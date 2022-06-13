@@ -13,4 +13,4 @@ jobs:
       - name: test action locally
         id: ld
         uses: ./
-      - run: echo ${{ JSON.stringify(steps.ld.outputs) }}
+      - run: echo ${{ toJSON(steps.ld.outputs) }}
