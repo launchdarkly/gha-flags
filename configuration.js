@@ -16,4 +16,4 @@ export const validate = (args) => {
   }
 
   return errors;
-}
+};
