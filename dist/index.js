@@ -16231,17 +16231,18 @@ var launchdarkly_node_server_sdk_default = /*#__PURE__*/__nccwpck_require__.n(la
 // singleton client
 let ldClient;
 
-const getClient = async (sdkKey) => {
-  if (ldClient && ldClient.initialized()) {
+const getClient = (sdkKey) => {
+  if (ldClient !== undefined) {
     return ldClient;
   }
 
   ldClient = launchdarkly_node_server_sdk_default().init(sdkKey);
-  return await ldClient.waitForInitialization();
+  return ldClient;
 };
 
 const evaluateFlag = async (sdkKey, flagKey, defaultValue, customProps = {}) => {
   const client = getClient(sdkKey);
+  await client.waitForInitialization();
   const context = {
     key: 'ld-github-action-flags',
     custom: customProps,
@@ -16282,8 +16283,7 @@ const main = async () => {
   core.setSecret(sdkKey);
   const flagKeys = core.getMultilineInput('flag-keys');
   const validationErrors = validate({ sdkKey, flagKeys });
-
-  if (validationErrors) {
+  if (validationErrors.length > 0) {
     core.setFailed(`Invalid arguments: ${validationErrors.join(', ')}`);
     return;
   }
@@ -16293,6 +16293,7 @@ const main = async () => {
   core.startGroup('Evaluating flags');
   const flags = {};
   for (const flagKey of flagKeys) {
+    core.info(`Evaluating flag ${flagKey}`);
     flags[flagKey] = await evaluateFlag(sdkKey, flagKey);
   }
   core.endGroup();

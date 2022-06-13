@@ -3,17 +3,18 @@ import LaunchDarkly from 'launchdarkly-node-server-sdk';
 // singleton client
 let ldClient;
 
-const getClient = async (sdkKey) => {
-  if (ldClient && ldClient.initialized()) {
+const getClient = (sdkKey) => {
+  if (ldClient !== undefined) {
     return ldClient;
   }
 
   ldClient = LaunchDarkly.init(sdkKey);
-  return await ldClient.waitForInitialization();
+  return ldClient;
 };
 
 export const evaluateFlag = async (sdkKey, flagKey, defaultValue, customProps = {}) => {
   const client = getClient(sdkKey);
+  await client.waitForInitialization();
   const context = {
     key: 'ld-github-action-flags',
     custom: customProps,

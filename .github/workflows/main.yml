@@ -8,9 +8,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
-        with:
-          path: 'gha-flags'
       - name: test action locally
         id: ld
         uses: ./
+        with:
+          sdk-key: ${{ secrets.SDK_KEY }}
+          flag-keys: |
+            coderefs-flag-to-find
+            jaz-flag-to-find
       - run: echo ${{ toJSON(steps.ld.outputs) }}
