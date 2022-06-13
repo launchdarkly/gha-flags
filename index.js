@@ -1,4 +1,4 @@
-import core from '@actions/core';
+import * as core from '@actions/core';
 import { evaluateFlag } from './client';
 import { validate } from './configuration';
 

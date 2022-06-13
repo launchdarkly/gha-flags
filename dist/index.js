@@ -16222,7 +16222,6 @@ __nccwpck_require__.r(__webpack_exports__);
 
 // EXTERNAL MODULE: ./node_modules/@actions/core/lib/core.js
 var core = __nccwpck_require__(2186);
-var core_default = /*#__PURE__*/__nccwpck_require__.n(core);
 // EXTERNAL MODULE: ./node_modules/launchdarkly-node-server-sdk/index.js
 var launchdarkly_node_server_sdk = __nccwpck_require__(8403);
 var launchdarkly_node_server_sdk_default = /*#__PURE__*/__nccwpck_require__.n(launchdarkly_node_server_sdk);
@@ -16256,15 +16255,15 @@ const evaluateFlag = async (sdkKey, flagKey, defaultValue, customProps = {}) => 
 const validate = (args) => {
   const errors = [];
   if (!args.sdkKey) {
-    core_default().error('SDK key is required');
+    core.error('SDK key is required');
     errors.push('sdk-key');
   } else if (!args.sdkKey.startsWith('sdk-')) {
-    core_default().error('SDK key must start with "sdk-"');
+    core.error('SDK key must start with "sdk-"');
     errors.push('sdk-key');
   }
 
   if (!args.flagKeys) {
-    core_default().error('At least one flag key is required');
+    core.error('At least one flag key is required');
     errors.push('flag-keys');
   }
 
@@ -16278,28 +16277,28 @@ const validate = (args) => {
 
 const main = async () => {
   // parse and validate args
-  core_default().startGroup('Validating arguments');
-  const sdkKey = core_default().getInput('sdk-key');
-  core_default().setSecret(sdkKey);
-  const flagKeys = core_default().getMultilineInput('flag-keys');
+  core.startGroup('Validating arguments');
+  const sdkKey = core.getInput('sdk-key');
+  core.setSecret(sdkKey);
+  const flagKeys = core.getMultilineInput('flag-keys');
   const validationErrors = validate({ sdkKey, flagKeys });
 
   if (validationErrors) {
-    core_default().setFailed(`Invalid arguments: ${validationErrors.join(', ')}`);
+    core.setFailed(`Invalid arguments: ${validationErrors.join(', ')}`);
     return;
   }
-  core_default().endGroup();
+  core.endGroup();
 
   // evaluate flags
-  core_default().startGroup('Evaluating flags');
+  core.startGroup('Evaluating flags');
   const flags = {};
   for (const flagKey of flagKeys) {
     flags[flagKey] = await evaluateFlag(sdkKey, flagKey);
   }
-  core_default().endGroup();
+  core.endGroup();
 
   // set output
-  core_default().setOutput('flags', flags);
+  core.setOutput('flags', flags);
 };
 
 main();
