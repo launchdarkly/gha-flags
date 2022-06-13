@@ -13,8 +13,9 @@ const getClient = (sdkKey) => {
 };
 
 export const closeClient = () => {
-  const client = getClient();
-  client.close();
+  if (ldClient !== undefined) {
+    ldClient.close();
+  }
 };
 
 export const evaluateFlag = async (sdkKey, flagKey, defaultValue, customProps = {}) => {

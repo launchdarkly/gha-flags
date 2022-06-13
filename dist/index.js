@@ -16241,8 +16241,9 @@ const getClient = (sdkKey) => {
 };
 
 const closeClient = () => {
-  const client = getClient();
-  client.close();
+  if (ldClient !== undefined) {
+    ldClient.close();
+  }
 };
 
 const evaluateFlag = async (sdkKey, flagKey, defaultValue, customProps = {}) => {
