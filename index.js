@@ -1,5 +1,5 @@
 import core from '@actions/core';
-// import { evaluateFlag } from './client';
+import { evaluateFlag } from './client';
 import { validate } from './configuration';
 
 const main = async () => {
@@ -17,9 +17,15 @@ const main = async () => {
   core.endGroup();
 
   // evaluate flags
-  // const result = await evaluateFlag('sdkKey', 'flagKey', 'defaultValue', {})
+  core.startGroup('Evaluating flags');
+  const flags = {};
+  for (const flagKey of flagKeys) {
+    flags[flagKey] = await evaluateFlag(sdkKey, flagKey);
+  }
+  core.endGroup();
 
   // set output
+  core.setOutput('flags', flags);
 };
 
 main();

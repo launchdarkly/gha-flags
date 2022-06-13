@@ -16220,8 +16220,12 @@ var __webpack_exports__ = {};
 // ESM COMPAT FLAG
 __nccwpck_require__.r(__webpack_exports__);
 
+// EXTERNAL MODULE: ./node_modules/@actions/core/lib/core.js
+var core = __nccwpck_require__(2186);
+var core_default = /*#__PURE__*/__nccwpck_require__.n(core);
 // EXTERNAL MODULE: ./node_modules/launchdarkly-node-server-sdk/index.js
 var launchdarkly_node_server_sdk = __nccwpck_require__(8403);
+var launchdarkly_node_server_sdk_default = /*#__PURE__*/__nccwpck_require__.n(launchdarkly_node_server_sdk);
 ;// CONCATENATED MODULE: ./client.js
 
 
@@ -16233,22 +16237,19 @@ const getClient = async (sdkKey) => {
     return ldClient;
   }
 
-  ldClient = LaunchDarkly.init(sdkKey);
+  ldClient = launchdarkly_node_server_sdk_default().init(sdkKey);
   return await ldClient.waitForInitialization();
-}
+};
 
 const evaluateFlag = async (sdkKey, flagKey, defaultValue, customProps = {}) => {
   const client = getClient(sdkKey);
   const context = {
     key: 'ld-github-action-flags',
     custom: customProps,
-  }
-  return client.variation(flagKey, context, defaultValue);
-}
+  };
+  return client.variation(flagKey, context, null);
+};
 
-// EXTERNAL MODULE: ./node_modules/@actions/core/lib/core.js
-var core = __nccwpck_require__(2186);
-var core_default = /*#__PURE__*/__nccwpck_require__.n(core);
 ;// CONCATENATED MODULE: ./configuration.js
 
 
@@ -16268,7 +16269,7 @@ const validate = (args) => {
   }
 
   return errors;
-}
+};
 
 ;// CONCATENATED MODULE: ./index.js
 
@@ -16284,15 +16285,21 @@ const main = async () => {
   const validationErrors = validate({ sdkKey, flagKeys });
 
   if (validationErrors) {
-    core_default().setFailed('Invalid arguments: ' + validationErrors.join(', '));
+    core_default().setFailed(`Invalid arguments: ${validationErrors.join(', ')}`);
     return;
   }
   core_default().endGroup();
 
   // evaluate flags
-  // const result = await evaluateFlag('sdkKey', 'flagKey', 'defaultValue', {})
+  core_default().startGroup('Evaluating flags');
+  const flags = {};
+  for (const flagKey of flagKeys) {
+    flags[flagKey] = await evaluateFlag(sdkKey, flagKey);
+  }
+  core_default().endGroup();
 
   // set output
+  core_default().setOutput('flags', flags);
 };
 
 main();
