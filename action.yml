@@ -1,4 +1,4 @@
-name: 'LauncDarkly Flags'
+name: 'LaunchDarkly Flags'
 description: 'Evaluate LaunchDarkly flags in your GitHub Action workflow'
 
 author: 'LaunchDarkly'
