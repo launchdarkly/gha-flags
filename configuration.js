@@ -1,6 +1,6 @@
 import core from '@actions/core';
 
-export const validateArgs = (args) => {
+export const validate = (args) => {
   const errors = [];
   if (!args.sdkKey) {
     core.error('SDK key is required');

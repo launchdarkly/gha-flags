@@ -1,5 +1,5 @@
 import { evaluateFlag } from "./client";
-import { configuration } from "./input";
+import { validate } from "./configuration";
 import core from '@actions/core';
 
 const main = async () => {
@@ -8,7 +8,7 @@ const main = async () => {
   const sdkKey = core.getInput('sdk-key');
   core.setSecret(sdkKey);
   const flagKeys = core.getMultilineInput('flag-keys');
-  const validationErrors = validateArgs({ sdkKey, flagKeys });
+  const validationErrors = validate({ sdkKey, flagKeys });
 
   if (validationErrors) {
     core.setFailed('Invalid arguments: ' + validationErrors.join(', '));
