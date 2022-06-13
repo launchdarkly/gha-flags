@@ -1,5 +1,5 @@
 import * as core from '@actions/core';
-import { evaluateFlag } from './client';
+import { closeClient, evaluateFlag } from './client';
 import { validate } from './configuration';
 
 const main = async () => {
@@ -26,6 +26,8 @@ const main = async () => {
 
   // set output
   core.setOutput('flags', flags);
+
+  return closeClient();
 };
 
 main();

@@ -12,6 +12,11 @@ const getClient = (sdkKey) => {
   return ldClient;
 };
 
+export const closeClient = () => {
+  const client = getClient();
+  client.close();
+};
+
 export const evaluateFlag = async (sdkKey, flagKey, defaultValue, customProps = {}) => {
   const client = getClient(sdkKey);
   await client.waitForInitialization();

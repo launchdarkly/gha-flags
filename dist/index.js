@@ -16240,6 +16240,11 @@ const getClient = (sdkKey) => {
   return ldClient;
 };
 
+const closeClient = () => {
+  const client = getClient();
+  client.close();
+};
+
 const evaluateFlag = async (sdkKey, flagKey, defaultValue, customProps = {}) => {
   const client = getClient(sdkKey);
   await client.waitForInitialization();
@@ -16300,6 +16305,8 @@ const main = async () => {
 
   // set output
   core.setOutput('flags', flags);
+
+  return closeClient();
 };
 
 main();

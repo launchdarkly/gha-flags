@@ -8,7 +8,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
-      - name: test action locally
+      - name: Evaluate flags
         id: ld
         uses: ./
         with:
@@ -16,4 +16,5 @@ jobs:
           flag-keys: |
             coderefs-flag-to-find
             jaz-flag-to-find
-      - run: echo ${{ toJSON(steps.ld.outputs) }}
+      - name: Print flag values
+        run: echo ${{ toJSON(steps.ld.outputs.flags) }}
