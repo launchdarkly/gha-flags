@@ -9,6 +9,7 @@
     "prettier": "prettier",
     "prettier:check": "prettier -c ./",
     "prettier:write": "prettier -w ./",
+    "prettier:write:path": "prettier -w",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
