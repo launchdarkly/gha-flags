@@ -1,5 +1,5 @@
 import * as core from '@actions/core';
-import { closeClient, evaluateFlag } from './client';
+import { evaluateFlags } from './client';
 import { validate } from './configuration';
 
 const main = async () => {
@@ -17,27 +17,13 @@ const main = async () => {
 
   // evaluate flags
   core.startGroup('Evaluating flags');
-  const flags = {};
-  const promises = [];
-  for (const flagKey of flagKeys) {
-    core.debug(`Evaluating flag ${flagKey}`);
-    promises.push(evaluateFlag(sdkKey, flagKey));
-  }
-  try {
-    const results = await Promise.all(promises);
-    for (let i = 0; i < results.length; i++) {
-      core.debug(`Flag ${flagKeys[i]} is ${results[i]}`);
-      flags[flagKeys[i]] = results[i];
-    }
-  } catch (error) {
-    console.error(error);
-    core.setFailed('Failed to evaluate flags');
-  }
-  closeClient();
+  const flags = await evaluateFlags(sdkKey, flagKeys);
   core.endGroup();
 
   // set output
   core.setOutput('flags', flags);
+
+  return;
 };
 
 main();
