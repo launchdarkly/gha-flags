@@ -1,0 +1,25 @@
+name: 'LaunchDarkly Flags'
+description: 'Evaluate LaunchDarkly flags in your GitHub Action workflow'
+
+author: 'LaunchDarkly'
+branding:
+  icon: toggle-right
+  color: gray-dark
+
+inputs:
+  sdk-key:
+    description: 'Server-side SDK key for environment'
+    required: true
+    default: ''
+  flag-keys:
+    description: 'The flag keys to evaluate'
+    required: true
+    default: ''
+
+outputs:
+  flags:
+    description: 'The evaluated flag values'
+
+runs:
+  using: 'node16'
+  main: 'index.js'
