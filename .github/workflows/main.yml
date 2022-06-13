@@ -1,0 +1,22 @@
+name: Test
+on: push
+
+jobs:
+  eval-flags:
+    name: Evaluate LaunchDarkly Flags
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Evaluate flags
+        id: ld
+        uses: ./
+        with:
+          sdk-key: ${{ secrets.SDK_KEY }}
+          flag-keys: |
+            test-boolean-flag
+            test-string-flag
+            test-number-flag
+            test-json-flag
+      - name: Print flag values
+        run: echo ${{ toJSON(steps.ld.outputs.flags) }}

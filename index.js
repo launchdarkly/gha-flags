@@ -1,5 +1,5 @@
-import core from '@actions/core';
-// import { evaluateFlag } from './client';
+import * as core from '@actions/core';
+import { evaluateFlags } from './client';
 import { validate } from './configuration';
 
 const main = async () => {
@@ -9,17 +9,21 @@ const main = async () => {
   core.setSecret(sdkKey);
   const flagKeys = core.getMultilineInput('flag-keys');
   const validationErrors = validate({ sdkKey, flagKeys });
-
-  if (validationErrors) {
+  if (validationErrors.length > 0) {
     core.setFailed(`Invalid arguments: ${validationErrors.join(', ')}`);
     return;
   }
   core.endGroup();
 
   // evaluate flags
-  // const result = await evaluateFlag('sdkKey', 'flagKey', 'defaultValue', {})
+  core.startGroup('Evaluating flags');
+  const flags = await evaluateFlags(sdkKey, flagKeys);
+  core.endGroup();
 
   // set output
+  core.setOutput('flags', flags);
+
+  return;
 };
 
 main();

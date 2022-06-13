@@ -16220,55 +16220,86 @@ var __webpack_exports__ = {};
 // ESM COMPAT FLAG
 __nccwpck_require__.r(__webpack_exports__);
 
+// EXTERNAL MODULE: ./node_modules/@actions/core/lib/core.js
+var core = __nccwpck_require__(2186);
 // EXTERNAL MODULE: ./node_modules/launchdarkly-node-server-sdk/index.js
 var launchdarkly_node_server_sdk = __nccwpck_require__(8403);
+var launchdarkly_node_server_sdk_default = /*#__PURE__*/__nccwpck_require__.n(launchdarkly_node_server_sdk);
 ;// CONCATENATED MODULE: ./client.js
+
 
 
 // singleton client
 let ldClient;
 
-const getClient = async (sdkKey) => {
-  if (ldClient && ldClient.initialized()) {
+const getClient = (sdkKey) => {
+  if (ldClient !== undefined) {
     return ldClient;
   }
 
-  ldClient = LaunchDarkly.init(sdkKey);
-  return await ldClient.waitForInitialization();
-}
+  ldClient = launchdarkly_node_server_sdk_default().init(sdkKey);
+  return ldClient;
+};
+
+const closeClient = () => {
+  if (ldClient !== undefined) {
+    ldClient.close();
+  }
+};
 
 const evaluateFlag = async (sdkKey, flagKey, defaultValue, customProps = {}) => {
   const client = getClient(sdkKey);
+  await client.waitForInitialization();
   const context = {
     key: 'ld-github-action-flags',
     custom: customProps,
-  }
-  return client.variation(flagKey, context, defaultValue);
-}
+  };
+  return client.variation(flagKey, context, null);
+};
 
-// EXTERNAL MODULE: ./node_modules/@actions/core/lib/core.js
-var core = __nccwpck_require__(2186);
-var core_default = /*#__PURE__*/__nccwpck_require__.n(core);
+const evaluateFlags = async (sdkKey, flagKeys, customProps = {}) => {
+  const flags = {};
+  const promises = [];
+  for (const flagKey of flagKeys) {
+    core.debug(`Evaluating flag ${flagKey}`);
+    promises.push(evaluateFlag(sdkKey, flagKey, null, customProps));
+  }
+  try {
+    const results = await Promise.all(promises);
+    for (let i = 0; i < results.length; i++) {
+      core.debug(`Flag ${flagKeys[i]} is ${results[i]}`);
+      flags[flagKeys[i]] = results[i];
+    }
+  } catch (error) {
+    console.error(error);
+    core.setFailed('Failed to evaluate flags');
+  }
+
+  closeClient();
+
+  return flags;
+};
+
 ;// CONCATENATED MODULE: ./configuration.js
 
 
 const validate = (args) => {
   const errors = [];
   if (!args.sdkKey) {
-    core_default().error('SDK key is required');
+    core.error('SDK key is required');
     errors.push('sdk-key');
   } else if (!args.sdkKey.startsWith('sdk-')) {
-    core_default().error('SDK key must start with "sdk-"');
+    core.error('SDK key must start with "sdk-"');
     errors.push('sdk-key');
   }
 
   if (!args.flagKeys) {
-    core_default().error('At least one flag key is required');
+    core.error('At least one flag key is required');
     errors.push('flag-keys');
   }
 
   return errors;
-}
+};
 
 ;// CONCATENATED MODULE: ./index.js
 
@@ -16277,22 +16308,26 @@ const validate = (args) => {
 
 const main = async () => {
   // parse and validate args
-  core_default().startGroup('Validating arguments');
-  const sdkKey = core_default().getInput('sdk-key');
-  core_default().setSecret(sdkKey);
-  const flagKeys = core_default().getMultilineInput('flag-keys');
+  core.startGroup('Validating arguments');
+  const sdkKey = core.getInput('sdk-key');
+  core.setSecret(sdkKey);
+  const flagKeys = core.getMultilineInput('flag-keys');
   const validationErrors = validate({ sdkKey, flagKeys });
-
-  if (validationErrors) {
-    core_default().setFailed('Invalid arguments: ' + validationErrors.join(', '));
+  if (validationErrors.length > 0) {
+    core.setFailed(`Invalid arguments: ${validationErrors.join(', ')}`);
     return;
   }
-  core_default().endGroup();
+  core.endGroup();
 
   // evaluate flags
-  // const result = await evaluateFlag('sdkKey', 'flagKey', 'defaultValue', {})
+  core.startGroup('Evaluating flags');
+  const flags = await evaluateFlags(sdkKey, flagKeys);
+  core.endGroup();
 
   // set output
+  core.setOutput('flags', flags);
+
+  return;
 };
 
 main();
