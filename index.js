@@ -1,5 +1,5 @@
 import { evaluateFlag } from "./client";
-import { validateArgs } from "./input";
+import { configuration } from "./input";
 import core from '@actions/core';
 
 const main = async () => {
