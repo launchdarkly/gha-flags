@@ -11,7 +11,7 @@ inputs:
     description: 'Server-side SDK key for environment'
     required: true
     default: ''
-  flags:
+  flagKeys:
     description: 'The flag keys to evaluate'
     required: true
     default: ''
