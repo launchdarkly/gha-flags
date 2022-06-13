@@ -16249,10 +16249,10 @@ const evaluateFlag = async (sdkKey, flagKey, defaultValue, customProps = {}) => 
 // EXTERNAL MODULE: ./node_modules/@actions/core/lib/core.js
 var core = __nccwpck_require__(2186);
 var core_default = /*#__PURE__*/__nccwpck_require__.n(core);
-;// CONCATENATED MODULE: ./input.js
+;// CONCATENATED MODULE: ./configuration.js
 
 
-const validateArgs = (args) => {
+const validate = (args) => {
   const errors = [];
   if (!args.sdkKey) {
     core_default().error('SDK key is required');
@@ -16269,6 +16269,7 @@ const validateArgs = (args) => {
 
   return errors;
 }
+
 ;// CONCATENATED MODULE: ./index.js
 
 
@@ -16280,7 +16281,7 @@ const main = async () => {
   const sdkKey = core_default().getInput('sdk-key');
   core_default().setSecret(sdkKey);
   const flagKeys = core_default().getMultilineInput('flag-keys');
-  const validationErrors = validateArgs({ sdkKey, flagKeys });
+  const validationErrors = validate({ sdkKey, flagKeys });
 
   if (validationErrors) {
     core_default().setFailed('Invalid arguments: ' + validationErrors.join(', '));
