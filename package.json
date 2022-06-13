@@ -16,5 +16,8 @@
   "bugs": {
     "url": "https://github.com/launchdarkly/gha-flags/issues"
   },
-  "homepage": "https://github.com/launchdarkly/gha-flags#readme"
+  "homepage": "https://github.com/launchdarkly/gha-flags#readme",
+  "dependencies": {
+    "launchdarkly-node-server-sdk": "^6.4.2"
+  }
 }
