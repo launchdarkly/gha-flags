@@ -1,6 +1,6 @@
-import { evaluateFlag } from "./client";
-import { validate } from "./configuration";
 import core from '@actions/core';
+// import { evaluateFlag } from './client';
+import { validate } from './configuration';
 
 const main = async () => {
   // parse and validate args
@@ -11,7 +11,7 @@ const main = async () => {
   const validationErrors = validate({ sdkKey, flagKeys });
 
   if (validationErrors) {
-    core.setFailed('Invalid arguments: ' + validationErrors.join(', '));
+    core.setFailed(`Invalid arguments: ${validationErrors.join(', ')}`);
     return;
   }
   core.endGroup();
