@@ -18,16 +18,26 @@ const main = async () => {
   // evaluate flags
   core.startGroup('Evaluating flags');
   const flags = {};
+  const promises = [];
   for (const flagKey of flagKeys) {
-    core.info(`Evaluating flag ${flagKey}`);
-    flags[flagKey] = await evaluateFlag(sdkKey, flagKey);
+    core.debug(`Evaluating flag ${flagKey}`);
+    promises.push(evaluateFlag(sdkKey, flagKey));
   }
+  try {
+    const results = await Promise.all(promises);
+    for (let i = 0; i < results.length; i++) {
+      core.debug(`Flag ${flagKeys[i]} is ${results[i]}`);
+      flags[flagKeys[i]] = results[i];
+    }
+  } catch (error) {
+    console.error(error);
+    core.setFailed('Failed to evaluate flags');
+  }
+  closeClient();
   core.endGroup();
 
   // set output
   core.setOutput('flags', flags);
-
-  return closeClient();
 };
 
 main();

@@ -14,7 +14,9 @@ jobs:
         with:
           sdk-key: ${{ secrets.SDK_KEY }}
           flag-keys: |
-            coderefs-flag-to-find
-            jaz-flag-to-find
+            test-boolean-flag
+            test-string-flag
+            test-number-flag
+            test-json-flag
       - name: Print flag values
         run: echo ${{ toJSON(steps.ld.outputs.flags) }}
