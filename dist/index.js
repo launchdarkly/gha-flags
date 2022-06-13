@@ -16325,7 +16325,9 @@ const main = async () => {
   core.endGroup();
 
   // set output
-  core.setOutput('flags', flags);
+  for (const flagKey in flags) {
+    core.setOutput(flagKey, flags[flagKey]);
+  }
 
   return;
 };

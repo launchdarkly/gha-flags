@@ -9,7 +9,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
       - name: Evaluate flags
-        id: ld
+        id: flags
         uses: ./
         with:
           sdk-key: ${{ secrets.SDK_KEY }}
@@ -19,4 +19,8 @@ jobs:
             test-number-flag
             test-json-flag
       - name: Print flag values
-        run: echo ${{ toJSON(steps.ld.outputs.flags) }}
+        run: |
+          echo ${{ steps.flags.outputs.test-boolean-flag }}
+          echo ${{ steps.flags.outputs.test-string-flag }}
+          echo ${{ steps.flags.outputs.test-number-flag }}
+          echo ${{ toJSON(steps.flags.outputs.test-json-flag) }}
