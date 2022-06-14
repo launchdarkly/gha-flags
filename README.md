@@ -24,10 +24,11 @@ The value of the given flags will be saved directly to the step's outputs with t
 ### Basic
 
 ```yaml
-name: Basic
+name: Evaluate LaunchDarkly flags
 on: push
 jobs:
-  basic:
+  eval-flags:
+    runs-on: ubuntu-latest
     steps:
       - name: Evaluate flags
         id: flags
@@ -50,16 +51,24 @@ jobs:
 ### Use value in expression
 
 ```yaml
-steps:
-  - name: Evaluate flags
-    id: ld
-    uses: launchdarkly/gha-flags@v0.0.1
-    with:
-      sdk-key: ${{ secrets.LD_SDK_KEY }}
-      flag-keys: enable-slack-notification
-  - name: Send notification
-    if: steps.flags.outputs.enable-notification == 'true'
-    # send notification
+name: Evaluate LaunchDarkly flags
+on: push
+jobs:
+  eval-flags:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Evaluate flags
+        id: ld
+        uses: launchdarkly/gha-flags@v0.0.1
+        with:
+          sdk-key: ${{ secrets.LD_SDK_KEY }}
+          flag-keys: test-boolean-flag
+      - name: If true
+        if: steps.flags.outputs.test-boolean-flag == 'true'
+        run: echo "It's true"
+      - name: If false
+        if: steps.flags.outputs.test-boolean-flag == 'false'
+        run: echo "It's false"
 ```
 
 ### Parse values to correct type
@@ -67,15 +76,24 @@ steps:
 <!-- TODO link to info about fromJSON -->
 
 ```yaml
-steps:
-  - name: Evaluate flags
-    id: ld
-    uses: launchdarkly/gha-flags@v0.0.1
-    with:
-      sdk-key: ${{ secrets.LD_SDK_KEY }}
-      flag-keys: enable-slack-notification
-  - name: Send notification
-    if: fromJSON(steps.flags.outputs.enable-notification) == true
+name: Evaluate LaunchDarkly flags
+on: push
+jobs:
+  eval-flags:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Evaluate flags
+        id: ld
+        uses: launchdarkly/gha-flags@v0.0.1
+        with:
+          sdk-key: ${{ secrets.LD_SDK_KEY }}
+          flag-keys: test-boolean-flag
+          - name: If true
+            if: fromJSON(steps.flags.outputs.test-boolean-flag) == true
+            run: echo "It's true"
+          - name: If false
+            if: fromJSON(steps.flags.outputs.test-boolean-flag) == false
+            run: echo "It's false"
 ```
 
 ### Using with Github environment deployments
@@ -89,16 +107,15 @@ name: Deploy to environment
 on: push
 job:
   deploy:
+    runs-on: ubuntu-latest
     environment: production
     steps:
       - name: Evaluate flags
         id: ld
         uses: launchdarkly/gha-flags@v0.0.1
         with:
-          sdk-key: ${{ secrets.LD_SDK_KEY }}
-          flag-keys: enable-slack-notification
-      - name: Send notification
-        if: fromJSON(steps.flags.outputs.enable-notification) == true
+          sdk-key: ${{ secrets.LD_SDK_KEY }} # configure environment-specific secret
+          flag-keys: test-boolean-flag
 ```
 
 ### Use JSON flag value

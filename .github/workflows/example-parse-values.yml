@@ -1,0 +1,20 @@
+name: Parse values
+on: push
+jobs:
+  parse-values:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Evaluate flags
+        id: flags
+        uses: ./
+        with:
+          sdk-key: ${{ secrets.SDK_KEY }}
+          flag-keys: test-boolean-flag
+      - name: If true
+        if: fromJSON(steps.flags.outputs.test-boolean-flag) == true
+        run: echo "It's true"
+      - name: If false
+        if: fromJSON(steps.flags.outputs.test-boolean-flag) == false
+        run: echo "It's false"
