@@ -8,13 +8,25 @@ branding:
 
 inputs:
   sdk-key:
-    description: 'Server-side SDK key for environment'
+    description: 'Server-side SDK key for environment.'
     required: true
     default: ''
   flag-keys:
-    description: 'The flag keys to evaluate'
+    description: 'The flag keys to evaluate.'
     required: true
     default: ''
+  base-uri:
+    description: 'The base URI for the LaunchDarkly server. Most users should use the default value.'
+    required: false
+    default: 'https://app.launchdarkly.com'
+  stream-uri:
+    description: 'The base URI for the LaunchDarkly streaming server. Most users should use the default value.'
+    required: false
+    default: 'https://stream.launchdarkly.com'
+  events-uri:
+    description: 'The base URI for the LaunchDarkly events server. Most users should use the default value.'
+    required: false
+    default: 'https://events.launchdarkly.com'
 
 outputs:
   flags:

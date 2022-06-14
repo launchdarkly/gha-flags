@@ -16232,13 +16232,12 @@ var launchdarkly_node_server_sdk_default = /*#__PURE__*/__nccwpck_require__.n(la
 // singleton client
 let ldClient;
 
-const getClient = (sdkKey) => {
+const initClient = (sdkKey, options = {}) => {
   if (ldClient !== undefined) {
-    return ldClient;
+    return;
   }
 
-  ldClient = launchdarkly_node_server_sdk_default().init(sdkKey);
-  return ldClient;
+  ldClient = launchdarkly_node_server_sdk_default().init(sdkKey, options);
 };
 
 const closeClient = () => {
@@ -16247,9 +16246,14 @@ const closeClient = () => {
   }
 };
 
-const evaluateFlag = async (sdkKey, flagKey, defaultValue, customProps = {}) => {
-  const client = getClient(sdkKey);
+const getClient = () => {
+  return ldClient;
+};
+
+const evaluateFlag = async (flagKey, defaultValue, customProps = {}) => {
+  const client = getClient();
   await client.waitForInitialization();
+
   const context = {
     key: 'ld-github-action-flags',
     custom: customProps,
@@ -16257,12 +16261,12 @@ const evaluateFlag = async (sdkKey, flagKey, defaultValue, customProps = {}) => 
   return client.variation(flagKey, context, null);
 };
 
-const evaluateFlags = async (sdkKey, flagKeys, customProps = {}) => {
+const evaluateFlags = async (flagKeys, customProps = {}) => {
   const flags = {};
   const promises = [];
   for (const flagKey of flagKeys) {
     core.debug(`Evaluating flag ${flagKey}`);
-    promises.push(evaluateFlag(sdkKey, flagKey, null, customProps));
+    promises.push(evaluateFlag(flagKey, null, customProps));
   }
   try {
     const results = await Promise.all(promises);
@@ -16274,8 +16278,6 @@ const evaluateFlags = async (sdkKey, flagKeys, customProps = {}) => {
     console.error(error);
     core.setFailed('Failed to evaluate flags');
   }
-
-  closeClient();
 
   return flags;
 };
@@ -16312,6 +16314,10 @@ const main = async () => {
   const sdkKey = core.getInput('sdk-key');
   core.setSecret(sdkKey);
   const flagKeys = core.getMultilineInput('flag-keys');
+  const baseUri = core.getInput('base-uri');
+  const eventsUri = core.getInput('events-uri');
+  const streamUri = core.getInput('stream-uri');
+  core.info(baseUri);
   const validationErrors = validate({ sdkKey, flagKeys });
   if (validationErrors.length > 0) {
     core.setFailed(`Invalid arguments: ${validationErrors.join(', ')}`);
@@ -16321,7 +16327,9 @@ const main = async () => {
 
   // evaluate flags
   core.startGroup('Evaluating flags');
-  const flags = await evaluateFlags(sdkKey, flagKeys);
+  initClient(sdkKey, { baseUri, eventsUri, streamUri });
+  const flags = await evaluateFlags(flagKeys);
+  closeClient();
   core.endGroup();
 
   // set output

@@ -4,13 +4,12 @@ import LaunchDarkly from 'launchdarkly-node-server-sdk';
 // singleton client
 let ldClient;
 
-const getClient = (sdkKey) => {
+export const initClient = (sdkKey, options = {}) => {
   if (ldClient !== undefined) {
-    return ldClient;
+    return;
   }
 
-  ldClient = LaunchDarkly.init(sdkKey);
-  return ldClient;
+  ldClient = LaunchDarkly.init(sdkKey, options);
 };
 
 export const closeClient = () => {
@@ -19,9 +18,14 @@ export const closeClient = () => {
   }
 };
 
-export const evaluateFlag = async (sdkKey, flagKey, defaultValue, customProps = {}) => {
-  const client = getClient(sdkKey);
+const getClient = () => {
+  return ldClient;
+};
+
+const evaluateFlag = async (flagKey, defaultValue, customProps = {}) => {
+  const client = getClient();
   await client.waitForInitialization();
+
   const context = {
     key: 'ld-github-action-flags',
     custom: customProps,
@@ -29,12 +33,12 @@ export const evaluateFlag = async (sdkKey, flagKey, defaultValue, customProps = 
   return client.variation(flagKey, context, null);
 };
 
-export const evaluateFlags = async (sdkKey, flagKeys, customProps = {}) => {
+export const evaluateFlags = async (flagKeys, customProps = {}) => {
   const flags = {};
   const promises = [];
   for (const flagKey of flagKeys) {
     core.debug(`Evaluating flag ${flagKey}`);
-    promises.push(evaluateFlag(sdkKey, flagKey, null, customProps));
+    promises.push(evaluateFlag(flagKey, null, customProps));
   }
   try {
     const results = await Promise.all(promises);
@@ -46,8 +50,6 @@ export const evaluateFlags = async (sdkKey, flagKeys, customProps = {}) => {
     console.error(error);
     core.setFailed('Failed to evaluate flags');
   }
-
-  closeClient();
 
   return flags;
 };
