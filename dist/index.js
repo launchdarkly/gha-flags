@@ -16317,19 +16317,15 @@ const main = async () => {
   core.startGroup('Extracting inputs');
   const inputPrefix = ['GITHUB_', 'RUNNER_', 'INPUT_CONTEXT_'];
   var ctx = {};
-  Object.keys(process.env)
-    .filter(function (key) {
-      return key.startsWith(inputPrefix);
-    })
-    .forEach(function (key) {
-      inputPrefix.forEach(function (prefix) {
-        if (key.startsWith(prefix)) {
-          var shortName = key.substring(inputPrefix.length);
-          ctx[shortName] = process.env[key];
-          core.debug(shortName + '="' + process.env[key]) + '"';
-        }
-      });
+  Object.keys(process.env).forEach(function (key) {
+    inputPrefix.forEach(function (prefix) {
+      if (key.startsWith(prefix)) {
+        var shortName = key.substring(inputPrefix.length);
+        ctx[shortName] = process.env[key];
+        core.debug(shortName + '="' + process.env[key]) + '"';
+      }
     });
+  });
   core.endGroup();
 
   // evaluate flags
