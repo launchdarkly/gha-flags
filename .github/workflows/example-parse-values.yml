@@ -11,10 +11,18 @@ jobs:
         uses: ./
         with:
           sdk-key: ${{ secrets.SDK_KEY }}
-          flag-keys: test-boolean-flag
+          flag-keys: |
+            test-boolean-flag
+            test-number-flag
       - name: If true
         if: fromJSON(steps.flags.outputs.test-boolean-flag) == true
         run: echo "It's true"
       - name: If false
         if: fromJSON(steps.flags.outputs.test-boolean-flag) == false
         run: echo "It's false"
+      - name: If number is 100
+        if: fromJSON(steps.flags.outputs.test-number-flag) == 100
+        run: echo "Number is 100"
+      - name: If number is 200
+        if: fromJSON(steps.flags.outputs.test-number-flag) == 200
+        run: echo "Number is 200"

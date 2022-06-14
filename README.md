@@ -19,7 +19,15 @@ The value of the given flags will be saved directly to the step's outputs with t
 
 ## Examples
 
-- [Basic](#basic)
+- [LaunchDarkly GitHub Action](#launchdarkly-github-action)
+  - [Configuration](#configuration)
+  - [Output](#output)
+  - [Examples](#examples)
+    - [Basic](#basic)
+    - [Use value in expression](#use-value-in-expression)
+    - [Parse output string to types](#parse-output-string-to-types)
+    - [Use with GitHub deployment environments](#use-with-github-deployment-environments)
+    - [Use JSON flag value](#use-json-flag-value)
 
 ### Basic
 
@@ -71,7 +79,7 @@ jobs:
         run: echo "It's false"
 ```
 
-### Parse values to correct type
+### Parse output string to types
 
 <!-- TODO link to info about fromJSON -->
 
@@ -96,7 +104,7 @@ jobs:
             run: echo "It's false"
 ```
 
-### Using with Github environment deployments
+### Use with GitHub deployment environments
 
 <!-- TODO link to info about environments -->
 
