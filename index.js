@@ -21,10 +21,23 @@ const main = async () => {
   }
   core.endGroup();
 
+  // build a context
+  core.startGroup('Extracting inputs');
+  const inputPrefix = "INPUT_"
+  var ctx = {}
+  Object.keys(process.env).filter(function(key){
+    return key.startsWith(inputPrefix)
+  }).forEach(function(key) {
+    var shortName = key.substring(len(inputPrefix))
+    ctx[shortName] = env[key]
+    core.debug(shortName + '=' + env[key])
+  });
+  core.endGroup();
+
   // evaluate flags
   const client = new LDClient(sdkKey, { baseUri, eventsUri, streamUri }, userKey);
   core.startGroup('Evaluating flags');
-  const flags = await client.evaluateFlags(flagKeys);
+  const flags = await client.evaluateFlags(flagKeys, ctx);
   client.close();
   core.endGroup();
 
