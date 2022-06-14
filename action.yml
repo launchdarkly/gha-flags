@@ -32,9 +32,12 @@ inputs:
     required: false
     default: 'ld-github-action-flags'
 
-outputs:
-  flags:
-    description: 'The evaluated flag values'
+# Outputs are generate dynamically based on flag-keys supplied
+# outputs:
+#   YOUR-FLAG-KEY:
+#     description: 'The evaluated flag value'
+#   YOUR-OTHER-FLAG-KEY
+#     description: 'The evaluated flag value'
 
 runs:
   using: 'node16'
