@@ -19,15 +19,11 @@ The value of the given flags will be saved directly to the step's outputs with t
 
 ## Examples
 
-- [LaunchDarkly GitHub Action](#launchdarkly-github-action)
-  - [Configuration](#configuration)
-  - [Output](#output)
-  - [Examples](#examples)
-    - [Basic](#basic)
-    - [Use value in expression](#use-value-in-expression)
-    - [Parse output string to types](#parse-output-string-to-types)
-    - [Use with GitHub deployment environments](#use-with-github-deployment-environments)
-    - [Use JSON flag value](#use-json-flag-value)
+- [Basic](#basic)
+- [Use value in expression](#use-value-in-expression)
+- [Parse output string to types](#parse-output-string-to-types)
+- [Use with GitHub deployment environments](#use-with-github-deployment-environments)
+- [Use JSON flag value](#use-json-flag-value)
 
 ### Basic
 
