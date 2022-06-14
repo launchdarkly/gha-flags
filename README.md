@@ -4,14 +4,14 @@ GitHub Action for evaluating LaunchDarkly flags in your workflow.
 
 ## Configuration
 
-| Option       | Description                                                                                  | Required | Default value                   | Example                        |
-| ------------ | -------------------------------------------------------------------------------------------- | -------- | ------------------------------- | ------------------------------ |
-| `sdk-key`    | SDK Key for environment                                                                      | true     |                                 | sdk-\*\*\*                     |
-| `flag-keys`  | The flag keys to evaluate                                                                    | true     |                                 | enable-new-feature             |
-| `user-key`   | The key of the user object used in a feature flag evaluation.                                | false    | ld-github-action-flags          |                                |
-| `base-uri`   | The base URI for the LaunchDarkly server. Most users should use the default value.           | false    | https://app.launchdarkly.com    | https://app.launchdarkly.us    |
-| `events-uri` | The base URI for the LaunchDarkly events server. Most users should use the default value.    | false    | https://events.launchdarkly.com | https://events.launchdarkly.us |
-| `stream-uri` | The base URI for the LaunchDarkly streaming server. Most users should use the default value. | false    | https://stream.launchdarkly.com | https://stream.launchdarkly.us |
+| Option       | Description                                                                                  | Required | Default value                   |
+| ------------ | -------------------------------------------------------------------------------------------- | -------- | ------------------------------- |
+| `sdk-key`    | SDK Key for environment                                                                      | true     |                                 |
+| `flag-keys`  | The flag keys to evaluate                                                                    | true     |                                 |
+| `user-key`   | The key of the user object used in a feature flag evaluation.                                | false    | ld-github-action-flags          |
+| `base-uri`   | The base URI for the LaunchDarkly server. Most users should use the default value.           | false    | https://app.launchdarkly.com    |
+| `events-uri` | The base URI for the LaunchDarkly events server. Most users should use the default value.    | false    | https://events.launchdarkly.com |
+| `stream-uri` | The base URI for the LaunchDarkly streaming server. Most users should use the default value. | false    | https://stream.launchdarkly.com |
 
 ## Output
 
@@ -23,10 +23,14 @@ _See more: [Metadata syntax](https://docs.github.com/en/actions/creating-actions
 
 ## Examples
 
-- [Basic](#basic)
-- [Use value in expression](#use-value-in-expression)
-- [Parse output string to types](#parse-output-string-to-types)
-- [Use with GitHub deployment environments](#use-with-github-deployment-environments)
+- [LaunchDarkly GitHub Action](#launchdarkly-github-action)
+  - [Configuration](#configuration)
+  - [Output](#output)
+  - [Examples](#examples)
+    - [Basic](#basic)
+    - [Use value in expression](#use-value-in-expression)
+    - [Parse output string to types](#parse-output-string-to-types)
+    - [Use with GitHub deployment environments](#use-with-github-deployment-environments)
 
 ### Basic
 
