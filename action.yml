@@ -27,6 +27,10 @@ inputs:
     description: 'The base URI for the LaunchDarkly events server. Most users should use the default value.'
     required: false
     default: 'https://events.launchdarkly.com'
+  user-key:
+    description: 'The key of the user object used in a feature flag evaluation.'
+    required: false
+    default: 'ld-github-action-flags'
 
 outputs:
   flags:

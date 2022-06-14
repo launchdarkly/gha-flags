@@ -2,7 +2,7 @@ import * as core from '@actions/core';
 import LaunchDarkly from 'launchdarkly-node-server-sdk';
 
 export default class LDClient {
-  constructor(sdkKey, options = {}, userKey = 'ld-github-action-flags') {
+  constructor(sdkKey, options = {}, userKey) {
     this.client = LaunchDarkly.init(sdkKey, options);
     this.userKey = userKey;
   }
