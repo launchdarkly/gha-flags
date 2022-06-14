@@ -23,15 +23,17 @@ const main = async () => {
 
   // build a context
   core.startGroup('Extracting inputs');
-  const inputPrefix = "INPUT_"
-  var ctx = {}
-  Object.keys(process.env).filter(function(key){
-    return key.startsWith(inputPrefix)
-  }).forEach(function(key) {
-    var shortName = key.substring(len(inputPrefix))
-    ctx[shortName] = env[key]
-    core.debug(shortName + '=' + env[key])
-  });
+  const inputPrefix = 'INPUT_';
+  var ctx = {};
+  Object.keys(process.env)
+    .filter(function (key) {
+      return key.startsWith(inputPrefix);
+    })
+    .forEach(function (key) {
+      var shortName = key.substring(inputPrefix.length);
+      ctx[shortName] = process.env[key];
+      core.debug(shortName + '="' + process.env[key]) + '"';
+    });
   core.endGroup();
 
   // evaluate flags

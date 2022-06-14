@@ -25,7 +25,8 @@
   "homepage": "https://github.com/launchdarkly/gha-flags#readme",
   "dependencies": {
     "@actions/core": "^1.8.2",
-    "launchdarkly-node-server-sdk": "^6.4.2"
+    "launchdarkly-node-server-sdk": "^6.4.2",
+    "ncc": "^0.3.6"
   },
   "devDependencies": {
     "@vercel/ncc": "^0.34.0",
@@ -33,6 +34,6 @@
     "eslint-config-prettier": "^8.5.0",
     "eslint-plugin-import": "^2.26.0",
     "eslint-plugin-prettier": "^4.0.0",
-    "prettier": "^2.6.2"
+    "prettier": "^2.7.0"
   }
 }

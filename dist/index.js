@@ -16131,7 +16131,7 @@ module.exports = require("util");
 /***/ ((module) => {
 
 "use strict";
-module.exports = JSON.parse('{"_from":"launchdarkly-node-server-sdk","_id":"launchdarkly-node-server-sdk@6.4.2","_inBundle":false,"_integrity":"sha512-cZQ/FDpzrXu7rOl2re9+79tX/jOrj+kb1ikbqpk/jEgLvXUHGE7Xr+fsEIbQa80H1PkGwiyWbmnAl31THJfKew==","_location":"/launchdarkly-node-server-sdk","_phantomChildren":{},"_requested":{"type":"tag","registry":true,"raw":"launchdarkly-node-server-sdk","name":"launchdarkly-node-server-sdk","escapedName":"launchdarkly-node-server-sdk","rawSpec":"","saveSpec":null,"fetchSpec":"latest"},"_requiredBy":["#USER","/"],"_resolved":"https://registry.npmjs.org/launchdarkly-node-server-sdk/-/launchdarkly-node-server-sdk-6.4.2.tgz","_shasum":"10a4fea21762315a095a9377cb23dc8d6e714469","_spec":"launchdarkly-node-server-sdk","_where":"/Users/cliffordtawiah/code/launchdarkly/gha-flags","bugs":{"url":"https://github.com/launchdarkly/node-server-sdk/issues"},"bundleDependencies":false,"dependencies":{"async":"^3.1.0","launchdarkly-eventsource":"1.4.4","lru-cache":"^6.0.0","node-cache":"^5.1.0","semver":"^7.3.0","tunnel":"0.0.6","uuid":"^8.3.2"},"deprecated":false,"description":"LaunchDarkly Server-Side SDK for Node.js","devDependencies":{"@babel/core":"^7.14.6","@babel/preset-env":"^7.14.5","@types/node":"^15.12.2","babel-jest":"^27.0.2","eslint":"^7.28.0","eslint-config-prettier":"^8.3.0","eslint-formatter-pretty":"^4.1.0","eslint-plugin-prettier":"^3.4.0","jest":"^27.0.4","jest-junit":"^12.2.0","launchdarkly-js-test-helpers":"^2.2.0","prettier":"^2.3.1","tmp":"^0.2.1","typescript":"~4.4.4","yaml":"^1.10.2"},"engines":{"node":">= 12.0.0"},"homepage":"https://github.com/launchdarkly/node-server-sdk","jest":{"rootDir":".","testEnvironment":"node","testMatch":["**/*-test.js"],"testResultsProcessor":"jest-junit"},"keywords":["launchdarkly","analytics","client"],"license":"Apache-2.0","main":"index.js","name":"launchdarkly-node-server-sdk","repository":{"type":"git","url":"git+https://github.com/launchdarkly/node-server-sdk.git"},"scripts":{"check-typescript":"node_modules/typescript/bin/tsc","contract-test-harness":"curl -s https://raw.githubusercontent.com/launchdarkly/sdk-test-harness/master/downloader/run.sh \\\\ | VERSION=v1 PARAMS=\\"-url http://localhost:8000 -debug -stop-service-at-end $TEST_HARNESS_PARAMS\\" sh","contract-test-service":"npm --prefix contract-tests install && npm --prefix contract-tests start","contract-tests":"npm run contract-test-service & npm run contract-test-harness","lint":"eslint --format \'node_modules/eslint-formatter-pretty\' --ignore-path .eslintignore .","test":"jest --ci"},"types":"./index.d.ts","version":"6.4.2"}');
+module.exports = JSON.parse('{"name":"launchdarkly-node-server-sdk","version":"6.4.2","description":"LaunchDarkly Server-Side SDK for Node.js","main":"index.js","scripts":{"test":"jest --ci","check-typescript":"node_modules/typescript/bin/tsc","lint":"eslint --format \'node_modules/eslint-formatter-pretty\' --ignore-path .eslintignore .","contract-test-service":"npm --prefix contract-tests install && npm --prefix contract-tests start","contract-test-harness":"curl -s https://raw.githubusercontent.com/launchdarkly/sdk-test-harness/master/downloader/run.sh \\\\ | VERSION=v1 PARAMS=\\"-url http://localhost:8000 -debug -stop-service-at-end $TEST_HARNESS_PARAMS\\" sh","contract-tests":"npm run contract-test-service & npm run contract-test-harness"},"types":"./index.d.ts","repository":{"type":"git","url":"https://github.com/launchdarkly/node-server-sdk.git"},"keywords":["launchdarkly","analytics","client"],"license":"Apache-2.0","bugs":{"url":"https://github.com/launchdarkly/node-server-sdk/issues"},"homepage":"https://github.com/launchdarkly/node-server-sdk","dependencies":{"async":"^3.1.0","launchdarkly-eventsource":"1.4.4","lru-cache":"^6.0.0","node-cache":"^5.1.0","semver":"^7.3.0","tunnel":"0.0.6","uuid":"^8.3.2"},"engines":{"node":">= 12.0.0"},"devDependencies":{"@babel/core":"^7.14.6","@babel/preset-env":"^7.14.5","@types/node":"^15.12.2","babel-jest":"^27.0.2","eslint":"^7.28.0","eslint-config-prettier":"^8.3.0","eslint-formatter-pretty":"^4.1.0","eslint-plugin-prettier":"^3.4.0","jest":"^27.0.4","jest-junit":"^12.2.0","launchdarkly-js-test-helpers":"^2.2.0","prettier":"^2.3.1","tmp":"^0.2.1","typescript":"~4.4.4","yaml":"^1.10.2"},"jest":{"rootDir":".","testEnvironment":"node","testMatch":["**/*-test.js"],"testResultsProcessor":"jest-junit"}}');
 
 /***/ })
 
@@ -16313,10 +16313,25 @@ const main = async () => {
   }
   core.endGroup();
 
+  // build a context
+  core.startGroup('Extracting inputs');
+  const inputPrefix = 'INPUT_';
+  var ctx = {};
+  Object.keys(process.env)
+    .filter(function (key) {
+      return key.startsWith(inputPrefix);
+    })
+    .forEach(function (key) {
+      var shortName = key.substring(inputPrefix.length);
+      ctx[shortName] = process.env[key];
+      core.debug(shortName + '="' + process.env[key]) + '"';
+    });
+  core.endGroup();
+
   // evaluate flags
   const client = new LDClient(sdkKey, { baseUri, eventsUri, streamUri }, userKey);
   core.startGroup('Evaluating flags');
-  const flags = await client.evaluateFlags(flagKeys);
+  const flags = await client.evaluateFlags(flagKeys, ctx);
   client.close();
   core.endGroup();
 
