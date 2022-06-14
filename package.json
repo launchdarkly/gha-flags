@@ -4,7 +4,7 @@
   "description": "Evaluate LaunchDarkly flags in your GitHub Action workflow.",
   "main": "index.js",
   "scripts": {
-    "build:dist": "ncc build index.js --license LICENSE",
+    "build": "ncc build index.js --license LICENSE",
     "lint": "eslint *.js",
     "prettier": "prettier",
     "prettier:check": "prettier -c ./",
