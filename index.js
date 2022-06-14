@@ -21,10 +21,29 @@ const main = async () => {
   }
   core.endGroup();
 
+  // build a context
+  core.startGroup('Extracting action context');
+  const inputPrefix = ['RUNNER_', 'GITHUB_', 'INPUT_CONTEXT_'];
+  var ctx = {};
+  Object.keys(process.env)
+    .filter(function (key) {
+      return process.env[key] != '';
+    })
+    .forEach(function (key) {
+      inputPrefix.forEach(function (prefix) {
+        if (key.startsWith(prefix)) {
+          var shortName = key.substring(prefix.length);
+          ctx[shortName] = process.env[key];
+          core.debug(shortName + '="' + process.env[key]) + '"';
+        }
+      });
+    });
+  core.endGroup();
+
   // evaluate flags
   const client = new LDClient(sdkKey, { baseUri, eventsUri, streamUri }, userKey);
   core.startGroup('Evaluating flags');
-  const flags = await client.evaluateFlags(flagKeys);
+  const flags = await client.evaluateFlags(flagKeys, ctx);
   client.close();
   core.endGroup();
 
