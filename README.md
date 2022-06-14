@@ -27,7 +27,6 @@ _See more: [Metadata syntax](https://docs.github.com/en/actions/creating-actions
 - [Use value in expression](#use-value-in-expression)
 - [Parse output string to types](#parse-output-string-to-types)
 - [Use with GitHub deployment environments](#use-with-github-deployment-environments)
-- [Use JSON flag value](#use-json-flag-value)
 
 ### Basic
 
@@ -123,7 +122,3 @@ job:
           sdk-key: ${{ secrets.LD_SDK_KEY }} # configure environment-specific secret
           flag-keys: test-boolean-flag
 ```
-
-### Use JSON flag value
-
-<!-- TODO >
