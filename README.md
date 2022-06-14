@@ -15,7 +15,11 @@ GitHub Action for evaluating LaunchDarkly flags in your workflow.
 
 ## Output
 
-The value of the given flags will be saved directly to the step's outputs with the flag key.
+The values of the request flags will be stored on the step outputs with the flag key.
+
+> Outputs are Unicode strings, and can be a maximum of 1 MB. The total of all outputs in a workflow run can be a maximum of 50 MB.
+
+_See more: [Metadata syntax](https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions)_
 
 ## Examples
 
@@ -77,7 +81,7 @@ jobs:
 
 ### Parse output string to types
 
-<!-- TODO link to info about fromJSON -->
+Output values are stored as strings and can be parsed to JSON or a JSON data type using [fromJSON()](https://docs.github.com/en/actions/learn-github-actions/expressions#fromjson).
 
 ```yaml
 name: Evaluate LaunchDarkly flags
@@ -102,9 +106,7 @@ jobs:
 
 ### Use with GitHub deployment environments
 
-<!-- TODO link to info about environments -->
-
-Set secret for production environment
+_See more: [Using environments for deployment](https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment)_
 
 ```yaml
 name: Deploy to environment
