@@ -1,5 +1,5 @@
 import * as core from '@actions/core';
-import { closeClient, evaluateFlags, initClient } from './client';
+import LDClient from './client';
 import { validate } from './configuration';
 
 const main = async () => {
@@ -20,10 +20,10 @@ const main = async () => {
   core.endGroup();
 
   // evaluate flags
+  const client = new LDClient(sdkKey, { baseUri, eventsUri, streamUri });
   core.startGroup('Evaluating flags');
-  initClient(sdkKey, { baseUri, eventsUri, streamUri });
-  const flags = await evaluateFlags(flagKeys);
-  closeClient();
+  const flags = await client.evaluateFlags(flagKeys);
+  client.close();
   core.endGroup();
 
   // set output
