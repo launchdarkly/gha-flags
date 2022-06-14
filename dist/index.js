@@ -16230,7 +16230,7 @@ var launchdarkly_node_server_sdk_default = /*#__PURE__*/__nccwpck_require__.n(la
 
 
 class LDClient {
-  constructor(sdkKey, options = {}, userKey = 'ld-github-action-flags') {
+  constructor(sdkKey, options = {}, userKey) {
     this.client = launchdarkly_node_server_sdk_default().init(sdkKey, options);
     this.userKey = userKey;
   }
@@ -16303,6 +16303,8 @@ const main = async () => {
   const baseUri = core.getInput('base-uri');
   const eventsUri = core.getInput('events-uri');
   const streamUri = core.getInput('stream-uri');
+  const userKey = core.getInput('user-key');
+
   core.info(baseUri);
   const validationErrors = validate({ sdkKey, flagKeys });
   if (validationErrors.length > 0) {
@@ -16312,7 +16314,7 @@ const main = async () => {
   core.endGroup();
 
   // evaluate flags
-  const client = new LDClient(sdkKey, { baseUri, eventsUri, streamUri });
+  const client = new LDClient(sdkKey, { baseUri, eventsUri, streamUri }, userKey);
   core.startGroup('Evaluating flags');
   const flags = await client.evaluateFlags(flagKeys);
   client.close();
