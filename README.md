@@ -7,7 +7,7 @@ GitHub Action for evaluating LaunchDarkly flags in your workflow.
 | Option         | Description                                                                                                                 | Required | Default value                     |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------- | -------- | --------------------------------- |
 | `sdk-key`      | SDK Key for environment                                                                                                     | true     |                                   |
-| `flag-keys`    | The flag keys to evaluate                                                                                                   | true     |                                   |
+| `flag-keys`    | The flag keys to evaluate. Note: flag keys may not contain periods. _Read more: [Outputs](#outputs) _                       | true     |                                   |
 | `user-key`     | The key of the user object used in a feature flag evaluation                                                                | false    | `ld-github-action-flags`          |
 | `send-events`  | Whether to send analytics events back to LaunchDarkly                                                                       | false    | `true`                            |
 | `base-uri`     | The base URI for the LaunchDarkly server. Most users should use the default value.                                          | false    | `https://app.launchdarkly.com`    |
@@ -22,6 +22,12 @@ GitHub Action for evaluating LaunchDarkly flags in your workflow.
 
 The values of the request flags are stored on the step outputs with the flag key.
 
+**Keys:**
+
+Flag keys used in this GitHub Action must contain only alphanumeric characters, `-`, or `_`.
+
+**Values:**
+
 > Outputs are Unicode strings, and can be a maximum of 1 MB. The total of all outputs in a workflow run can be a maximum of 50 MB.
 
 _Read more: [Metadata syntax](https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions)_
@@ -31,6 +37,7 @@ _Read more: [Metadata syntax](https://docs.github.com/en/actions/creating-action
 - [Basic](#basic)
 - [Use value in expression](#use-value-in-expression)
 - [Parse output string to types](#parse-output-string-to-types)
+- [Setting custom user attributes](#setting-custom-user-attributes)
 - [Use with GitHub deployment environments](#use-with-github-deployment-environments)
 - [Disable analytics events](#disable-analytics-events)
 
@@ -111,6 +118,29 @@ jobs:
           - name: If false
             if: fromJSON(steps.flags.outputs.test-boolean-flag) == false
             run: echo "It's false"
+```
+
+### Setting custom user attributes
+
+If you would like to include additional custom properties in your user object you may specify environment variables with the `LD_` prefix. All values will be treated at strings.
+
+_Read more: [Setting custom user attributes](https://docs.launchdarkly.com/home/users/attributes#setting-custom-user-attributes)_
+
+```yaml
+name: Evaluate LaunchDarkly flags
+on: push
+job:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Evaluate flags
+        id: ld
+        uses: launchdarkly/gha-flags@v0.0.1
+        with:
+          sdk-key: ${{ secrets.LD_SDK_KEY }}
+          flag-keys: test-boolean-flag
+        env:
+          LD_group: beta
 ```
 
 ### Use with GitHub deployment environments
