@@ -1,4 +1,4 @@
-# LaunchDarkly GitHub Action
+# LaunchDarkly Flag Evaluation GitHub Action
 
 GitHub Action for evaluating LaunchDarkly flags in your workflow.
 
@@ -23,10 +23,16 @@ _Read more: [Metadata syntax](https://docs.github.com/en/actions/creating-action
 
 ## Examples
 
-- [Basic](#basic)
-- [Use value in expression](#use-value-in-expression)
-- [Parse output string to types](#parse-output-string-to-types)
-- [Use with GitHub deployment environments](#use-with-github-deployment-environments)
+- [LaunchDarkly Flag Evaluation GitHub Action](#launchdarkly-flag-evaluation-github-action)
+  - [Configuration](#configuration)
+  - [Output](#output)
+  - [Examples](#examples)
+    - [Basic](#basic)
+    - [Use value in expression](#use-value-in-expression)
+    - [Parse output string to types](#parse-output-string-to-types)
+    - [Use with GitHub deployment environments](#use-with-github-deployment-environments)
+  - [Contributing](#contributing)
+  - [About LaunchDarkly](#about-launchdarkly)
 
 ### Basic
 
