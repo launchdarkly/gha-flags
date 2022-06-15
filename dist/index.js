@@ -16231,6 +16231,7 @@ var launchdarkly_node_server_sdk_default = /*#__PURE__*/__nccwpck_require__.n(la
 
 class LDClient {
   constructor(sdkKey, options = {}, userKey) {
+    core.debug(`Client options: ${JSON.stringify(options)}`);
     this.client = launchdarkly_node_server_sdk_default().init(sdkKey, options);
     this.userKey = userKey;
   }
@@ -16248,6 +16249,7 @@ class LDClient {
     const context = { key: this.userKey, custom: customProps };
 
     core.debug(`Evaluating flag ${flagKey}`);
+    core.debug(`with context ${JSON.stringify(context)}`);
     const result = await this.client.variation(flagKey, context, defaultValue);
     core.debug(`Flag ${flagKey} is ${result}`);
 
