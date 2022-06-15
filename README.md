@@ -32,6 +32,7 @@ _Read more: [Metadata syntax](https://docs.github.com/en/actions/creating-action
 - [Use value in expression](#use-value-in-expression)
 - [Parse output string to types](#parse-output-string-to-types)
 - [Use with GitHub deployment environments](#use-with-github-deployment-environments)
+- [Disable analytics events](#disable-analytics-events)
 
 ### Basic
 
@@ -130,6 +131,28 @@ job:
         with:
           sdk-key: ${{ secrets.LD_SDK_KEY }} # configure environment-specific secret
           flag-keys: test-boolean-flag
+```
+
+### Disable analytics events
+
+This example evaluates flag keys without sending events to LaunchDarkly.
+
+_Read more: [Analytics events](https://docs.launchdarkly.com/sdk/concepts/events/)_
+
+```yaml
+name: Evaluate LaunchDarkly flags
+on: push
+jobs:
+  eval-flags:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Evaluate flags
+        id: flags
+        uses: launchdarkly/gha-flags@v0.0.1
+        with:
+          sdk-key: ${{ secrets.LD_SDK_KEY }}
+          flag-keys: test-boolean-flag
+          send-events: false
 ```
 
 ## Contributing
