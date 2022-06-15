@@ -122,7 +122,7 @@ jobs:
 
 ### Setting custom user attributes
 
-If you would like to include additional custom properties in your user object you may specify environment variables with the `LD_` prefix.
+If you would like to include additional custom properties in your user object you may specify environment variables with the `LD_` prefix. All values will be treated at strings.
 
 _Read more: [Setting custom user attributes](https://docs.launchdarkly.com/home/users/attributes#setting-custom-user-attributes)_
 
