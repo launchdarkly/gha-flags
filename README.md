@@ -150,6 +150,8 @@ jobs:
 
 If you would like to include additional custom properties in your user object you may specify environment variables with the `LD_` prefix. All values will be treated at strings.
 
+By default, all metadata associated with the workflow run is saved in custom properties.
+
 _Read more: [Setting custom user attributes](https://docs.launchdarkly.com/home/users/attributes#setting-custom-user-attributes)_
 
 ```yaml
