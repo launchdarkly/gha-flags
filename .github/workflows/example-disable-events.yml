@@ -1,0 +1,15 @@
+name: Disable Analytics Events
+on: push
+jobs:
+  disable-events:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Evaluate flags
+        id: flags
+        uses: ./
+        with:
+          sdk-key: ${{ secrets.SDK_KEY }}
+          flag-keys: test-boolean-flag
+          send-events: false
