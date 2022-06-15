@@ -23,18 +23,23 @@ const main = async () => {
 
   // build a context
   core.startGroup('Extracting action context');
-  const inputPrefix = ['RUNNER_', 'GITHUB_', 'INPUT_CONTEXT_'];
+  const envFilters = [
+    // Don't strip RUNNER_ and GITHUB_ env vars so we can avoid naming conflicts
+    { prefix: 'RUNNER_', strip: false },
+    { prefix: 'GITHUB_', strip: false },
+    { prefix: 'LD_', strip: true },
+  ];
   var ctx = {};
   Object.keys(process.env)
     .filter(function (key) {
       return process.env[key] != '';
     })
     .forEach(function (key) {
-      inputPrefix.forEach(function (prefix) {
-        if (key.startsWith(prefix)) {
-          var shortName = key.substring(prefix.length);
-          ctx[shortName] = process.env[key];
-          core.debug(shortName + '="' + process.env[key]) + '"';
+      envFilters.forEach(function (p) {
+        if (key.startsWith(p.prefix)) {
+          var contextKey = p.strip ? key.substring(p.prefix.length) : key;
+          ctx[contextKey] = process.env[key];
+          core.debug(contextKey + '="' + process.env[key]) + '"';
         }
       });
     });
