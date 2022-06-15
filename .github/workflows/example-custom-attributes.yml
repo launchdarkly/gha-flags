@@ -15,5 +15,5 @@ jobs:
         env:
           LD_group: beta
       - name: Test output
-        if: steps.flags.test-boolean-flag != 'false'
+        if: steps.flags.outputs.test-boolean-flag != 'false'
         run: exit 1
