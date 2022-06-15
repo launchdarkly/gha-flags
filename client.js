@@ -23,7 +23,7 @@ export default class LDClient {
     core.debug(`Evaluating flag ${flagKey}`);
     core.debug(`with context ${JSON.stringify(context)}`);
     const result = await this.client.variation(flagKey, context, defaultValue);
-    core.debug(`Flag ${flagKey} is ${result}`);
+    core.debug(`Flag ${flagKey} is ${JSON.stringify(result)}`);
 
     return result;
   }
