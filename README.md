@@ -23,16 +23,10 @@ _Read more: [Metadata syntax](https://docs.github.com/en/actions/creating-action
 
 ## Examples
 
-- [LaunchDarkly Flag Evaluation GitHub Action](#launchdarkly-flag-evaluation-github-action)
-  - [Configuration](#configuration)
-  - [Output](#output)
-  - [Examples](#examples)
     - [Basic](#basic)
     - [Use value in expression](#use-value-in-expression)
     - [Parse output string to types](#parse-output-string-to-types)
     - [Use with GitHub deployment environments](#use-with-github-deployment-environments)
-  - [Contributing](#contributing)
-  - [About LaunchDarkly](#about-launchdarkly)
 
 ### Basic
 
