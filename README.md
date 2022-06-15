@@ -113,7 +113,7 @@ jobs:
 
 ### Use with GitHub deployment environments
 
-_See more: [Using environments for deployment](https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment)_
+_Read more: [Using environments for deployment](https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment)_
 
 ```yaml
 name: Deploy to environment
