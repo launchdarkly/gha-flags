@@ -19,6 +19,10 @@ inputs:
     description: 'The key of the user object used in a feature flag evaluation'
     required: false
     default: 'ld-github-action-flags'
+  send-events:
+    description: 'Whether to send analytics events back to LaunchDarkly'
+    required: false
+    default: 'true'
   base-uri:
     description: 'The base URI for the LaunchDarkly server. Most users should use the default value.'
     required: false

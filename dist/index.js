@@ -16307,6 +16307,7 @@ const main = async () => {
   core.setSecret(sdkKey);
   const flagKeys = core.getMultilineInput('flag-keys');
   const userKey = core.getInput('user-key');
+  const sendEvents = core.getBooleanInput('send-events');
   const baseUri = core.getInput('base-uri');
   const eventsUri = core.getInput('events-uri');
   const streamUri = core.getInput('stream-uri');
@@ -16349,6 +16350,7 @@ const main = async () => {
   core.endGroup();
 
   const options = {
+    sendEvents,
     baseUri,
     eventsUri,
     streamUri,
