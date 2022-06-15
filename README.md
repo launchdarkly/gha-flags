@@ -34,6 +34,8 @@ _Read more: [Metadata syntax](https://docs.github.com/en/actions/creating-action
 
 ### Basic
 
+This example evaluates flag keys of different types and prints their values.
+
 ```yaml
 name: Evaluate LaunchDarkly flags
 on: push
