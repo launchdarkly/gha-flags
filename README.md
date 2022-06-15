@@ -88,7 +88,7 @@ jobs:
 
 ### Parse output string to types
 
-Output values are stored as strings and can be parsed to JSON or a JSON data type using [fromJSON()](https://docs.github.com/en/actions/learn-github-actions/expressions#fromjson).
+This example illustrates how output values are stored as strings. You can parse them to JSON or a JSON data type using [fromJSON()](https://docs.github.com/en/actions/learn-github-actions/expressions#fromjson).
 
 ```yaml
 name: Evaluate LaunchDarkly flags
