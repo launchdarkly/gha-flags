@@ -36,7 +36,7 @@ inputs:
 # outputs:
 #   YOUR-FLAG-KEY:
 #     description: 'The evaluated flag value'
-#   YOUR-OTHER-FLAG-KEY
+#   YOUR-OTHER-FLAG-KEY:
 #     description: 'The evaluated flag value'
 
 runs:
