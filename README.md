@@ -22,7 +22,11 @@ GitHub Action for evaluating LaunchDarkly flags in your workflow.
 
 The values of the request flags are stored on the step outputs with the flag key.
 
+**Keys:**
+
 Flag keys used in this GitHub Action must contain only alphanumeric characters, `-`, or `_`.
+
+**Values:**
 
 > Outputs are Unicode strings, and can be a maximum of 1 MB. The total of all outputs in a workflow run can be a maximum of 50 MB.
 
