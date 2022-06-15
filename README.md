@@ -4,19 +4,19 @@ GitHub Action for evaluating LaunchDarkly flags in your workflow.
 
 ## Configuration
 
-| Option         | Description                                                                                                                 | Required | Default value                     |
-| -------------- | --------------------------------------------------------------------------------------------------------------------------- | -------- | --------------------------------- |
-| `sdk-key`      | SDK Key for environment                                                                                                     | true     |                                   |
-| `flag-keys`    | The flag keys to evaluate. Note: flag keys may not contain periods. _Read more: [Outputs](#outputs) _                       | true     |                                   |
-| `user-key`     | The key of the user object used in a feature flag evaluation                                                                | false    | `ld-github-action-flags`          |
-| `send-events`  | Whether to send analytics events back to LaunchDarkly                                                                       | false    | `true`                            |
-| `base-uri`     | The base URI for the LaunchDarkly server. Most users should use the default value.                                          | false    | `https://app.launchdarkly.com`    |
-| `events-uri`   | The base URI for the LaunchDarkly events server. Most users should use the default value.                                   | false    | `https://events.launchdarkly.com` |
-| `stream-uri`   | The base URI for the LaunchDarkly streaming server. Most users should use the default value.                                | false    | `https://stream.launchdarkly.com` |
-| `proxy-auth`   | Allows you to specify basic authentication parameters for an optional HTTP proxy. Usually of the form `username:password`.  | false    |                                   |
-| `proxy-host`   | Allows you to specify a host for an optional HTTP proxy. Both the host and port must be specified to enable proxy support.  | false    |                                   |
-| `proxy-port`   | Allows you to specify a port for an optional HTTP proxy. Both the host and port` must be specified to enable proxy support. | false    |                                   |
-| `proxy-scheme` | When using an HTTP proxy, specifies whether it is accessed via `http` or `https`                                            | false    |                                   |
+| Option         | Description                                                                                                                   | Required | Default value                     |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------- | -------- | --------------------------------- |
+| `sdk-key`      | SDK Key for environment                                                                                                       | true     |                                   |
+| `flag-keys`    | The flag keys to evaluate. Note: flag keys may not contain periods. _Read more: [Outputs](#outputs) _                         | true     |                                   |
+| `user-key`     | The key of the user object used in a feature flag evaluation                                                                  | false    | `ld-github-action-flags`          |
+| `send-events`  | Whether to send analytics events back to LaunchDarkly                                                                         | false    | `true`                            |
+| `base-uri`     | The base URI for the LaunchDarkly server. Most users should use the default value.                                            | false    | `https://app.launchdarkly.com`    |
+| `events-uri`   | The base URI for the LaunchDarkly events server. Most users should use the default value.                                     | false    | `https://events.launchdarkly.com` |
+| `stream-uri`   | The base URI for the LaunchDarkly streaming server. Most users should use the default value.                                  | false    | `https://stream.launchdarkly.com` |
+| `proxy-auth`   | Allows you to specify basic authentication parameters for an optional HTTP proxy. Usually of the form `username:password`.    | false    |                                   |
+| `proxy-host`   | Allows you to specify a host for an optional HTTP proxy. You must specify both the host and the port to enable proxy support. | false    |                                   |
+| `proxy-port`   | Allows you to specify a port for an optional HTTP proxy. You must specify both the host and the port to enable proxy support. | false    |                                   |
+| `proxy-scheme` | When using an HTTP proxy, specifies whether it is accessed via `http` or `https`                                              | false    |                                   |
 
 ## Output
 
@@ -35,6 +35,7 @@ _Read more: [Metadata syntax](https://docs.github.com/en/actions/creating-action
 ## Examples
 
 - [Basic](#basic)
+- [Dynamic user key](#dynamic-user-key)
 - [Use value in expression](#use-value-in-expression)
 - [Parse output string to types](#parse-output-string-to-types)
 - [Setting custom user attributes](#setting-custom-user-attributes)
@@ -68,6 +69,31 @@ jobs:
           echo ${{ steps.flags.outputs.test-string-flag }}
           echo ${{ steps.flags.outputs.test-number-flag }}
           echo ${{ toJSON(steps.flags.outputs.test-json-flag) }}
+```
+
+### Dynamic user key
+
+This example evaluates a flag for a user. Here, the user key of the LaunchDarkly user is the username of the GitHub user who initiated the workflow run.
+
+_Read more: [GitHub Actions Contexts](https://docs.github.com/en/actions/learn-github-actions/contexts)_
+
+```yaml
+name: Evaluate LaunchDarkly flags
+on: push
+jobs:
+  eval-flags:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Evaluate flags
+        id: flags
+        uses: launchdarkly/gha-flags@v0.0.1
+        with:
+          sdk-key: ${{ secrets.LD_SDK_KEY }}
+          flag-keys: favorite-animal
+          user-key: ${{ github.actor }}
+      - name: Favorite animal
+        if: steps.flags.outputs.favorite-animal != 'idk'
+        run: echo "${{ github.actor }}'s favorite animal is a...${{ steps.flags.outputs.favorite-animal }}"
 ```
 
 ### Use value in expression
@@ -123,6 +149,8 @@ jobs:
 ### Setting custom user attributes
 
 If you would like to include additional custom properties in your user object you may specify environment variables with the `LD_` prefix. All values will be treated at strings.
+
+By default, all metadata associated with the workflow run is saved in custom properties.
 
 _Read more: [Setting custom user attributes](https://docs.launchdarkly.com/home/users/attributes#setting-custom-user-attributes)_
 
