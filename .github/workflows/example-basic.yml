@@ -1,9 +1,7 @@
-name: Test
+name: Basic
 on: push
-
 jobs:
-  eval-flags:
-    name: Evaluate LaunchDarkly Flags
+  basic:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -24,9 +22,3 @@ jobs:
           echo ${{ steps.flags.outputs.test-string-flag }}
           echo ${{ steps.flags.outputs.test-number-flag }}
           echo ${{ toJSON(steps.flags.outputs.test-json-flag) }}
-      - name: If boolean flag
-        if: fromJSON(steps.flags.outputs.test-boolean-flag) == true
-        run: echo "It's true"
-      - name: If not boolean flag
-        if: fromJSON(steps.flags.outputs.test-boolean-flag) == false
-        run: echo "It's false"

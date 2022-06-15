@@ -1,9 +1,7 @@
-name: Test
+name: Parse values
 on: push
-
 jobs:
-  eval-flags:
-    name: Evaluate LaunchDarkly Flags
+  parse-values:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -15,18 +13,16 @@ jobs:
           sdk-key: ${{ secrets.SDK_KEY }}
           flag-keys: |
             test-boolean-flag
-            test-string-flag
             test-number-flag
-            test-json-flag
-      - name: Print flag values
-        run: |
-          echo ${{ steps.flags.outputs.test-boolean-flag }}
-          echo ${{ steps.flags.outputs.test-string-flag }}
-          echo ${{ steps.flags.outputs.test-number-flag }}
-          echo ${{ toJSON(steps.flags.outputs.test-json-flag) }}
-      - name: If boolean flag
+      - name: If true
         if: fromJSON(steps.flags.outputs.test-boolean-flag) == true
         run: echo "It's true"
-      - name: If not boolean flag
+      - name: If false
         if: fromJSON(steps.flags.outputs.test-boolean-flag) == false
         run: echo "It's false"
+      - name: If number is 100
+        if: fromJSON(steps.flags.outputs.test-number-flag) == 100
+        run: echo "Number is 100"
+      - name: If number is 200
+        if: fromJSON(steps.flags.outputs.test-number-flag) == 200
+        run: echo "Number is 200"
