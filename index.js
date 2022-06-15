@@ -44,6 +44,7 @@ const main = async () => {
   const client = new LDClient(sdkKey, { baseUri, eventsUri, streamUri }, userKey);
   core.startGroup('Evaluating flags');
   const flags = await client.evaluateFlags(flagKeys, ctx);
+  await client.flush();
   client.close();
   core.endGroup();
 
