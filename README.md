@@ -35,6 +35,7 @@ _Read more: [Metadata syntax](https://docs.github.com/en/actions/creating-action
 ## Examples
 
 - [Basic](#basic)
+- [Dynamic user key](#dynamic-user-key)
 - [Use value in expression](#use-value-in-expression)
 - [Parse output string to types](#parse-output-string-to-types)
 - [Setting custom user attributes](#setting-custom-user-attributes)
@@ -68,6 +69,31 @@ jobs:
           echo ${{ steps.flags.outputs.test-string-flag }}
           echo ${{ steps.flags.outputs.test-number-flag }}
           echo ${{ toJSON(steps.flags.outputs.test-json-flag) }}
+```
+
+### Dynamic user key
+
+This example evaluates a flag with the user key being the username of the user that initiated the workflow run.
+
+_Read more: [GitHub Actions Contexts](https://docs.github.com/en/actions/learn-github-actions/contexts)_
+
+```yaml
+name: Evaluate LaunchDarkly flags
+on: push
+jobs:
+  eval-flags:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Evaluate flags
+        id: flags
+        uses: launchdarkly/gha-flags@v0.0.1
+        with:
+          sdk-key: ${{ secrets.LD_SDK_KEY }}
+          flag-keys: favorite-animal
+          user-key: ${{ github.actor }}
+      - name: Favorite animal
+        if: steps.flags.outputs.favorite-animal != 'idk'
+        run: echo "${{ github.actor }}'s favorite animal is a...${{ steps.flags.outputs.favorite-animal }}"
 ```
 
 ### Use value in expression
