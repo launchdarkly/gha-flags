@@ -7,6 +7,14 @@ export default class LDClient {
     this.userKey = userKey;
   }
 
+  close() {
+    this.client.close();
+  }
+
+  async flush() {
+    this.client.flush();
+  }
+
   async evaluateFlag(flagKey, defaultValue, customProps = {}) {
     await this.client.waitForInitialization();
     const context = { key: this.userKey, custom: customProps };
@@ -33,9 +41,5 @@ export default class LDClient {
     }
 
     return flags;
-  }
-
-  close() {
-    this.client.close();
   }
 }
