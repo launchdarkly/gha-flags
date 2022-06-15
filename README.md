@@ -63,6 +63,8 @@ jobs:
 
 ### Use value in expression
 
+This example evaluates a flag key and uses the value in an expression in a subsequent step.
+
 ```yaml
 name: Evaluate LaunchDarkly flags
 on: push
