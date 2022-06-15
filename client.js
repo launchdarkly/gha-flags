@@ -3,6 +3,7 @@ import LaunchDarkly from 'launchdarkly-node-server-sdk';
 
 export default class LDClient {
   constructor(sdkKey, options = {}, userKey) {
+    core.debug(`Client options: ${JSON.stringify(options)}`);
     this.client = LaunchDarkly.init(sdkKey, options);
     this.userKey = userKey;
   }
@@ -20,8 +21,9 @@ export default class LDClient {
     const context = { key: this.userKey, custom: customProps };
 
     core.debug(`Evaluating flag ${flagKey}`);
+    core.debug(`with context ${JSON.stringify(context)}`);
     const result = await this.client.variation(flagKey, context, defaultValue);
-    core.debug(`Flag ${flagKey} is ${result}`);
+    core.debug(`Flag ${flagKey} is ${JSON.stringify(result)}`);
 
     return result;
   }
