@@ -16306,10 +16306,15 @@ const main = async () => {
   const sdkKey = core.getInput('sdk-key');
   core.setSecret(sdkKey);
   const flagKeys = core.getMultilineInput('flag-keys');
+  const userKey = core.getInput('user-key');
   const baseUri = core.getInput('base-uri');
   const eventsUri = core.getInput('events-uri');
   const streamUri = core.getInput('stream-uri');
-  const userKey = core.getInput('user-key');
+  // these will be validated by SDK
+  const proxyAuth = core.getInput('proxy-auth');
+  const proxyHost = core.getInput('proxy-host');
+  const proxyPort = core.getInput('proxy-port');
+  const proxyScheme = core.getInput('proxy-scheme');
 
   core.info(baseUri);
   const validationErrors = validate({ sdkKey, flagKeys });
@@ -16343,8 +16348,27 @@ const main = async () => {
     });
   core.endGroup();
 
+  const options = {
+    baseUri,
+    eventsUri,
+    streamUri,
+  };
+
+  if (proxyAuth) {
+    options.proxyAuth = proxyAuth;
+  }
+  if (proxyHost) {
+    options.proxyHost = proxyHost;
+  }
+  if (proxyPort) {
+    options.proxyPort = proxyPort;
+  }
+  if (proxyScheme) {
+    options.proxyScheme = proxyScheme;
+  }
+
   // evaluate flags
-  const client = new LDClient(sdkKey, { baseUri, eventsUri, streamUri }, userKey);
+  const client = new LDClient(sdkKey, options, userKey);
   core.startGroup('Evaluating flags');
   const flags = await client.evaluateFlags(flagKeys, ctx);
   await client.flush();
