@@ -32,7 +32,7 @@ inputs:
     required: false
     default: 'ld-github-action-flags'
 
-# Outputs are generate dynamically based on flag-keys supplied
+# Outputs are generated dynamically based on the flag-keys you supply
 # outputs:
 #   YOUR-FLAG-KEY:
 #     description: 'The evaluated flag value'
