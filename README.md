@@ -14,8 +14,8 @@ GitHub Action for evaluating LaunchDarkly flags in your workflow.
 | `events-uri`   | The base URI for the LaunchDarkly events server. Most users should use the default value.                                  | false    | `https://events.launchdarkly.com` |
 | `stream-uri`   | The base URI for the LaunchDarkly streaming server. Most users should use the default value.                               | false    | `https://stream.launchdarkly.com` |
 | `proxy-auth`   | Allows you to specify basic authentication parameters for an optional HTTP proxy. Usually of the form `username:password`. | false    |                                   |
-| `proxy-host`   | Allows you to specify a host for an optional HTTP proxy. Both the host and port must be specified to enable proxy support. | false    |                                   |
-| `proxy-port`   | Allows you to specify a port for an optional HTTP proxy. Both the host and port must be specified to enable proxy support. | false    |                                   |
+| `proxy-host`   | Allows you to specify a host for an optional HTTP proxy. You must specify both the host and the port to enable proxy support. | false    |                                   |
+| `proxy-port`   | Allows you to specify a port for an optional HTTP proxy. You must specify both the host and the port to enable proxy support. | false    |                                   |
 | `proxy-scheme` | When using an HTTP proxy, specifies whether it is accessed via `http` or `https`                                           | false    |                                   |
 
 ## Output
@@ -73,7 +73,7 @@ jobs:
 
 ### Dynamic user key
 
-This example evaluates a flag with the user key being the username of the user that initiated the workflow run.
+This example evaluates a flag for a user. Here, the user key of the LaunchDarkly user is the username of the GitHub user who initiated the workflow run.
 
 _Read more: [GitHub Actions Contexts](https://docs.github.com/en/actions/learn-github-actions/contexts)_
 
