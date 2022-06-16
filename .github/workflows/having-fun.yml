@@ -29,6 +29,10 @@ jobs:
           # GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GIPHY_TOKEN: ${{ secrets.GIPHY_TOKEN }}
       - if: steps.flags.outputs.enable-giphy-comment == 'true' && github.event_name == 'pull_request'
-        run: gh pr comment github.event.pull_request.number -b "![gif](${{ steps.giphy.outputs.url }})"
+        run: gh pr comment ${{ github.event.pull_request.number }} -b "![gif](${{ steps.giphy.outputs.url }})"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - if: steps.flags.outputs.enable-giphy-comment == 'true' && github.event_name == 'issue'
-        run: gh issue comment github.event.issue.number -b "![gif](${{ steps.giphy.outputs.url }})"
+        run: gh issue comment ${{ github.event.issue.number }} -b "![gif](${{ steps.giphy.outputs.url }})"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
