@@ -16,13 +16,14 @@ jobs:
         with:
           sdk-key: ${{ secrets.SDK_KEY_TEST }}
           flag-keys: |
-            enable-funny-comment
-            funny-comment-type
+            favorite-animal
+            enable-giphy-comment
           user-key: ${{ github.actor }}
       - name: Favorite animal
-        if: steps.flags.outputs.enable-funny-comment == 'true'
+        if: steps.flags.outputs.favorite-animal != 'idk'
         run: echo "${{ github.actor }}'s favorite animal is a...${{ steps.flags.outputs.favorite-animal }}"
-      - uses: jzweifel/pr-status-giphy-action@v1.0.3
+      - if: steps.flags.outputs.enable-giphy-comment == 'true'
+        uses: jzweifel/pr-status-giphy-action@v1.0.3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GIPHY_API_KEY: ${{ secrets.GIPHY_TOKEN }}
