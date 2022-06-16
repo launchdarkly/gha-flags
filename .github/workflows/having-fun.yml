@@ -1,0 +1,30 @@
+name: Having fun
+on:
+  pull_request:
+  issues:
+    types: [opened]
+
+jobs:
+  fun:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Evaluate flags
+        id: flags
+        uses: ./
+        with:
+          sdk-key: ${{ secrets.SDK_KEY_TEST }}
+          flag-keys: |
+            enable-funny-comment
+            funny-comment-type
+          user-key: ${{ github.actor }}
+      - name: Favorite animal
+        if: steps.flags.outputs.enable-funny-comment == 'true'
+        run: echo "${{ github.actor }}'s favorite animal is a...${{ steps.flags.outputs.favorite-animal }}"
+      - id: prComment
+        uses: Marta83/funny-comment-action@v2.1
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GIPHY_TOKEN: ${{ secrets.GIPHY_TOKEN }}
+          comment_type: ${{ steps.flags.outputs.funny-comment-type }}
