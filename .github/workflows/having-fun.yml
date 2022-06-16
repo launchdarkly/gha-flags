@@ -23,10 +23,11 @@ jobs:
         if: steps.flags.outputs.enable-giphy-comment == 'true'
         id: giphy
         uses: shokme/giphy-generator@v1.1
+        with:
+          query: ${{ steps.flags.outputs.favorite-animal }}
         env:
-          query: steps.flags.outputs.favorite-animal
           # GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GIPHY_API_KEY: ${{ secrets.GIPHY_TOKEN }}
+          GIPHY_TOKEN: ${{ secrets.GIPHY_TOKEN }}
       - if: steps.flags.outputs.enable-giphy-comment == 'true' && github.event_name == 'pull_request'
         run: gh pr comment github.event.pull_request.number -b "![gif](${{ steps.giphy.outputs.url }})"
       - if: steps.flags.outputs.enable-giphy-comment == 'true' && github.event_name == 'issue'
