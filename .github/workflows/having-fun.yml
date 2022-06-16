@@ -20,10 +20,14 @@ jobs:
             enable-giphy-comment
           user-key: ${{ github.actor }}
       - name: Favorite animal
-        if: steps.flags.outputs.favorite-animal != 'idk'
-        run: echo "${{ github.actor }}'s favorite animal is a...${{ steps.flags.outputs.favorite-animal }}"
-      - if: steps.flags.outputs.enable-giphy-comment == 'true'
-        uses: jzweifel/pr-status-giphy-action@v1.0.3
+        if: steps.flags.outputs.enable-giphy-comment == 'true'
+        id: giphy
+        uses: shokme/giphy-generator@v1.1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          query: steps.flags.outputs.favorite-animal
+          # GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GIPHY_API_KEY: ${{ secrets.GIPHY_TOKEN }}
+      - if: steps.flags.outputs.enable-giphy-comment == 'true' && github.event_name == 'pull_request'
+        run: gh pr comment github.event.pull_request.number -b "![gif](${{ steps.giphy.outputs.url }})"
+      - if: steps.flags.outputs.enable-giphy-comment == 'true' && github.event_name == 'issue'
+        run: gh issue comment github.event.issue.number -b "![gif](${{ steps.giphy.outputs.url }})"
