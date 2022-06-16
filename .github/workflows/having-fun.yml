@@ -23,3 +23,6 @@ jobs:
         if: steps.flags.outputs.enable-funny-comment == 'true'
         run: echo "${{ github.actor }}'s favorite animal is a...${{ steps.flags.outputs.favorite-animal }}"
       - uses: iamhughes/giphy-generator@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GIPHY_TOKEN: ${{ secrets.GIPHY_TOKEN }}
