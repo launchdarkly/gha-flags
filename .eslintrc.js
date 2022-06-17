@@ -5,6 +5,7 @@ module.exports = {
     node: true,
     es2021: true,
     es6: true,
+    jest: true,
   },
   plugins: ['prettier'],
   extends: ['eslint:recommended', 'prettier'],

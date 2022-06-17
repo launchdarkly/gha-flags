@@ -23,6 +23,12 @@ repos:
         types_or: [javascript, json, markdown, yaml]
         language: system
 
+      - id: test
+        name: test
+        entry: npm run test
+        types_or: [javascript]
+        language: system
+
       - id: build
         name: build
         entry: npm run build
