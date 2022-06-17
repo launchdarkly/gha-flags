@@ -29,3 +29,9 @@ repos:
         types_or: [javascript]
         language: system
         pass_filenames: false
+
+      - id: test
+        name: test
+        entry: npm run test
+        types_or: [javascript]
+        language: system

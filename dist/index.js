@@ -16295,12 +16295,12 @@ const validate = (args) => {
   return errors;
 };
 
-;// CONCATENATED MODULE: ./index.js
+;// CONCATENATED MODULE: ./action.js
 
 
 
 
-const main = async () => {
+const run = async () => {
   // parse and validate args
   core.startGroup('Validating arguments');
   const sdkKey = core.getInput('sdk-key');
@@ -16385,7 +16385,10 @@ const main = async () => {
   return;
 };
 
-main();
+;// CONCATENATED MODULE: ./index.js
+
+
+run();
 
 })();
 

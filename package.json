@@ -10,7 +10,7 @@
     "prettier:check": "prettier -c ./",
     "prettier:write": "prettier -w ./",
     "prettier:write:path": "prettier -w",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "jest --testMatch '**/*.test.js'"
   },
   "repository": {
     "type": "git",
@@ -28,11 +28,15 @@
     "launchdarkly-node-server-sdk": "^6.4.2"
   },
   "devDependencies": {
+    "@babel/core": "^7.18.5",
+    "@babel/preset-env": "^7.18.2",
     "@vercel/ncc": "^0.34.0",
+    "babel-jest": "^28.1.1",
     "eslint": "^8.17.0",
     "eslint-config-prettier": "^8.5.0",
     "eslint-plugin-import": "^2.26.0",
     "eslint-plugin-prettier": "^4.0.0",
+    "jest": "^28.1.1",
     "prettier": "^2.7.0"
   }
 }
