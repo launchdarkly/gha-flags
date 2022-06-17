@@ -16168,6 +16168,35 @@ module.exports = JSON.parse('{"_from":"launchdarkly-node-server-sdk","_id":"laun
 /******/ 	}
 /******/ 	
 /************************************************************************/
+/******/ 	/* webpack/runtime/compat get default export */
+/******/ 	(() => {
+/******/ 		// getDefaultExport function for compatibility with non-harmony modules
+/******/ 		__nccwpck_require__.n = (module) => {
+/******/ 			var getter = module && module.__esModule ?
+/******/ 				() => (module['default']) :
+/******/ 				() => (module);
+/******/ 			__nccwpck_require__.d(getter, { a: getter });
+/******/ 			return getter;
+/******/ 		};
+/******/ 	})();
+/******/ 	
+/******/ 	/* webpack/runtime/define property getters */
+/******/ 	(() => {
+/******/ 		// define getter functions for harmony exports
+/******/ 		__nccwpck_require__.d = (exports, definition) => {
+/******/ 			for(var key in definition) {
+/******/ 				if(__nccwpck_require__.o(definition, key) && !__nccwpck_require__.o(exports, key)) {
+/******/ 					Object.defineProperty(exports, key, { enumerable: true, get: definition[key] });
+/******/ 				}
+/******/ 			}
+/******/ 		};
+/******/ 	})();
+/******/ 	
+/******/ 	/* webpack/runtime/hasOwnProperty shorthand */
+/******/ 	(() => {
+/******/ 		__nccwpck_require__.o = (obj, prop) => (Object.prototype.hasOwnProperty.call(obj, prop))
+/******/ 	})();
+/******/ 	
 /******/ 	/* webpack/runtime/make namespace object */
 /******/ 	(() => {
 /******/ 		// define __esModule on exports
@@ -16191,22 +16220,19 @@ var __webpack_exports__ = {};
 // ESM COMPAT FLAG
 __nccwpck_require__.r(__webpack_exports__);
 
-// NAMESPACE OBJECT: ./action.js
-var action_namespaceObject = {};
-__nccwpck_require__.r(action_namespaceObject);
-
 // EXTERNAL MODULE: ./node_modules/@actions/core/lib/core.js
-var lib_core = __nccwpck_require__(2186);
+var core = __nccwpck_require__(2186);
 // EXTERNAL MODULE: ./node_modules/launchdarkly-node-server-sdk/index.js
 var launchdarkly_node_server_sdk = __nccwpck_require__(8403);
+var launchdarkly_node_server_sdk_default = /*#__PURE__*/__nccwpck_require__.n(launchdarkly_node_server_sdk);
 ;// CONCATENATED MODULE: ./client.js
 
 
 
-class client_LDClient {
+class LDClient {
   constructor(sdkKey, options = {}, userKey) {
     core.debug(`Client options: ${JSON.stringify(options)}`);
-    this.client = LaunchDarkly.init(sdkKey, options);
+    this.client = launchdarkly_node_server_sdk_default().init(sdkKey, options);
     this.userKey = userKey;
   }
 
@@ -16251,7 +16277,7 @@ class client_LDClient {
 ;// CONCATENATED MODULE: ./configuration.js
 
 
-const configuration_validate = (args) => {
+const validate = (args) => {
   const errors = [];
   if (!args.sdkKey) {
     core.error('SDK key is required');
@@ -16362,7 +16388,7 @@ const run = async () => {
 ;// CONCATENATED MODULE: ./index.js
 
 
-action_namespaceObject["default"].run();
+run();
 
 })();
 
