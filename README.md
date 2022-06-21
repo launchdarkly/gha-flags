@@ -7,7 +7,7 @@ GitHub Action for evaluating LaunchDarkly flags in your workflow.
 | Option         | Description                                                                                                                   | Required | Default value                     |
 | -------------- | ----------------------------------------------------------------------------------------------------------------------------- | -------- | --------------------------------- |
 | `sdk-key`      | SDK Key for environment                                                                                                       | true     |                                   |
-| `flag-keys`    | The flag keys to evaluate. Note: flag keys may not contain periods. _Read more: [Outputs](#outputs) _                         | true     |                                   |
+| `flag-keys`    | The flag keys to evaluate. Note: flag keys may not contain periods. _Read more: [Output](#output)_                            | true     |                                   |
 | `user-key`     | The key of the user object used in a feature flag evaluation                                                                  | false    | `ld-github-action-flags`          |
 | `send-events`  | Whether to send analytics events back to LaunchDarkly                                                                         | false    | `true`                            |
 | `base-uri`     | The base URI for the LaunchDarkly server. Most users should use the default value.                                            | false    | `https://app.launchdarkly.com`    |
@@ -34,13 +34,19 @@ _Read more: [Metadata syntax](https://docs.github.com/en/actions/creating-action
 
 ## Examples
 
-- [Basic](#basic)
-- [Dynamic user key](#dynamic-user-key)
-- [Use value in expression](#use-value-in-expression)
-- [Parse output string to types](#parse-output-string-to-types)
-- [Setting custom user attributes](#setting-custom-user-attributes)
-- [Use with GitHub deployment environments](#use-with-github-deployment-environments)
-- [Disable analytics events](#disable-analytics-events)
+- [LaunchDarkly Flag Evaluation GitHub Action](#launchdarkly-flag-evaluation-github-action)
+  - [Configuration](#configuration)
+  - [Output](#output)
+  - [Examples](#examples)
+    - [Basic](#basic)
+    - [Dynamic user key](#dynamic-user-key)
+    - [Use value in expression](#use-value-in-expression)
+    - [Parse output string to types](#parse-output-string-to-types)
+    - [Setting custom user attributes](#setting-custom-user-attributes)
+    - [Use with GitHub deployment environments](#use-with-github-deployment-environments)
+    - [Disable analytics events](#disable-analytics-events)
+  - [Contributing](#contributing)
+  - [About LaunchDarkly](#about-launchdarkly)
 
 ### Basic
 
