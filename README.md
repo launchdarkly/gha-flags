@@ -40,19 +40,13 @@ _Read more: [Metadata syntax](https://docs.github.com/en/actions/creating-action
 
 ## Examples
 
-- [LaunchDarkly Flag Evaluation GitHub Action](#launchdarkly-flag-evaluation-github-action)
-  - [Configuration](#configuration)
-  - [Output](#output)
-  - [Examples](#examples)
-    - [Basic](#basic)
-    - [Dynamic user key](#dynamic-user-key)
-    - [Use value in expression](#use-value-in-expression)
-    - [Parse output string to types](#parse-output-string-to-types)
-    - [Setting custom user attributes](#setting-custom-user-attributes)
-    - [Use with GitHub deployment environments](#use-with-github-deployment-environments)
-    - [Disable analytics events](#disable-analytics-events)
-  - [Contributing](#contributing)
-  - [About LaunchDarkly](#about-launchdarkly)
+- [Basic](#basic)
+- [Dynamic user key](#dynamic-user-key)
+- [Use value in expression](#use-value-in-expression)
+- [Parse output string to types](#parse-output-string-to-types)
+- [Setting custom user attributes](#setting-custom-user-attributes)
+- [Use with GitHub deployment environments](#use-with-github-deployment-environments)
+- [Disable analytics events](#disable-analytics-events)
 
 ### Basic
 
