@@ -10,13 +10,6 @@ repos:
 
   - repo: local
     hooks:
-      - id: action-docs
-        name: action-docs
-        entry: npm run docs
-        pass_filenames: false
-        language: node
-        files: action.yml
-
       - id: eslint
         name: eslint
         entry: npm run lint
@@ -42,3 +35,10 @@ repos:
         entry: npm run test
         types_or: [javascript]
         language: node
+
+      - id: action-docs
+        name: action-docs
+        entry: npm run docs
+        pass_filenames: false
+        language: node
+        files: action.yml
