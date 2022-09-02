@@ -2,21 +2,25 @@
 
 GitHub Action for evaluating LaunchDarkly flags in your workflow.
 
-## Configuration
+<!-- action-docs-inputs -->
 
-| Option         | Description                                                                                                                   | Required | Default value                     |
-| -------------- | ----------------------------------------------------------------------------------------------------------------------------- | -------- | --------------------------------- |
-| `sdk-key`      | SDK Key for environment                                                                                                       | true     |                                   |
-| `flag-keys`    | The flag keys to evaluate. Note: flag keys may not contain periods. _Read more: [Output](#output)_                            | true     |                                   |
-| `user-key`     | The key of the user object used in a feature flag evaluation                                                                  | false    | `ld-github-action-flags`          |
-| `send-events`  | Whether to send analytics events back to LaunchDarkly                                                                         | false    | `true`                            |
-| `base-uri`     | The base URI for the LaunchDarkly server. Most users should use the default value.                                            | false    | `https://app.launchdarkly.com`    |
-| `events-uri`   | The base URI for the LaunchDarkly events server. Most users should use the default value.                                     | false    | `https://events.launchdarkly.com` |
-| `stream-uri`   | The base URI for the LaunchDarkly streaming server. Most users should use the default value.                                  | false    | `https://stream.launchdarkly.com` |
-| `proxy-auth`   | Allows you to specify basic authentication parameters for an optional HTTP proxy. Usually of the form `username:password`.    | false    |                                   |
-| `proxy-host`   | Allows you to specify a host for an optional HTTP proxy. You must specify both the host and the port to enable proxy support. | false    |                                   |
-| `proxy-port`   | Allows you to specify a port for an optional HTTP proxy. You must specify both the host and the port to enable proxy support. | false    |                                   |
-| `proxy-scheme` | When using an HTTP proxy, specifies whether it is accessed via `http` or `https`                                              | false    |                                   |
+## Inputs
+
+| parameter    | description                                                                                                                | required | default                         |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------- |
+| sdk-key      | Server-side SDK key for environment.                                                                                       | `true`   |                                 |
+| flag-keys    | The flag keys to evaluate.                                                                                                 | `true`   |                                 |
+| user-key     | The key of the user object used in a feature flag evaluation                                                               | `false`  | ld-github-action-flags          |
+| send-events  | Whether to send analytics events back to LaunchDarkly                                                                      | `false`  | true                            |
+| base-uri     | The base URI for the LaunchDarkly server. Most users should use the default value.                                         | `false`  | https://app.launchdarkly.com    |
+| stream-uri   | The base URI for the LaunchDarkly streaming server. Most users should use the default value.                               | `false`  | https://stream.launchdarkly.com |
+| events-uri   | The base URI for the LaunchDarkly events server. Most users should use the default value.                                  | `false`  | https://events.launchdarkly.com |
+| proxy-auth   | Allows you to specify basic authentication parameters for an optional HTTP proxy. Usually of the form username:password.   | `false`  |                                 |
+| proxy-host   | Allows you to specify a host for an optional HTTP proxy. Both the host and port must be specified to enable proxy support. | `false`  |                                 |
+| proxy-port   | Allows you to specify a port for an optional HTTP proxy. Both the host and port must be specified to enable proxy support. | `false`  |                                 |
+| proxy-scheme | When using an HTTP proxy, specifies whether it is accessed via http or https                                               | `false`  |                                 |
+
+<!-- action-docs-inputs -->
 
 ## Output
 
@@ -34,19 +38,13 @@ _Read more: [Metadata syntax](https://docs.github.com/en/actions/creating-action
 
 ## Examples
 
-- [LaunchDarkly Flag Evaluation GitHub Action](#launchdarkly-flag-evaluation-github-action)
-  - [Configuration](#configuration)
-  - [Output](#output)
-  - [Examples](#examples)
-    - [Basic](#basic)
-    - [Dynamic user key](#dynamic-user-key)
-    - [Use value in expression](#use-value-in-expression)
-    - [Parse output string to types](#parse-output-string-to-types)
-    - [Setting custom user attributes](#setting-custom-user-attributes)
-    - [Use with GitHub deployment environments](#use-with-github-deployment-environments)
-    - [Disable analytics events](#disable-analytics-events)
-  - [Contributing](#contributing)
-  - [About LaunchDarkly](#about-launchdarkly)
+- [Basic](#basic)
+- [Dynamic user key](#dynamic-user-key)
+- [Use value in expression](#use-value-in-expression)
+- [Parse output string to types](#parse-output-string-to-types)
+- [Setting custom user attributes](#setting-custom-user-attributes)
+- [Use with GitHub deployment environments](#use-with-github-deployment-environments)
+- [Disable analytics events](#disable-analytics-events)
 
 ### Basic
 

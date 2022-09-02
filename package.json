@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "build": "ncc build index.js --license LICENSE",
+    "docs": "action-docs -u --no-banner && npm run prettier:write:path README.md",
     "lint": "eslint *.js",
     "prettier": "prettier",
     "prettier:check": "prettier -c ./",
@@ -31,6 +32,7 @@
     "@babel/core": "^7.18.5",
     "@babel/preset-env": "^7.18.2",
     "@vercel/ncc": "^0.34.0",
+    "action-docs": "^1.0.4",
     "babel-jest": "^28.1.1",
     "eslint": "^8.17.0",
     "eslint-config-prettier": "^8.5.0",
