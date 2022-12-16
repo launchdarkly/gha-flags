@@ -29,26 +29,41 @@ export const run = async () => {
 
   // build a context
   core.startGroup('Extracting action context');
-  const envFilters = [
+
+  // Setup Runner Context
+  const envRunnerFilters = [
     // Don't strip RUNNER_ and GITHUB_ env vars so we can avoid naming conflicts
     { prefix: 'RUNNER_', strip: false },
-    { prefix: 'GITHUB_', strip: false },
-    { prefix: 'LD_', strip: true },
   ];
-  var ctx = {};
-  Object.keys(process.env)
-    .filter(function (key) {
-      return process.env[key] != '';
-    })
-    .forEach(function (key) {
-      envFilters.forEach(function (p) {
-        if (key.startsWith(p.prefix)) {
-          var contextKey = p.strip ? key.substring(p.prefix.length) : key;
-          ctx[contextKey] = process.env[key];
-          core.debug(contextKey + '="' + process.env[key]) + '"';
-        }
-      });
-    });
+  const runnerKey = 'RUNNER_TRACKING_ID';
+  const githubRunnerCtx = {
+    key: process.env[runnerKey],
+    ...createContext(envRunnerFilters, runnerKey),
+  };
+
+  // Setup Github Context
+  const envGithubFilters = [{ prefix: 'GITHUB_', strip: false }];
+  const githubKey = 'GITHUB_REPOSITORY';
+  const githubCtx = {
+    key: process.env[githubKey],
+    ...createContext(envGithubFilters, githubKey),
+  };
+
+  // Setup LaunchDarkly Context
+  const envLDFilters = [{ prefix: 'LD_', strip: true }];
+  const LDKey = 'LaunchDarkly';
+  const ldCtx = {
+    key: process.env[LDKey],
+    ...createContext(envLDFilters, LDKey),
+  };
+
+  const ctx = {
+    kind: 'multi',
+    GithubRunner: githubRunnerCtx,
+    Github: githubCtx,
+    LaunchDarkly: ldCtx,
+  };
+
   core.endGroup();
 
   const options = {
@@ -86,3 +101,27 @@ export const run = async () => {
 
   return;
 };
+
+function createContext(envFilters, ctxKey) {
+  const ctx = {};
+  Object.keys(process.env)
+    .filter(function (key) {
+      return process.env[key] != '';
+    })
+    .filter(function (key) {
+      if (key === ctxKey) {
+        return;
+      }
+    })
+    .forEach(function (key) {
+      envFilters.forEach(function (p) {
+        if (key.startsWith(p.prefix)) {
+          var contextKey = p.strip ? key.substring(p.prefix.length) : key;
+          ctx[contextKey] = process.env[key];
+          core.debug(contextKey + '="' + process.env[key]) + '"';
+        }
+      });
+    });
+
+  return ctx;
+}
