@@ -16,13 +16,12 @@ export default class LDClient {
     this.client.flush();
   }
 
-  async evaluateFlag(flagKey, defaultValue, customProps = {}) {
+  async evaluateFlag(flagKey, defaultValue, ctx) {
     await this.client.waitForInitialization();
-    const context = { key: this.userKey, custom: customProps };
 
     core.debug(`Evaluating flag ${flagKey}`);
-    core.debug(`with context ${JSON.stringify(context)}`);
-    const result = await this.client.variation(flagKey, context, defaultValue);
+    core.debug(`with context ${JSON.stringify(ctx)}`);
+    const result = await this.client.variation(flagKey, ctx, defaultValue);
     core.debug(`Flag ${flagKey} is ${JSON.stringify(result)}`);
 
     return result;

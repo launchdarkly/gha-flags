@@ -17073,13 +17073,12 @@ class LDClient {
     this.client.flush();
   }
 
-  async evaluateFlag(flagKey, defaultValue, customProps = {}) {
+  async evaluateFlag(flagKey, defaultValue, ctx) {
     await this.client.waitForInitialization();
-    const context = { key: this.userKey, custom: customProps };
 
     core.debug(`Evaluating flag ${flagKey}`);
-    core.debug(`with context ${JSON.stringify(context)}`);
-    const result = await this.client.variation(flagKey, context, defaultValue);
+    core.debug(`with context ${JSON.stringify(ctx)}`);
+    const result = await this.client.variation(flagKey, ctx, defaultValue);
     core.debug(`Flag ${flagKey} is ${JSON.stringify(result)}`);
 
     return result;
@@ -17163,32 +17162,45 @@ const run = async () => {
     { prefix: 'RUNNER_', strip: false },
   ];
   const runnerKey = 'RUNNER_TRACKING_ID';
-  const githubRunnerCtx = {
-    key: process.env[runnerKey],
-    ...createContext(envRunnerFilters, runnerKey),
-  };
+
+  const githubRunnerCtx = process.env[runnerKey]
+    ? {
+        GithubRunner: {
+          key: process.env[runnerKey],
+          ...createContext(envRunnerFilters, runnerKey),
+        },
+      }
+    : {};
 
   // Setup Github Context
   const envGithubFilters = [{ prefix: 'GITHUB_', strip: false }];
   const githubKey = 'GITHUB_REPOSITORY';
-  const githubCtx = {
-    key: process.env[githubKey],
-    ...createContext(envGithubFilters, githubKey),
-  };
+  const githubCtx = process.env[githubKey]
+    ? {
+        Github: {
+          key: 'test',
+          ...createContext(envGithubFilters, githubKey),
+        },
+      }
+    : {};
 
   // Setup LaunchDarkly Context
   const envLDFilters = [{ prefix: 'LD_', strip: true }];
   const LDKey = 'LaunchDarkly';
-  const ldCtx = {
-    key: process.env[LDKey],
-    ...createContext(envLDFilters, LDKey),
-  };
+  const ldCtx = process.env[LDKey]
+    ? {
+        LaunchDarkly: {
+          key: process.env[LDKey],
+          ...createContext(envLDFilters, LDKey),
+        },
+      }
+    : {};
 
   const ctx = {
     kind: 'multi',
-    GithubRunner: githubRunnerCtx,
-    Github: githubCtx,
-    LaunchDarkly: ldCtx,
+    ...githubRunnerCtx,
+    ...githubCtx,
+    ...ldCtx,
   };
 
   core.endGroup();
@@ -17198,6 +17210,7 @@ const run = async () => {
     baseUri,
     eventsUri,
     streamUri,
+    wrapperName: 'github-flag-evaluation',
   };
 
   if (proxyAuth) {
