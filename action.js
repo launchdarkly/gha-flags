@@ -60,15 +60,20 @@ export const run = async () => {
 
   // Setup LaunchDarkly Context
   const envLDFilters = [{ prefix: 'LD_', strip: true }];
-  const LDKey = 'LaunchDarkly';
-  const ldCtx = process.env[LDKey]
-    ? {
-        LaunchDarkly: {
-          key: process.env[LDKey],
-          ...createContext(envLDFilters, LDKey),
-        },
-      }
-    : {};
+  const LDKey = 'CustomGHAction';
+  let ldCtx = {};
+  if (
+    Object.keys(process.env).some((i) => {
+      return i.startsWith('LD_');
+    })
+  ) {
+    ldCtx = {
+      LaunchDarkly: {
+        key: LDKey,
+        ...createContext(envLDFilters, 'LD_'),
+      },
+    };
+  }
 
   const ctx = {
     kind: 'multi',
