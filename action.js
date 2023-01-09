@@ -60,7 +60,6 @@ export const run = async () => {
 
   // Setup LaunchDarkly Context
   const envLDFilters = [{ prefix: 'LD_', strip: true }];
-  const LDKey = 'CustomGHAction';
   let ldCtx = {};
   if (
     Object.keys(process.env).some((i) => {
@@ -68,8 +67,8 @@ export const run = async () => {
     })
   ) {
     ldCtx = {
-      LaunchDarkly: {
-        key: LDKey,
+      GithubCustomAttributes: {
+        key: userKey ? userKey : Date.now(),
         ...createContext(envLDFilters, 'LD_'),
       },
     };
