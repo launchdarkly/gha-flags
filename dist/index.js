@@ -17195,7 +17195,7 @@ const run = async () => {
     ldCtx = {
       GithubCustomAttributes: {
         key: userKey ? userKey : Date.now(),
-        ...createContext(envLDFilters, 'LD_'),
+        ...createContext(envLDFilters),
       },
     };
   }
@@ -17246,16 +17246,17 @@ const run = async () => {
   return;
 };
 
-function createContext(envFilters, ctxKey) {
+function createContext(envFilters, ignoreKey = '') {
   const ctx = {};
   Object.keys(process.env)
     .filter(function (key) {
-      return process.env[key] != '';
+      return process.env[key] == '';
     })
     .filter(function (key) {
-      if (key === ctxKey) {
-        return;
+      if (key === ignoreKey) {
+        return false;
       }
+      return true;
     })
     .forEach(function (key) {
       envFilters.forEach(function (p) {
