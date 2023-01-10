@@ -124,7 +124,7 @@ function createContext(envFilters, ignoreKey = '') {
   const ctx = {};
   Object.keys(process.env)
     .filter(function (key) {
-      return process.env[key] == '';
+      return process.env[key] != '';
     })
     .filter(function (key) {
       if (key === ignoreKey) {
