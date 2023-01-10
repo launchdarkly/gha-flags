@@ -11,8 +11,8 @@ jobs:
         id: flags
         uses: ./
         with:
-          stream-uri: "https://stream.ld.catamorphic.com"
-          events-uri: "https://events.ld.catamorphic.com"
-          base-uri: "https://app.ld.catamorphic.com"
+          stream-uri: 'https://stream.ld.catamorphic.com'
+          events-uri: 'https://events.ld.catamorphic.com'
+          base-uri: 'https://app.ld.catamorphic.com'
           sdk-key: ${{ secrets.SDK_KEY }} # configure environment-specific secret
           flag-keys: test-boolean-flag
