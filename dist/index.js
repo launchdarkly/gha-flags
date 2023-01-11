@@ -17157,7 +17157,7 @@ const run = async () => {
   core.startGroup('Validating arguments');
   const sdkKey = core.getInput('sdk-key');
   core.setSecret(sdkKey);
-  const flagKeys = core.getMultilineInput('flag-keys');
+  const flags = core.getMultilineInput('flags');
   const userKey = core.getInput('user-key');
   const sendEvents = core.getBooleanInput('send-events');
   const baseUri = core.getInput('base-uri');
@@ -17170,7 +17170,7 @@ const run = async () => {
   const proxyPort = core.getInput('proxy-port');
   const proxyScheme = core.getInput('proxy-scheme');
 
-  const validationErrors = validate({ sdkKey, flagKeys });
+  const validationErrors = validate({ sdkKey, flags });
   if (validationErrors.length > 0) {
     core.setFailed(`Invalid arguments: ${validationErrors.join(', ')}`);
     return;
@@ -17258,14 +17258,14 @@ const run = async () => {
   // evaluate flags
   const client = new LDClient(sdkKey, options);
   core.startGroup('Evaluating flags');
-  const flags = await client.evaluateFlags(flagKeys, ctx);
+  const evaledFlags = await client.evaluateFlags(flags, ctx);
   await client.flush();
   client.close();
   core.endGroup();
 
   // set output
-  for (const flagKey in flags) {
-    core.setOutput(flagKey, flags[flagKey]);
+  for (const flagKey in evaledFlags) {
+    core.setOutput(flagKey, evaledFlags[flagKey]);
   }
 
   return;

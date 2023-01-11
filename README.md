@@ -9,7 +9,7 @@ GitHub Action for evaluating LaunchDarkly flags in your workflow.
 | parameter    | description                                                                                                                | required | default                         |
 | ------------ | -------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------- |
 | sdk-key      | Server-side SDK key for environment.                                                                                       | `true`   |                                 |
-| flag-keys    | The flag keys to evaluate.                                                                                                 | `true`   |                                 |
+| flags    | Provide a list flag keys and default value in a comma separated format with a newline between each flag you want evaluated. `example-flag,true`                                                                                                 | `true`   |                                 |
 | user-key     | The key of the user object used in a feature flag evaluation                                                               | `false`  | ld-github-action-flags          |
 | send-events  | Whether to send analytics events back to LaunchDarkly                                                                      | `false`  | true                            |
 | offline      | Whether to use the LaunchDarkly SDK in offline mode                                                                        | `false`  | false                           |
