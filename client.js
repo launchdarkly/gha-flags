@@ -16,12 +16,13 @@ export default class LDClient {
   }
 
   async evaluateFlag(flagKey, defaultValue, ctx) {
-    const timeoutPromise = new Promise((resolve, reject) => {
-      setTimeout(reject, 25000);
-    });
+    // const timeoutPromise = new Promise((resolve, reject) => {
+    //   setTimeout(reject, 25000);
+    // });
 
     try {
-      await Promise.race([timeoutPromise, this.client.waitForInitialization()]);
+      //await Promise.race([timeoutPromise, this.client.waitForInitialization()]);
+      await this.client.waitForInitialization();
     } catch (error) {
       console.error(error);
       core.setFailed('Failed to initialize SDK.');
