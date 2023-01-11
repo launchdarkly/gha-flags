@@ -13,6 +13,7 @@ export const run = async () => {
   const baseUri = core.getInput('base-uri');
   const eventsUri = core.getInput('events-uri');
   const streamUri = core.getInput('stream-uri');
+  const offline = core.getBooleanInput('offline');
   // these will be validated by SDK
   const proxyAuth = core.getInput('proxy-auth');
   const proxyHost = core.getInput('proxy-host');
@@ -88,6 +89,7 @@ export const run = async () => {
     baseUri,
     eventsUri,
     streamUri,
+    offline,
     wrapperName: 'github-flag-evaluation',
   };
 

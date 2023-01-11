@@ -17059,10 +17059,9 @@ var launchdarkly_node_server_sdk_default = /*#__PURE__*/__nccwpck_require__.n(la
 
 
 class LDClient {
-  constructor(sdkKey, options = {}, userKey) {
+  constructor(sdkKey, options = {}) {
     core.debug(`Client options: ${JSON.stringify(options)}`);
     this.client = launchdarkly_node_server_sdk_default().init(sdkKey, options);
-    this.userKey = userKey;
   }
 
   close() {
@@ -17074,7 +17073,18 @@ class LDClient {
   }
 
   async evaluateFlag(flagKey, defaultValue, ctx) {
-    await this.client.waitForInitialization();
+    const timeoutPromise = new Promise((resolve, reject) => {
+      setTimeout(reject, 5000);
+    });
+
+    try {
+      await Promise.race([timeoutPromise, this.client.waitForInitialization()]).then(() => {
+        // Both resolve, but promise2 is faster
+      });
+    } catch (error) {
+      console.error(error);
+      core.setFailed('Failed to initialize SDK.');
+    }
 
     core.debug(`Evaluating flag ${flagKey}`);
     core.debug(`with context ${JSON.stringify(ctx)}`);
@@ -17085,7 +17095,12 @@ class LDClient {
   }
 
   async evaluateFlags(flagKeys = [], customProps = {}) {
-    const promises = flagKeys.map((flagKey) => this.evaluateFlag(flagKey, null, customProps));
+    const promises = flagKeys.map((item) => {
+      // const splitFlagKey = item.split(',');
+      // const flagKey = splitFlagKey[0];
+      // const defaultValue = splitFlagKey[1] ? splitFlagKey[1] : null;
+      this.evaluateFlag(item, null, customProps);
+    });
 
     const flags = {};
     try {
@@ -17139,6 +17154,7 @@ const run = async () => {
   const baseUri = core.getInput('base-uri');
   const eventsUri = core.getInput('events-uri');
   const streamUri = core.getInput('stream-uri');
+  const offline = core.getBooleanInput('offline');
   // these will be validated by SDK
   const proxyAuth = core.getInput('proxy-auth');
   const proxyHost = core.getInput('proxy-host');
@@ -17214,6 +17230,7 @@ const run = async () => {
     baseUri,
     eventsUri,
     streamUri,
+    offline,
     wrapperName: 'github-flag-evaluation',
   };
 

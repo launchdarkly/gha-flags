@@ -2,10 +2,9 @@ import * as core from '@actions/core';
 import LaunchDarkly from 'launchdarkly-node-server-sdk';
 
 export default class LDClient {
-  constructor(sdkKey, options = {}, userKey) {
+  constructor(sdkKey, options = {}) {
     core.debug(`Client options: ${JSON.stringify(options)}`);
     this.client = LaunchDarkly.init(sdkKey, options);
-    this.userKey = userKey;
   }
 
   close() {
@@ -17,7 +16,18 @@ export default class LDClient {
   }
 
   async evaluateFlag(flagKey, defaultValue, ctx) {
-    await this.client.waitForInitialization();
+    const timeoutPromise = new Promise((resolve, reject) => {
+      setTimeout(reject, 5000);
+    });
+
+    try {
+      await Promise.race([timeoutPromise, this.client.waitForInitialization()]).then(() => {
+        // Both resolve, but promise2 is faster
+      });
+    } catch (error) {
+      console.error(error);
+      core.setFailed('Failed to initialize SDK.');
+    }
 
     core.debug(`Evaluating flag ${flagKey}`);
     core.debug(`with context ${JSON.stringify(ctx)}`);
@@ -28,7 +38,12 @@ export default class LDClient {
   }
 
   async evaluateFlags(flagKeys = [], customProps = {}) {
-    const promises = flagKeys.map((flagKey) => this.evaluateFlag(flagKey, null, customProps));
+    const promises = flagKeys.map((item) => {
+      // const splitFlagKey = item.split(',');
+      // const flagKey = splitFlagKey[0];
+      // const defaultValue = splitFlagKey[1] ? splitFlagKey[1] : null;
+      this.evaluateFlag(item, null, customProps);
+    });
 
     const flags = {};
     try {
