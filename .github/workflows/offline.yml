@@ -1,7 +1,7 @@
 name: Offline Mode
 on: push
 jobs:
-  disable-events:
+  offline-mode:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

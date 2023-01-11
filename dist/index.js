@@ -17093,6 +17093,10 @@ class LDClient {
   }
 
   async evaluateFlags(flagKeys = [], customProps = {}) {
+    const flagMap = getFlagKeys(flagKeys);
+    Object.keys(flagMap).forEach((flag) => {
+      return this.evaluateFlag(flag, customProps, flagMap[flag]);
+    });
     const promises = flagKeys.map((item) => {
       const splitFlagKey = item.split(',');
       const flagKey = splitFlagKey[0];
@@ -17113,6 +17117,18 @@ class LDClient {
 
     return flags;
   }
+}
+
+function getFlagKeys(flagInput) {
+  const flagMap = {};
+  flagInput.map((item) => {
+    const splitFlagKey = item.split(',');
+    const flagKey = splitFlagKey[0];
+    const defaultValue = splitFlagKey[1] ? splitFlagKey[1].trim() : null;
+    flagMap[flagKey] = defaultValue;
+  });
+
+  return flagMap;
 }
 
 ;// CONCATENATED MODULE: ./configuration.js
