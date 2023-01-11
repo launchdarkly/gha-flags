@@ -17096,6 +17096,7 @@ class LDClient {
     const parsedFlags = getParsedFlags(flagInputs);
 
     const promises = parsedFlags.forEach((flag) => {
+      core.debug(flag);
       return this.evaluateFlag(flag[0], customProps, flag[1]);
     });
 
