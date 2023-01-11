@@ -14,8 +14,13 @@ jobs:
           events-uri: 'https://events.ld.catamorphic.com'
           base-uri: 'https://app.ld.catamorphic.com'
           sdk-key: ${{ secrets.SDK_KEY }}
-          flag-keys: test-boolean-flag
+          flag-keys: |
+            test-flag-false, false
+            test-flag-true, true
           offline: true
       - name: Test output
-        if: steps.flags.outputs.test-boolean-flag != 'false'
+        if: steps.flags.outputs.test-flag-false != 'false'
+        run: exit 1
+      - name: Test output
+        if: steps.flags.outputs.test-flag-true != 'true'
         run: exit 1

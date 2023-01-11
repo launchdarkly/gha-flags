@@ -37,7 +37,7 @@ export default class LDClient {
     const promises = flagKeys.map((item) => {
       const splitFlagKey = item.split(',');
       const flagKey = splitFlagKey[0];
-      const defaultValue = splitFlagKey[1] ? splitFlagKey[1] : null;
+      const defaultValue = splitFlagKey[1] ? splitFlagKey[1].trim() : null;
       return this.evaluateFlag(flagKey, customProps, defaultValue);
     });
 
