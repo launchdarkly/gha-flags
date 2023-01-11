@@ -17139,9 +17139,9 @@ const validate = (args) => {
     errors.push('sdk-key');
   }
 
-  if (!Array.isArray(args.flagKeys) || !args.flagKeys.length) {
+  if (!Array.isArray(args.flags) || !args.flags.length) {
     core.error('At least one flag key is required');
-    errors.push('flag-keys');
+    errors.push('flags');
   }
 
   return errors;

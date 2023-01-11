@@ -65,7 +65,7 @@ describe('Action', () => {
     const outputSpy = jest.spyOn(core, 'setOutput');
     await runAction({
       'sdk-key': 'sdk-xxxx',
-      'flags': 'flag-key-1\nflag-key-2\nflag-key-3',
+      flags: 'flag-key-1\nflag-key-2\nflag-key-3',
     });
 
     expect(outputSpy).toHaveBeenNthCalledWith(1, 'flag-key-1', false);
