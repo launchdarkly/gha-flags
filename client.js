@@ -24,9 +24,7 @@ export default class LDClient {
     core.debug(`with context ${JSON.stringify(ctx)}`);
     try {
       // Only await initialization if we're not in offline mode.
-      if (!this.options.offline) {
-        await Promise.race([timeoutPromise, this.client.waitForInitialization()]);
-      }
+      await Promise.race([timeoutPromise, this.client.waitForInitialization()]);
       const result = await this.client.variation(flagKey, ctx, defaultValue);
       core.debug(`Flag ${flagKey} is ${JSON.stringify(result)}`);
 
