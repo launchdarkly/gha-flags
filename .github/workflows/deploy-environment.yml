@@ -15,4 +15,4 @@ jobs:
           events-uri: 'https://events.ld.catamorphic.com'
           base-uri: 'https://app.ld.catamorphic.com'
           sdk-key: ${{ secrets.SDK_KEY }} # configure environment-specific secret
-          flag-keys: test-boolean-flag
+          flags: test-boolean-flag
