@@ -40,7 +40,7 @@ export default class LDClient {
       // const splitFlagKey = item.split(',');
       // const flagKey = splitFlagKey[0];
       // const defaultValue = splitFlagKey[1] ? splitFlagKey[1] : null;
-      this.evaluateFlag(item, customProps, null);
+      return this.evaluateFlag(item, customProps, null);
     });
 
     const flags = {};
