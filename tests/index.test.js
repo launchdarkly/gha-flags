@@ -36,8 +36,7 @@ describe('Action', () => {
       'flag-keys': 'flag-key',
       'user-key': 'user-key',
       'send-events': 'false',
-      // eslint-disable-next-line prettier/prettier
-      'offline': 'false',
+      offline: 'false',
       'base-uri': 'https://base.uri',
       'events-uri': 'https://events.uri',
       'stream-uri': 'https://stream.uri',

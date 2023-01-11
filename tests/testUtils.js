@@ -11,8 +11,7 @@ const buildDefaultEnv = makeEnv({
   'flag-keys': 'key-1\nkey-2',
   'user-key': '',
   'send-events': 'false',
-  // eslint-disable-next-line prettier/prettier
-  'offline': 'false',
+  offline: 'false',
   'base-uri': '',
   'events-uri': '',
   'stream-uri': '',
