@@ -17117,9 +17117,9 @@ class LDClient {
 function getParsedFlags(flagInput) {
   const parsedFlags = [];
   flagInput.map((item) => {
-    const splitFlagKey = item.split(',');
+    const splitFlagKey = item.split(',').map((v) => v.trim());
     const flagKey = splitFlagKey[0];
-    const defaultValue = splitFlagKey[1] ? splitFlagKey[1].trim() : null;
+    const defaultValue = splitFlagKey[1] ? splitFlagKey[1] : null;
     parsedFlags.push([flagKey, defaultValue]);
   });
 
