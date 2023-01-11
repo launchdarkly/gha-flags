@@ -21,9 +21,7 @@ export default class LDClient {
     });
 
     try {
-      await Promise.race([timeoutPromise, this.client.waitForInitialization()]).then(() => {
-        // Both resolve, but promise2 is faster
-      });
+      await Promise.race([timeoutPromise, this.client.waitForInitialization()]);
     } catch (error) {
       console.error(error);
       core.setFailed('Failed to initialize SDK.');

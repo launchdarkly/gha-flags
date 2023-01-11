@@ -1,4 +1,4 @@
-name: Disable Analytics Events
+name: Offline Mode
 on: push
 jobs:
   disable-events:
