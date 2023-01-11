@@ -17074,7 +17074,7 @@ class LDClient {
 
   async evaluateFlag(flagKey, defaultValue, ctx) {
     const timeoutPromise = new Promise((resolve, reject) => {
-      setTimeout(reject, 10000);
+      setTimeout(reject, 25000);
     });
 
     try {
