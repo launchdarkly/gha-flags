@@ -5,6 +5,7 @@ export default class LDClient {
   constructor(sdkKey, options = {}) {
     core.debug(`Client options: ${JSON.stringify(options)}`);
     this.client = LaunchDarkly.init(sdkKey, options);
+    this.options = options;
   }
 
   close() {
@@ -22,7 +23,10 @@ export default class LDClient {
     core.debug(`Evaluating flag ${flagKey}`);
     core.debug(`with context ${JSON.stringify(ctx)}`);
     try {
-      await Promise.race([timeoutPromise, this.client.waitForInitialization()]);
+      // Only await initialization if we're not in offline mode.
+      if (!this.options.offline) {
+        await Promise.race([timeoutPromise, this.client.waitForInitialization()]);
+      }
       const result = await this.client.variation(flagKey, ctx, defaultValue);
       core.debug(`Flag ${flagKey} is ${JSON.stringify(result)}`);
 
