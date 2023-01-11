@@ -63,7 +63,7 @@ jobs:
         uses: launchdarkly/gha-flags@v0.0.1
         with:
           sdk-key: ${{ secrets.LD_SDK_KEY }}
-          flag-keys: |
+          flags: |
             test-boolean-flag
             test-string-flag
             test-number-flag
@@ -94,7 +94,7 @@ jobs:
         uses: launchdarkly/gha-flags@v0.0.1
         with:
           sdk-key: ${{ secrets.LD_SDK_KEY }}
-          flag-keys: favorite-animal
+          flags: favorite-animal
           user-key: ${{ github.actor }}
       - name: Favorite animal
         if: steps.flags.outputs.favorite-animal != 'idk'
@@ -117,7 +117,7 @@ jobs:
         uses: launchdarkly/gha-flags@v0.0.1
         with:
           sdk-key: ${{ secrets.LD_SDK_KEY }}
-          flag-keys: test-boolean-flag
+          flags: test-boolean-flag
       - name: If true
         if: steps.flags.outputs.test-boolean-flag == 'true'
         run: echo "It's true"
@@ -142,7 +142,7 @@ jobs:
         uses: launchdarkly/gha-flags@v0.0.1
         with:
           sdk-key: ${{ secrets.LD_SDK_KEY }}
-          flag-keys: test-boolean-flag
+          flags: test-boolean-flag
           - name: If true
             if: fromJSON(steps.flags.outputs.test-boolean-flag) == true
             run: echo "It's true"
@@ -171,7 +171,7 @@ job:
         uses: launchdarkly/gha-flags@v0.0.1
         with:
           sdk-key: ${{ secrets.LD_SDK_KEY }}
-          flag-keys: test-boolean-flag
+          flags: test-boolean-flag
         env:
           LD_group: beta
 ```
@@ -193,7 +193,7 @@ job:
         uses: launchdarkly/gha-flags@v0.0.1
         with:
           sdk-key: ${{ secrets.LD_SDK_KEY }} # configure environment-specific secret
-          flag-keys: test-boolean-flag
+          flags: test-boolean-flag
 ```
 
 ### Disable analytics events
@@ -214,7 +214,7 @@ jobs:
         uses: launchdarkly/gha-flags@v0.0.1
         with:
           sdk-key: ${{ secrets.LD_SDK_KEY }}
-          flag-keys: test-boolean-flag
+          flags: test-boolean-flag
           send-events: false
 ```
 
