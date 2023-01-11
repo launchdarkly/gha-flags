@@ -24,15 +24,14 @@ export default class LDClient {
     try {
       //await Promise.race([timeoutPromise, this.client.waitForInitialization()]);
       await this.client.waitForInitialization();
+      const result = await this.client.variation(flagKey, ctx, defaultValue);
+      core.debug(`Flag ${flagKey} is ${JSON.stringify(result)}`);
+
+      return result;
     } catch (error) {
       console.error(error);
       core.setFailed('Failed to initialize SDK.');
     }
-
-    const result = await this.client.variation(flagKey, ctx, defaultValue);
-    core.debug(`Flag ${flagKey} is ${JSON.stringify(result)}`);
-
-    return result;
   }
 
   async evaluateFlags(flagKeys = [], customProps = {}) {
