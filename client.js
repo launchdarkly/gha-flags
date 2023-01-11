@@ -38,7 +38,7 @@ export default class LDClient {
   async evaluateFlags(flagInputs = [], customProps = {}) {
     const parsedFlags = getParsedFlags(flagInputs);
 
-    const promises = parsedFlags.forEach((flag) => {
+    const promises = parsedFlags.map((flag) => {
       core.debug(flag);
       return this.evaluateFlag(flag[0], customProps, flag[1]);
     });
