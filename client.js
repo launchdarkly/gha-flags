@@ -35,23 +35,18 @@ export default class LDClient {
     }
   }
 
-  async evaluateFlags(flagKeys = [], customProps = {}) {
-    const flagMap = getFlagKeys(flagKeys);
-    Object.keys(flagMap).forEach((flag) => {
-      return this.evaluateFlag(flag, customProps, flagMap[flag]);
-    });
-    const promises = flagKeys.map((item) => {
-      const splitFlagKey = item.split(',');
-      const flagKey = splitFlagKey[0];
-      const defaultValue = splitFlagKey[1] ? splitFlagKey[1].trim() : null;
-      return this.evaluateFlag(flagKey, customProps, defaultValue);
+  async evaluateFlags(flagInputs = [], customProps = {}) {
+    const parsedFlags = getParsedFlags(flagInputs);
+
+    const promises = parsedFlags.forEach((flag) => {
+      return this.evaluateFlag(flag[0], customProps, flag[1]);
     });
 
     const flags = {};
     try {
       const results = await Promise.all(promises);
       for (let i = 0; i < results.length; i++) {
-        flags[flagKeys[i]] = results[i];
+        parsedFlags[[i][0]] = results[i];
       }
     } catch (error) {
       console.error(error);
@@ -62,14 +57,14 @@ export default class LDClient {
   }
 }
 
-function getFlagKeys(flagInput) {
-  const flagMap = {};
+function getParsedFlags(flagInput) {
+  const parsedFlags = [];
   flagInput.map((item) => {
     const splitFlagKey = item.split(',');
     const flagKey = splitFlagKey[0];
     const defaultValue = splitFlagKey[1] ? splitFlagKey[1].trim() : null;
-    flagMap[flagKey] = defaultValue;
+    parsedFlags.push([flagKey, defaultValue]);
   });
 
-  return flagMap;
+  return parsedFlags;
 }
