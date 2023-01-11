@@ -17170,7 +17170,6 @@ const run = async () => {
   const proxyPort = core.getInput('proxy-port');
   const proxyScheme = core.getInput('proxy-scheme');
 
-  core.info(baseUri);
   const validationErrors = validate({ sdkKey, flagKeys });
   if (validationErrors.length > 0) {
     core.setFailed(`Invalid arguments: ${validationErrors.join(', ')}`);
