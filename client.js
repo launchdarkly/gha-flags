@@ -5,7 +5,6 @@ export default class LDClient {
   constructor(sdkKey, options = {}) {
     core.debug(`Client options: ${JSON.stringify(options)}`);
     this.client = LaunchDarkly.init(sdkKey, options);
-    this.options = options;
   }
 
   close() {

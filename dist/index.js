@@ -17062,7 +17062,6 @@ class LDClient {
   constructor(sdkKey, options = {}) {
     core.debug(`Client options: ${JSON.stringify(options)}`);
     this.client = launchdarkly_node_server_sdk_default().init(sdkKey, options);
-    this.options = options;
   }
 
   close() {
