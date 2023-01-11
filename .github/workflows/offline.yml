@@ -16,3 +16,6 @@ jobs:
           sdk-key: ${{ secrets.SDK_KEY }}
           flag-keys: test-boolean-flag
           offline: true
+      - name: Test output
+        if: steps.flags.outputs.test-boolean-flag != 'false'
+        run: exit 1

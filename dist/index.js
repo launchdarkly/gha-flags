@@ -17092,10 +17092,10 @@ class LDClient {
 
   async evaluateFlags(flagKeys = [], customProps = {}) {
     const promises = flagKeys.map((item) => {
-      // const splitFlagKey = item.split(',');
-      // const flagKey = splitFlagKey[0];
-      // const defaultValue = splitFlagKey[1] ? splitFlagKey[1] : null;
-      return this.evaluateFlag(item, customProps, null);
+      const splitFlagKey = item.split(',');
+      const flagKey = splitFlagKey[0];
+      const defaultValue = splitFlagKey[1] ? splitFlagKey[1] : null;
+      return this.evaluateFlag(flagKey, customProps, defaultValue);
     });
 
     const flags = {};
