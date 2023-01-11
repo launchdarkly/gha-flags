@@ -46,7 +46,7 @@ export default class LDClient {
     try {
       const results = await Promise.all(promises);
       for (let i = 0; i < results.length; i++) {
-        parsedFlags[[i][0]] = results[i];
+        parsedFlags[i][0] = results[i];
       }
     } catch (error) {
       console.error(error);
