@@ -16,14 +16,13 @@ export default class LDClient {
   }
 
   async evaluateFlag(flagKey, ctx, defaultValue) {
-    // const timeoutPromise = new Promise((resolve, reject) => {
-    //   setTimeout(reject, 25000);
-    // });
+    const timeoutPromise = new Promise((resolve, reject) => {
+      setTimeout(reject, 5000);
+    });
     core.debug(`Evaluating flag ${flagKey}`);
     core.debug(`with context ${JSON.stringify(ctx)}`);
     try {
-      //await Promise.race([timeoutPromise, this.client.waitForInitialization()]);
-      await this.client.waitForInitialization();
+      await Promise.race([timeoutPromise, this.client.waitForInitialization()]);
       const result = await this.client.variation(flagKey, ctx, defaultValue);
       core.debug(`Flag ${flagKey} is ${JSON.stringify(result)}`);
 
