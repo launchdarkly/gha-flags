@@ -23,6 +23,10 @@ inputs:
     description: 'Whether to send analytics events back to LaunchDarkly'
     required: false
     default: 'true'
+  offline:
+    description: 'Whether to use the LaunchDarkly SDK in offline mode'
+    required: false
+    default: 'false'
   base-uri:
     description: 'The base URI for the LaunchDarkly server. Most users should use the default value.'
     required: false
