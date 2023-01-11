@@ -17072,11 +17072,12 @@ class LDClient {
     this.client.flush();
   }
 
-  async evaluateFlag(flagKey, defaultValue, ctx) {
+  async evaluateFlag(flagKey, ctx, defaultValue) {
     // const timeoutPromise = new Promise((resolve, reject) => {
     //   setTimeout(reject, 25000);
     // });
-
+    core.debug(`Evaluating flag ${flagKey}`);
+    core.debug(`with context ${JSON.stringify(ctx)}`);
     try {
       //await Promise.race([timeoutPromise, this.client.waitForInitialization()]);
       await this.client.waitForInitialization();
@@ -17085,8 +17086,6 @@ class LDClient {
       core.setFailed('Failed to initialize SDK.');
     }
 
-    core.debug(`Evaluating flag ${flagKey}`);
-    core.debug(`with context ${JSON.stringify(ctx)}`);
     const result = await this.client.variation(flagKey, ctx, defaultValue);
     core.debug(`Flag ${flagKey} is ${JSON.stringify(result)}`);
 
@@ -17098,7 +17097,7 @@ class LDClient {
       // const splitFlagKey = item.split(',');
       // const flagKey = splitFlagKey[0];
       // const defaultValue = splitFlagKey[1] ? splitFlagKey[1] : null;
-      this.evaluateFlag(item, null, customProps);
+      this.evaluateFlag(item, customProps, null);
     });
 
     const flags = {};
@@ -17247,7 +17246,7 @@ const run = async () => {
   }
 
   // evaluate flags
-  const client = new LDClient(sdkKey, options, userKey);
+  const client = new LDClient(sdkKey, options);
   core.startGroup('Evaluating flags');
   const flags = await client.evaluateFlags(flagKeys, ctx);
   await client.flush();

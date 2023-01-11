@@ -15,11 +15,12 @@ export default class LDClient {
     this.client.flush();
   }
 
-  async evaluateFlag(flagKey, defaultValue, ctx) {
+  async evaluateFlag(flagKey, ctx, defaultValue) {
     // const timeoutPromise = new Promise((resolve, reject) => {
     //   setTimeout(reject, 25000);
     // });
-
+    core.debug(`Evaluating flag ${flagKey}`);
+    core.debug(`with context ${JSON.stringify(ctx)}`);
     try {
       //await Promise.race([timeoutPromise, this.client.waitForInitialization()]);
       await this.client.waitForInitialization();
@@ -28,8 +29,6 @@ export default class LDClient {
       core.setFailed('Failed to initialize SDK.');
     }
 
-    core.debug(`Evaluating flag ${flagKey}`);
-    core.debug(`with context ${JSON.stringify(ctx)}`);
     const result = await this.client.variation(flagKey, ctx, defaultValue);
     core.debug(`Flag ${flagKey} is ${JSON.stringify(result)}`);
 
@@ -41,7 +40,7 @@ export default class LDClient {
       // const splitFlagKey = item.split(',');
       // const flagKey = splitFlagKey[0];
       // const defaultValue = splitFlagKey[1] ? splitFlagKey[1] : null;
-      this.evaluateFlag(item, null, customProps);
+      this.evaluateFlag(item, customProps, null);
     });
 
     const flags = {};

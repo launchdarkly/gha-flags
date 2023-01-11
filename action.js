@@ -107,7 +107,7 @@ export const run = async () => {
   }
 
   // evaluate flags
-  const client = new LDClient(sdkKey, options, userKey);
+  const client = new LDClient(sdkKey, options);
   core.startGroup('Evaluating flags');
   const flags = await client.evaluateFlags(flagKeys, ctx);
   await client.flush();
