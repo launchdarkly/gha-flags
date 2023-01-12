@@ -12,7 +12,7 @@ inputs:
     required: true
     default: ''
   flags:
-    description: 'The flag keys to evaluate.'
+    description: 'Provide a list flag keys and default value in a comma separated format with a newline between each flag you want evaluated. `example-flag,true`'
     required: true
     default: ''
   user-key:
