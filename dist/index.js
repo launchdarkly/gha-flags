@@ -17202,7 +17202,7 @@ const run = async () => {
   const githubCtx = process.env[githubKey]
     ? {
         Github: {
-          key: githubCtx ? githubCtx : process.env['GITHUB_RUN_ID'],
+          key: process.env[githubKey] ? process.env[githubKey] : process.env['GITHUB_RUN_ID'],
           ...createContext(envGithubFilters, githubKey),
         },
       }
