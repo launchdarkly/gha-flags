@@ -2,10 +2,9 @@ import * as core from '@actions/core';
 import LaunchDarkly from 'launchdarkly-node-server-sdk';
 
 export default class LDClient {
-  constructor(sdkKey, options = {}, userKey) {
+  constructor(sdkKey, options = {}) {
     core.debug(`Client options: ${JSON.stringify(options)}`);
     this.client = LaunchDarkly.init(sdkKey, options);
-    this.userKey = userKey;
   }
 
   close() {
@@ -16,26 +15,38 @@ export default class LDClient {
     this.client.flush();
   }
 
-  async evaluateFlag(flagKey, defaultValue, customProps = {}) {
-    await this.client.waitForInitialization();
-    const context = { key: this.userKey, custom: customProps };
-
+  async evaluateFlag(flagKey, ctx, defaultValue) {
+    const timeoutPromise = new Promise((resolve, reject) => {
+      setTimeout(reject, 5000);
+    });
     core.debug(`Evaluating flag ${flagKey}`);
-    core.debug(`with context ${JSON.stringify(context)}`);
-    const result = await this.client.variation(flagKey, context, defaultValue);
-    core.debug(`Flag ${flagKey} is ${JSON.stringify(result)}`);
+    core.debug(`with context ${JSON.stringify(ctx)}`);
+    try {
+      // Only await initialization if we're not in offline mode.
+      await Promise.race([timeoutPromise, this.client.waitForInitialization()]);
+      const result = await this.client.variation(flagKey, ctx, defaultValue);
+      core.debug(`Flag ${flagKey} is ${JSON.stringify(result)}`);
 
-    return result;
+      return result;
+    } catch (error) {
+      console.error(error);
+      core.setFailed('Failed to initialize SDK.');
+    }
   }
 
-  async evaluateFlags(flagKeys = [], customProps = {}) {
-    const promises = flagKeys.map((flagKey) => this.evaluateFlag(flagKey, null, customProps));
+  async evaluateFlags(flagInputs = [], customProps = {}) {
+    const parsedFlags = getParsedFlags(flagInputs);
+
+    const promises = parsedFlags.map((flag) => {
+      core.debug(flag);
+      return this.evaluateFlag(flag[0], customProps, flag[1]);
+    });
 
     const flags = {};
     try {
       const results = await Promise.all(promises);
       for (let i = 0; i < results.length; i++) {
-        flags[flagKeys[i]] = results[i];
+        flags[parsedFlags[i][0]] = results[i];
       }
     } catch (error) {
       console.error(error);
@@ -44,4 +55,16 @@ export default class LDClient {
 
     return flags;
   }
+}
+
+function getParsedFlags(flagInput) {
+  const parsedFlags = [];
+  flagInput.map((item) => {
+    const splitFlagKey = item.split(',').map((v) => v.trim());
+    const flagKey = splitFlagKey[0];
+    const defaultValue = splitFlagKey[1] ? splitFlagKey[1] : null;
+    parsedFlags.push([flagKey, defaultValue]);
+  });
+
+  return parsedFlags;
 }

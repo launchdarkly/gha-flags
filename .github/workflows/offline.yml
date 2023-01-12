@@ -1,0 +1,26 @@
+name: Offline Mode
+on: push
+jobs:
+  offline-mode:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Evaluate flags
+        id: flags
+        uses: ./
+        with:
+          stream-uri: 'https://stream.ld.catamorphic.com'
+          events-uri: 'https://events.ld.catamorphic.com'
+          base-uri: 'https://app.ld.catamorphic.com'
+          sdk-key: ${{ secrets.SDK_KEY }}
+          flags: |
+            test-flag-false, false
+            test-flag-true, true
+          offline: true
+      - name: Test output
+        if: steps.flags.outputs.test-flag-false != 'false'
+        run: exit 1
+      - name: Test output
+        if: steps.flags.outputs.test-flag-true != 'true'
+        run: exit 1

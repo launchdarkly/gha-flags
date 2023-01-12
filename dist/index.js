@@ -8447,6 +8447,230 @@ module.exports = {
 
 /***/ }),
 
+/***/ 1224:
+/***/ ((module) => {
+
+/**
+ * Take a key string and escape the characters to allow it to be used as a reference.
+ * @param {string} key
+ * @returns {string} The processed key.
+ */
+function processEscapeCharacters(key) {
+  return key.replace(/~/g, '~0').replace(/\//g, '~1');
+}
+
+/**
+ * @param {string} reference The reference to get the components of.
+ * @returns {string[]} The components of the reference. Escape characters will be converted to their representative values.
+ */
+function getComponents(reference) {
+  const referenceWithoutPrefix = reference.startsWith('/') ? reference.substring(1) : reference;
+  return referenceWithoutPrefix
+    .split('/')
+    .map(component => (component.indexOf('~') >= 0 ? component.replace(/~1/g, '/').replace(/~0/g, '~') : component));
+}
+
+/**
+ * @param {string} reference The reference to check if it is a literal.
+ * @returns true if the reference is a literal.
+ */
+function isLiteral(reference) {
+  return !reference.startsWith('/');
+}
+
+/**
+ * Get an attribute value from a literal.
+ * @param {Object} target
+ * @param {string} literal
+ */
+function getFromLiteral(target, literal) {
+  if (target !== null && target !== undefined && Object.prototype.hasOwnProperty.call(target, literal)) {
+    return target[literal];
+  }
+}
+
+/**
+ * Gets the `target` object's value at the `reference`'s location.
+ *
+ * This method method follows the rules for accessing attributes for use
+ * in evaluating clauses.
+ *
+ * Accessing the root of the target will always result in undefined.
+ *
+ * @param {Object} target
+ * @param {string} reference
+ * @returns The `target` object's value at the `reference`'s location.
+ * Undefined if the field does not exist or if the reference is not valid.
+ */
+function get(target, reference) {
+  if (reference === '' || reference === '/') {
+    return undefined;
+  }
+
+  if (isLiteral(reference)) {
+    return getFromLiteral(target, reference);
+  }
+
+  const components = getComponents(reference);
+  let current = target;
+  for (const component of components) {
+    if (
+      current !== null &&
+      current !== undefined &&
+      typeof current === 'object' &&
+      // We do not want to allow indexing into an array.
+      !Array.isArray(current) &&
+      // For arrays and strings, in addition to objects, a hasOwnProperty check
+      // will be true for indexes (as strings or numbers), which are present
+      // in the object/string/array.
+      Object.prototype.hasOwnProperty.call(current, component)
+    ) {
+      current = current[component];
+    } else {
+      return undefined;
+    }
+  }
+
+  return current;
+}
+
+/**
+ * Compare two references and determine if they are equivalent.
+ * @param {string} a
+ * @param {string} b
+ */
+function compare(a, b) {
+  const aIsLiteral = isLiteral(a);
+  const bIsLiteral = isLiteral(b);
+  if (aIsLiteral && bIsLiteral) {
+    return a === b;
+  }
+  if (aIsLiteral) {
+    const bComponents = getComponents(b);
+    if (bComponents.length !== 1) {
+      return false;
+    }
+    return a === bComponents[0];
+  }
+  if (bIsLiteral) {
+    const aComponents = getComponents(a);
+    if (aComponents.length !== 1) {
+      return false;
+    }
+    return b === aComponents[0];
+  }
+  return a === b;
+}
+
+/**
+ * @param {string} a
+ * @param {string} b
+ * @returns The two strings joined by '/'.
+ */
+function join(a, b) {
+  return `${a}/${b}`;
+}
+
+/**
+ * There are cases where a field could have been named with a preceeding '/'.
+ * If that attribute was private, then the literal would appear to be a reference.
+ * This method can be used to convert a literal to a reference in such situations.
+ * @param {string} literal The literal to convert to a reference.
+ * @returns A literal which has been converted to a reference.
+ */
+function literalToReference(literal) {
+  return `/${processEscapeCharacters(literal)}`;
+}
+
+/**
+ * Clone an object excluding the values referenced by a list of references.
+ * @param {Object} target The object to clone.
+ * @param {string[]} references A list of references from the cloned object.
+ * @returns {{cloned: Object, excluded: string[]}} The cloned object and a list of excluded values.
+ */
+function cloneExcluding(target, references) {
+  const stack = [];
+  const cloned = {};
+  const excluded = [];
+
+  stack.push(
+    ...Object.keys(target).map(key => ({
+      key,
+      ptr: literalToReference(key),
+      source: target,
+      parent: cloned,
+      visited: [target],
+    }))
+  );
+
+  while (stack.length) {
+    const item = stack.pop();
+    if (!references.some(ptr => compare(ptr, item.ptr))) {
+      const value = item.source[item.key];
+
+      // Handle null because it overlaps with object, which we will want to handle later.
+      if (value === null) {
+        item.parent[item.key] = value;
+      } else if (Array.isArray(value)) {
+        item.parent[item.key] = [...value];
+      } else if (typeof value === 'object') {
+        //Arrays and null must already be handled.
+
+        //Prevent cycles by not visiting the same object
+        //with in the same branch. Parallel branches
+        //may contain the same object.
+        if (item.visited.includes(value)) {
+          continue;
+        }
+
+        item.parent[item.key] = {};
+
+        stack.push(
+          ...Object.keys(value).map(key => ({
+            key,
+            ptr: join(item.ptr, processEscapeCharacters(key)),
+            source: value,
+            parent: item.parent[item.key],
+            visited: [...item.visited, value],
+          }))
+        );
+      } else {
+        item.parent[item.key] = value;
+      }
+    } else {
+      excluded.push(item.ptr);
+    }
+  }
+  return { cloned, excluded: excluded.sort() };
+}
+
+function isValidReference(reference) {
+  return !reference.match(/\/\/|(^\/.*~[^0|^1])|~$/);
+}
+
+/**
+ * Check if the given attribute reference is for the "kind" attribute.
+ * @param {string} reference String containing an attribute reference.
+ */
+function isKind(reference) {
+  // There are only 2 valid ways to specify the kind attribute,
+  // so this just checks them. Given the current flow of evaluation
+  // this is much less intense a process than doing full validation and parsing.
+  return reference === 'kind' || reference === '/kind';
+}
+
+module.exports = {
+  cloneExcluding,
+  compare,
+  get,
+  isValidReference,
+  literalToReference,
+  isKind,
+};
+
+
+/***/ }),
+
 /***/ 7634:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
@@ -8594,10 +8818,9 @@ module.exports = (function () {
       offline: false,
       useLdd: false,
       allAttributesPrivate: false,
-      privateAttributeNames: [],
-      inlineUsersInEvents: false,
-      userKeysCapacity: 1000,
-      userKeysFlushInterval: 300,
+      privateAttributes: [],
+      contextKeysCapacity: 1000,
+      contextKeysFlushInterval: 300,
       diagnosticOptOut: false,
       diagnosticRecordingInterval: 900,
       featureStore: InMemoryFeatureStore(),
@@ -8665,7 +8888,10 @@ module.exports = (function () {
   };
 
   /* eslint-disable camelcase */
-  const deprecatedOptions = {};
+  const deprecatedOptions = {
+    userKeysCapacity: 'contextKeysCapacity',
+    userKeysFlushInterval: 'contextKeysFlushInterval',
+  };
   /* eslint-enable camelcase */
 
   function checkDeprecatedOptions(configIn) {
@@ -8713,6 +8939,7 @@ module.exports = (function () {
       }
       return 'object';
     };
+
     Object.keys(config).forEach(name => {
       const value = config[name];
       if (value !== null && value !== undefined) {
@@ -8806,6 +9033,255 @@ module.exports = (function () {
     getTags,
   };
 })();
+
+
+/***/ }),
+
+/***/ 6105:
+/***/ ((module) => {
+
+/**
+ * Validate a context kind.
+ * @param {string} kind
+ * @returns true if the kind is valid.
+ */
+function validKind(kind) {
+  return typeof kind === 'string' && kind !== 'kind' && kind.match(/^(\w|\.|-)+$/);
+}
+
+/**
+ * Validate a context key.
+ * @param {string} key
+ * @returns true if the key is valid.
+ */
+function validKey(key) {
+  return key !== undefined && key !== null && key !== '' && typeof key === 'string';
+}
+
+/**
+ * Perform a check of basic context requirements.
+ * @param {Object} context
+ * @param {boolean} allowLegacyKey If true, then a legacy user can have an
+ * empty or non-string key. A legacy user is a context without a kind.
+ * @returns true if the context meets basic requirements.
+ */
+function checkContext(context, allowLegacyKey) {
+  if (context) {
+    if (allowLegacyKey && (context.kind === undefined || context.kind === null)) {
+      return context.key !== undefined && context.key !== null;
+    }
+    const key = context.key;
+    const kind = context.kind === undefined ? 'user' : context.kind;
+    const kindValid = validKind(kind);
+    const keyValid = kind === 'multi' || validKey(key);
+    if (kind === 'multi') {
+      const kinds = Object.keys(context).filter(key => key !== 'kind');
+      return keyValid && kinds.every(key => validKind(key)) && kinds.every(key => validKey(context[key].key));
+    }
+    return keyValid && kindValid;
+  }
+  return false;
+}
+
+/**
+ * The partial URL encoding is needed because : is a valid character in context keys.
+ *
+ * Partial encoding is the replacement of all colon (:) characters with the URL
+ * encoded equivalent (%3A) and all percent (%) characters with the URL encoded
+ * equivalent (%25).
+ * @param {string} key The key to encode.
+ * @returns {string} Partially URL encoded key.
+ */
+function encodeKey(key) {
+  if (key.includes('%') || key.includes(':')) {
+    return key.replace(/%/g, '%25').replace(/:/g, '%3A');
+  }
+  return key;
+}
+
+/**
+ * For a given context get a list of context kinds.
+ * @param {Object} context
+ * @returns A list of kinds in the context.
+ */
+function getContextKinds(context) {
+  if (context) {
+    if (context.kind === null || context.kind === undefined) {
+      return ['user'];
+    }
+    if (context.kind !== 'multi') {
+      return [context.kind];
+    }
+    return Object.keys(context).filter(kind => kind !== 'kind');
+  }
+  return [];
+}
+
+function getCanonicalKey(context) {
+  if (context) {
+    if ((context.kind === undefined || context.kind === null || context.kind === 'user') && context.key) {
+      return context.key;
+    } else if (context.kind !== 'multi' && context.key) {
+      return `${context.kind}:${encodeKey(context.key)}`;
+    } else if (context.kind === 'multi') {
+      return Object.keys(context)
+        .sort()
+        .filter(key => key !== 'kind')
+        .map(key => `${key}:${encodeKey(context[key].key)}`)
+        .join(':');
+    }
+  }
+}
+
+module.exports = {
+  checkContext,
+  getContextKinds,
+  getCanonicalKey,
+};
+
+
+/***/ }),
+
+/***/ 8895:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+const AttributeReference = __nccwpck_require__(1224);
+
+function ContextFilter(config) {
+  const filter = {};
+
+  const allAttributesPrivate = config.allAttributesPrivate;
+  const privateAttributes = config.privateAttributes || [];
+
+  // These attributes cannot be removed via a private attribute.
+  const protectedAttributes = ['key', 'kind', '_meta', 'anonymous'];
+
+  const legacyTopLevelCopyAttributes = ['name', 'ip', 'firstName', 'lastName', 'email', 'avatar', 'country'];
+
+  /**
+   * For the given context and configuration get a list of attributes to filter.
+   * @param {Object} context
+   * @returns {string[]} A list of the attributes to filter.
+   */
+  const getAttributesToFilter = context =>
+    (allAttributesPrivate
+      ? Object.keys(context)
+      : [...privateAttributes, ...((context._meta && context._meta.privateAttributes) || [])]
+    ).filter(attr => !protectedAttributes.some(protectedAttr => AttributeReference.compare(attr, protectedAttr)));
+
+  /**
+   * @param {Object} context
+   * @returns {Object} A copy of the context with private attributes removed,
+   * and the redactedAttributes meta populated.
+   */
+  const filterSingleKind = context => {
+    if (typeof context !== 'object' || context === null || Array.isArray(context)) {
+      return undefined;
+    }
+
+    const { cloned, excluded } = AttributeReference.cloneExcluding(context, getAttributesToFilter(context));
+    cloned.key = String(cloned.key);
+    if (excluded.length) {
+      if (!cloned._meta) {
+        cloned._meta = {};
+      }
+      cloned._meta.redactedAttributes = excluded;
+    }
+    if (cloned._meta) {
+      delete cloned._meta['privateAttributes'];
+      if (Object.keys(cloned._meta).length === 0) {
+        delete cloned._meta;
+      }
+    }
+    // Make sure anonymous is boolean if present.
+    // Null counts as present, and would be falsy, which is the default.
+    if (cloned.anonymous !== undefined) {
+      cloned.anonymous = !!cloned.anonymous;
+    }
+
+    return cloned;
+  };
+
+  /**
+   * @param {Object} context
+   * @returns {Object} A copy of the context with the private attributes removed,
+   * and the redactedAttributes meta populated for each sub-context.
+   */
+  const filterMultiKind = context => {
+    const filtered = {
+      kind: context.kind,
+    };
+    const contextKeys = Object.keys(context);
+
+    for (const contextKey of contextKeys) {
+      if (contextKey !== 'kind') {
+        const filteredContext = filterSingleKind(context[contextKey]);
+        if (filteredContext) {
+          filtered[contextKey] = filteredContext;
+        }
+      }
+    }
+    return filtered;
+  };
+
+  /**
+   * Convert the LDUser object into an LDContext object.
+   * @param {Object} user The LDUser to produce an LDContext for.
+   * @returns {Object} A single kind context based on the provided user.
+   */
+  const legacyToSingleKind = user => {
+    const filtered = {
+      /* Destructure custom items into the top level.
+         Duplicate keys will be overridden by previously
+         top level items.
+      */
+      ...(user.custom || {}),
+
+      // Implicity a user kind.
+      kind: 'user',
+
+      key: user.key,
+    };
+
+    if (user.anonymous !== undefined) {
+      filtered.anonymous = !!user.anonymous;
+    }
+
+    // Copy top level keys and convert them to strings.
+    // Remove keys that may have been destructured from `custom`.
+    for (const key of legacyTopLevelCopyAttributes) {
+      delete filtered[key];
+      if (user[key] !== undefined && user[key] !== null) {
+        filtered[key] = String(user[key]);
+      }
+    }
+
+    if (user.privateAttributeNames !== undefined && user.privateAttributeNames !== null) {
+      filtered._meta = filtered._meta || {};
+      // If any private attributes started with '/' we need to convert them to references, otherwise the '/' will
+      // cause the literal to incorrectly be treated as a reference.
+      filtered._meta.privateAttributes = user.privateAttributeNames.map(literal =>
+        literal.startsWith('/') ? AttributeReference.literalToReference(literal) : literal
+      );
+    }
+
+    return filtered;
+  };
+
+  filter.filter = context => {
+    if (context.kind === undefined || context.kind === null) {
+      return filterSingleKind(legacyToSingleKind(context));
+    } else if (context.kind === 'multi') {
+      return filterMultiKind(context);
+    } else {
+      return filterSingleKind(context);
+    }
+  };
+
+  return filter;
+}
+
+module.exports = ContextFilter;
 
 
 /***/ }),
@@ -8922,9 +9398,8 @@ function makeConfigData(config) {
     usingRelayDaemon: !!config.useLdd,
     offline: !!config.offline,
     allAttributesPrivate: !!config.allAttributesPrivate,
-    inlineUsersInEvents: !!config.inlineUsersInEvents,
-    userKeysCapacity: config.userKeysCapacity,
-    userKeysFlushIntervalMillis: secondsToMillis(config.userKeysFlushInterval),
+    contextKeysCapacity: config.contextKeysCapacity,
+    contextKeysFlushIntervalMillis: secondsToMillis(config.contextKeysFlushInterval),
     usingProxy: !!(config.proxyAgent || config.proxyHost),
     usingProxyAuthenticator: !!config.proxyAuth,
     diagnosticRecordingIntervalMillis: secondsToMillis(config.diagnosticRecordingInterval),
@@ -9009,13 +9484,29 @@ const crypto = __nccwpck_require__(6113);
 
 const operators = __nccwpck_require__(4420);
 const util = __nccwpck_require__(3837);
-const stringifyAttrs = __nccwpck_require__(3916);
 const { safeAsyncEachSeries } = __nccwpck_require__(2517);
+const AttributeReference = __nccwpck_require__(1224);
+const { checkContext } = __nccwpck_require__(6105);
 
-const builtins = ['key', 'secondary', 'ip', 'country', 'email', 'firstName', 'lastName', 'avatar', 'name', 'anonymous'];
-const userAttrsToStringifyForEvaluation = ['key', 'secondary'];
-// Currently we are not stringifying the rest of the built-in attributes prior to evaluation, only for events.
-// This is because it could affect evaluation results for existing users (ch35206).
+const builtins = ['key', 'ip', 'country', 'email', 'firstName', 'lastName', 'avatar', 'name', 'anonymous'];
+
+const bigSegementsStatusPriority = {
+  HEALTHY: 1,
+  STALE: 2,
+  STORE_ERROR: 3,
+  NOT_CONFIGURED: 4,
+};
+
+function stringifyContextAttrs(context) {
+  // Only legacy contexts may have non-string keys.
+  if (context.kind === undefined && typeof context.key !== 'string') {
+    return {
+      ...context,
+      key: String(context.key),
+    };
+  }
+  return context;
+}
 
 const noop = () => {};
 
@@ -9029,8 +9520,8 @@ const noop = () => {};
 function Evaluator(queries) {
   const ret = {};
 
-  ret.evaluate = (flag, user, eventFactory, maybeCallback) => {
-    evaluate(flag, user, queries, eventFactory, maybeCallback);
+  ret.evaluate = (flag, context, eventFactory, maybeCallback) => {
+    evaluate(flag, context, queries, eventFactory, maybeCallback);
   };
 
   return ret;
@@ -9038,9 +9529,9 @@ function Evaluator(queries) {
 
 // Callback receives (err, detail, events) where detail has the properties "value", "variationIndex", and "reason";
 // detail will never be null even if there's an error; events is either an array or undefined.
-function evaluate(flag, user, queries, eventFactory, maybeCallback) {
+function evaluate(flag, context, queries, eventFactory, maybeCallback) {
   const cb = maybeCallback || noop;
-  if (!user || user.key === null || user.key === undefined) {
+  if (!checkContext(context, true)) {
     cb(null, errorResult('USER_NOT_SPECIFIED'), []);
     return;
   }
@@ -9050,9 +9541,10 @@ function evaluate(flag, user, queries, eventFactory, maybeCallback) {
     return;
   }
 
-  const sanitizedUser = stringifyAttrs(user, userAttrsToStringifyForEvaluation);
+  const sanitizedContext = stringifyContextAttrs(context);
+
   const stateOut = {};
-  evalInternal(flag, sanitizedUser, queries, stateOut, eventFactory, (err, detail) => {
+  evalInternal(flag, sanitizedContext, queries, stateOut, eventFactory, [flag.key], (err, detail) => {
     const result = detail;
     if (stateOut.bigSegmentsStatus) {
       result.reason.bigSegmentsStatus = stateOut.bigSegmentsStatus;
@@ -9061,28 +9553,46 @@ function evaluate(flag, user, queries, eventFactory, maybeCallback) {
   });
 }
 
-function evalInternal(flag, user, queries, stateOut, eventFactory, cb) {
+function evalInternal(flag, context, queries, stateOut, eventFactory, visitedFlags, cb) {
   // If flag is off, return the off variation
   if (!flag.on) {
     getOffResult(flag, { kind: 'OFF' }, cb);
     return;
   }
 
-  checkPrerequisites(flag, user, queries, stateOut, eventFactory, (err, failureReason) => {
+  checkPrerequisites(flag, context, queries, stateOut, eventFactory, visitedFlags, (err, failureReason) => {
+    if (stateOut.error) {
+      cb(...stateOut.error);
+      return;
+    }
     if (err || failureReason) {
       getOffResult(flag, failureReason, cb);
     } else {
-      evalRules(flag, user, queries, stateOut, cb);
+      evalRules(flag, context, queries, stateOut, cb);
     }
   });
 }
 
 // Callback receives (err, reason) where reason is null if successful, or a "prerequisite failed" reason
-function checkPrerequisites(flag, user, queries, stateOut, eventFactory, cb) {
+function checkPrerequisites(flag, context, queries, stateOut, eventFactory, visitedFlags, cb) {
   if (flag.prerequisites && flag.prerequisites.length) {
     safeAsyncEachSeries(
       flag.prerequisites,
       (prereq, callback) => {
+        if (visitedFlags.indexOf(prereq.key) !== -1) {
+          /* eslint-disable no-param-reassign */
+          stateOut.error = [
+            new Error(
+              `Prerequisite of ${flag.key} causing a circular reference.` +
+                ' This is probably a temporary condition due to an incomplete update.'
+            ),
+            errorResult('MALFORMED_FLAG'),
+          ];
+          /* eslint-enable no-param-reassign */
+          callback(null);
+          return;
+        }
+        const updatedVisitedFlags = [...visitedFlags, prereq.key];
         queries.getFlag(prereq.key, prereqFlag => {
           // If the flag does not exist in the store or is not on, the prerequisite
           // is not satisfied
@@ -9093,11 +9603,11 @@ function checkPrerequisites(flag, user, queries, stateOut, eventFactory, cb) {
             });
             return;
           }
-          evalInternal(prereqFlag, user, queries, stateOut, eventFactory, (err, detail) => {
+          evalInternal(prereqFlag, context, queries, stateOut, eventFactory, updatedVisitedFlags, (err, detail) => {
             // If there was an error, the value is null, the variation index is out of range,
             // or the value does not match the indexed variation the prerequisite is not satisfied
             stateOut.events = stateOut.events || []; // eslint-disable-line no-param-reassign
-            stateOut.events.push(eventFactory.newEvalEvent(prereqFlag, user, detail, null, flag));
+            stateOut.events.push(eventFactory.newEvalEvent(prereqFlag, context, detail, null, flag));
             if (err) {
               callback({ key: prereq.key, err: err });
             } else if (!prereqFlag.on || detail.variationIndex !== prereq.variation) {
@@ -9127,34 +9637,34 @@ function checkPrerequisites(flag, user, queries, stateOut, eventFactory, cb) {
   }
 }
 
-// Callback receives (err, detail)
-function evalRules(flag, user, queries, stateOut, cb) {
-  // Check target matches
-  for (let i = 0; i < (flag.targets || []).length; i++) {
-    const target = flag.targets[i];
-
-    if (!target.values) {
-      continue;
-    }
-
-    for (let j = 0; j < target.values.length; j++) {
-      if (user.key === target.values[j]) {
-        getVariation(flag, target.variation, { kind: 'TARGET_MATCH' }, cb);
-        return;
-      }
-    }
+function evalRules(flag, context, queries, stateOut, cb) {
+  if (evalTargets(flag, context, cb)) {
+    return;
   }
 
   safeAsyncEachSeries(
     flag.rules,
     (rule, callback) => {
-      ruleMatchUser(rule, user, queries, stateOut, matched => {
-        // We raise an "error" on the first rule that *does* match, to stop evaluating more rules
-        callback(matched ? rule : null);
-      });
+      ruleMatchContext(
+        rule,
+        context,
+        queries,
+        stateOut,
+        matched => {
+          // We raise an "error" on the first rule that *does* match, to stop evaluating more rules
+          callback(matched ? rule : null);
+        },
+        []
+      );
     },
     // The following function executes once all of the rules have been checked
     err => {
+      // If there was an error processing the rules, then it will
+      // have been populated into stateOut.error.
+      if (stateOut.error) {
+        return cb(...stateOut.error);
+      }
+
       // we use the "error" value to indicate that a rule was successfully matched (since we only care
       // about the first match, and eachSeries terminates on the first "error")
       if (err) {
@@ -9166,16 +9676,56 @@ function evalRules(flag, user, queries, stateOut, cb) {
             break;
           }
         }
-        getResultForVariationOrRollout(rule, user, flag, reason, cb);
+        getResultForVariationOrRollout(rule, context, flag, reason, cb);
       } else {
         // no rule matched; check the fallthrough
-        getResultForVariationOrRollout(flag.fallthrough, user, flag, { kind: 'FALLTHROUGH' }, cb);
+        getResultForVariationOrRollout(flag.fallthrough, context, flag, { kind: 'FALLTHROUGH' }, cb);
       }
     }
   );
 }
 
-function ruleMatchUser(r, user, queries, stateOut, cb) {
+function evalTarget(flag, target, context, cb) {
+  if (!target.values) {
+    return false;
+  }
+  const matchContext = getContextForKind(context, target.contextKind);
+  if (!matchContext) {
+    return false;
+  }
+  const matchKey = matchContext.key;
+  return target.values.some(key => {
+    if (key === matchKey) {
+      getVariation(flag, target.variation, { kind: 'TARGET_MATCH' }, cb);
+      return true;
+    }
+    return false;
+  });
+}
+
+function evalTargets(flag, context, cb) {
+  if (!flag.contextTargets || !flag.contextTargets.length) {
+    return (
+      flag.targets &&
+      flag.targets.some(target =>
+        // We can call evalTarget with this just like we could with a target from contextTargets: it does not
+        // have a contextKind property, but our default behavior is to treat that as a contextKind of "user".
+        evalTarget(flag, target, context, cb)
+      )
+    );
+  }
+
+  return flag.contextTargets.some(target => {
+    if (!target.contextKind || target.contextKind === 'user') {
+      const userTarget = (flag.targets || []).find(ut => ut.variation === target.variation);
+      return userTarget && evalTarget(flag, userTarget, context, cb);
+    } else {
+      return evalTarget(flag, target, context, cb);
+    }
+  });
+}
+
+function ruleMatchContext(r, context, queries, stateOut, cb, segmentsVisited) {
   if (!r.clauses) {
     cb(false);
     return;
@@ -9185,10 +9735,17 @@ function ruleMatchUser(r, user, queries, stateOut, cb) {
   safeAsyncEachSeries(
     r.clauses,
     (clause, callback) => {
-      clauseMatchUser(clause, user, queries, stateOut, matched => {
-        // on the first clause that does *not* match, we raise an "error" to stop the loop
-        callback(matched ? null : clause);
-      });
+      clauseMatchContext(
+        clause,
+        context,
+        queries,
+        stateOut,
+        matched => {
+          // on the first clause that does *not* match, we raise an "error" to stop the loop
+          callback(matched ? null : clause);
+        },
+        segmentsVisited
+      );
     },
     err => {
       cb(!err);
@@ -9196,64 +9753,120 @@ function ruleMatchUser(r, user, queries, stateOut, cb) {
   );
 }
 
-function clauseMatchUser(c, user, queries, stateOut, cb) {
+function clauseMatchContext(c, context, queries, stateOut, matchedCb, segmentsVisited) {
   if (c.op === 'segmentMatch') {
     safeAsyncEachSeries(
       c.values,
       (value, seriesCallback) => {
         queries.getSegment(value, segment => {
           if (segment) {
-            segmentMatchUser(segment, user, queries, stateOut, result => {
-              // On the first segment that matches, we call seriesCallback with an
-              // arbitrary non-null value, which safeAsyncEachSeries interprets as an
-              // "error", causing it to skip the rest of the series.
-              seriesCallback(result ? segment : null);
-            });
+            if (segmentsVisited.indexOf(segment.key) >= 0) {
+              /* eslint-disable no-param-reassign */
+              stateOut.error = [
+                new Error(
+                  `Segment rule referencing segment ${segment.key} caused a circular reference. ` +
+                    'This is probably a temporary condition due to an incomplete update'
+                ),
+                errorResult('MALFORMED_FLAG'),
+              ];
+              /* eslint-enable no-param-reassign */
+
+              //The return needs to be non-null in order to skip the rest of the series.
+              return seriesCallback(true);
+            }
+            const newVisited = [...segmentsVisited, segment.key];
+            segmentMatchContext(
+              segment,
+              context,
+              queries,
+              stateOut,
+              result =>
+                // On the first segment that matches, we call seriesCallback with an
+                // arbitrary non-null value, which safeAsyncEachSeries interprets as an
+                // "error", causing it to skip the rest of the series.
+                seriesCallback(result ? segment : null),
+              newVisited
+            );
           } else {
-            seriesCallback(null);
+            return seriesCallback(null);
           }
         });
       },
       // The following function executes once all of the clauses have been checked
       err => {
         // an "error" indicates that a segment *did* match
-        cb(maybeNegate(c, !!err));
+        matchedCb(maybeNegate(c, !!err));
       }
     );
   } else {
-    cb(clauseMatchUserNoSegments(c, user));
+    matchedCb(clauseMatchContextNoSegments(c, context, stateOut));
   }
 }
 
-function clauseMatchUserNoSegments(c, user) {
-  const uValue = userValue(user, c.attribute);
+function getContextValueForClause(c, context) {
+  const kind = c.contextKind || 'user';
+  const isKindRule = AttributeReference.isKind(c.attribute);
 
-  if (uValue === null || uValue === undefined) {
+  if (isKindRule && context.kind !== 'multi') {
+    return [true, context.kind || 'user'];
+  } else if (isKindRule) {
+    return [true, Object.keys(context).filter(key => key !== 'kind')];
+  }
+
+  return contextValue(context, kind, c.attribute, !c.contextKind);
+}
+
+function clauseMatchContextNoSegments(c, context, stateOut) {
+  const matchFn = operators.fn(c.op);
+  const [validReference, cValue] = getContextValueForClause(c, context);
+
+  if (!validReference) {
+    stateOut.error = [new Error('Invalid attribute reference in clause'), errorResult('MALFORMED_FLAG')]; // eslint-disable-line no-param-reassign
     return false;
   }
 
-  const matchFn = operators.fn(c.op);
+  if (cValue === null || cValue === undefined) {
+    return false;
+  }
 
-  // The user's value is an array
-  if (Array === uValue.constructor) {
-    for (let i = 0; i < uValue.length; i++) {
-      if (matchAny(matchFn, uValue[i], c.values)) {
+  // The contexts's value is an array
+  if (Array.isArray(cValue)) {
+    for (let i = 0; i < cValue.length; i++) {
+      if (matchAny(matchFn, cValue[i], c.values)) {
         return maybeNegate(c, true);
       }
     }
     return maybeNegate(c, false);
   }
 
-  return maybeNegate(c, matchAny(matchFn, uValue, c.values));
+  return maybeNegate(c, matchAny(matchFn, cValue, c.values));
 }
 
-function segmentMatchUser(segment, user, queries, stateOut, cb) {
-  if (!user.key) {
-    return cb(false);
-  }
+/**
+ * Get a priority for the given big segment status.
+ * @param {string} status
+ * @returns Integer representing the priority.
+ */
+function getBigSegmentsStatusPriority(status) {
+  return bigSegementsStatusPriority[status] || 0;
+}
 
+/**
+ * Given two big segment statuses return the one with the higher priority.
+ * @param {string} old
+ * @param {string} latest
+ * @returns The status with the higher priority.
+ */
+function computeUpdatedBigSegmentsStatus(old, latest) {
+  if (old !== undefined && getBigSegmentsStatusPriority(old) > getBigSegmentsStatusPriority(latest)) {
+    return old;
+  }
+  return latest;
+}
+
+function segmentMatchContext(segment, context, queries, stateOut, cb, segmentsVisited) {
   if (!segment.unbounded) {
-    return cb(simpleSegmentMatchUser(segment, user, true));
+    return simpleSegmentMatchContext(segment, context, true, queries, stateOut, cb, segmentsVisited);
   }
 
   if (!segment.generation) {
@@ -9261,70 +9874,176 @@ function segmentMatchUser(segment, user, queries, stateOut, cb) {
     // that probably means the data store was populated by an older SDK that doesn't know
     // about the generation property and therefore dropped it from the JSON data. We'll treat
     // that as a "not configured" condition.
-    stateOut.bigSegmentsStatus = 'NOT_CONFIGURED'; // eslint-disable-line no-param-reassign
+    stateOut.bigSegmentsStatus = computeUpdatedBigSegmentsStatus(stateOut.bigSegmentsStatus, 'NOT_CONFIGURED'); // eslint-disable-line no-param-reassign
     return cb(false);
   }
 
-  if (stateOut.bigSegmentsStatus) {
+  const bigSegmentKind = segment.unboundedContextKind || 'user';
+  const bigSegmentContext = getContextForKind(context, bigSegmentKind);
+
+  if (!bigSegmentContext) {
+    return cb(false);
+  }
+
+  if (stateOut.bigSegmentsMembership && stateOut.bigSegmentsMembership[bigSegmentContext.key]) {
     // We've already done the query at some point during the flag evaluation and stored
     // the result (if any) in stateOut.bigSegmentsMembership, so we don't need to do it
     // again. Even if multiple Big Segments are being referenced, the membership includes
     // *all* of the user's segment memberships.
-    return cb(bigSegmentMatchUser(stateOut.bigSegmentsMembership, segment, user));
+
+    return bigSegmentMatchContext(
+      stateOut.bigSegmentsMembership[bigSegmentContext.key],
+      segment,
+      bigSegmentContext,
+      queries,
+      stateOut,
+      cb
+    );
   }
 
-  queries.getBigSegmentsMembership(user.key, result => {
+  queries.getBigSegmentsMembership(bigSegmentContext.key, result => {
+    /* eslint-disable no-param-reassign */
+    stateOut.bigSegmentsMembership = stateOut.bigSegmentsMembership || {};
     if (result) {
-      stateOut.bigSegmentsMembership = result[0]; // eslint-disable-line no-param-reassign
-      stateOut.bigSegmentsStatus = result[1]; // eslint-disable-line no-param-reassign
+      stateOut.bigSegmentsMembership[bigSegmentContext.key] = result[0];
+      stateOut.bigSegmentsStatus = computeUpdatedBigSegmentsStatus(stateOut.bigSegmentsStatus, result[1]);
     } else {
-      stateOut.bigSegmentsStatus = 'NOT_CONFIGURED'; // eslint-disable-line no-param-reassign
+      stateOut.bigSegmentsStatus = computeUpdatedBigSegmentsStatus(stateOut.bigSegmentsStatus, 'NOT_CONFIGURED');
     }
-    return cb(bigSegmentMatchUser(stateOut.bigSegmentsMembership, segment, user));
+    /* eslint-enable no-param-reassign */
+    return bigSegmentMatchContext(
+      stateOut.bigSegmentsMembership[bigSegmentContext.key],
+      segment,
+      bigSegmentContext,
+      queries,
+      stateOut,
+      cb
+    );
   });
 }
 
-function bigSegmentMatchUser(membership, segment, user) {
+function bigSegmentMatchContext(membership, segment, context, queries, stateOut, cb) {
   const segmentRef = makeBigSegmentRef(segment);
   const included = membership && membership[segmentRef];
   if (included !== undefined) {
-    return included;
+    return cb(included);
   }
-  return simpleSegmentMatchUser(segment, user, false);
+  return simpleSegmentMatchContext(segment, context, false, queries, stateOut, cb);
 }
 
-function simpleSegmentMatchUser(segment, user, useIncludesAndExcludes) {
+function getContextForKind(context, inKind) {
+  const kind = inKind || 'user';
+  if (context.kind === 'multi') {
+    return context[kind];
+  } else if (context.kind === kind || (context.kind === undefined && kind === 'user')) {
+    return context;
+  }
+  return undefined;
+}
+
+/**
+ * Search the given contextTargets and userTargets. If a match is made, then
+ * return `[true, true]`. If a match is not made then return `[false, _]`.
+ * If there was an error which prevents matching, then return `[true, false]`.
+ * @param {{contextKind: string, values: string[]}[]} contextTargets
+ * @param {string[]} userTargets
+ * @param {Object} context
+ * @returns {[boolean, boolean]} Pair of booleans where the first indicates
+ * if the return value should be used, and the second indicates if there
+ * was a match.
+ */
+function segmentSearch(contextTargets, userTargets, context) {
+  const contextKind = context.kind || 'user';
+  for (const { contextKind: kind, values } of contextTargets) {
+    const contextForKind = getContextForKind(context, kind);
+    if (contextForKind) {
+      if (values.indexOf(contextForKind.key) >= 0) {
+        return [true, true];
+      }
+    }
+  }
+
+  const userContext = contextKind === 'user' ? context : context['user'];
+  if (userContext) {
+    if (userTargets.indexOf(userContext.key) >= 0) {
+      return [true, true];
+    }
+  }
+  return [false, false];
+}
+
+function simpleSegmentMatchContext(segment, context, useIncludesAndExcludes, queries, stateOut, cb, segmentsVisited) {
   if (useIncludesAndExcludes) {
-    if ((segment.included || []).indexOf(user.key) >= 0) {
-      return true;
+    const includedRes = segmentSearch(segment.includedContexts || [], segment.included || [], context);
+    if (includedRes[0]) {
+      return cb(includedRes[1]);
     }
-    if ((segment.excluded || []).indexOf(user.key) >= 0) {
-      return false;
-    }
-  }
-  for (let i = 0; i < (segment.rules || []).length; i++) {
-    if (segmentRuleMatchUser(segment.rules[i], user, segment.key, segment.salt)) {
-      return true;
+    const excludedRes = segmentSearch(segment.excludedContexts || [], segment.excluded || [], context);
+    if (excludedRes[0]) {
+      // The match was an exclusion, so it should be negated.
+      return cb(!excludedRes[1]);
     }
   }
+
+  safeAsyncEachSeries(
+    segment.rules || [],
+    (rule, callback) => {
+      segmentRuleMatchContext(
+        rule,
+        context,
+        segment.key,
+        segment.salt,
+        queries,
+        stateOut,
+        res => {
+          // on the first rule that does match, we raise an "error" to stop the loop
+          callback(res ? res : null);
+        },
+        segmentsVisited
+      );
+    },
+    err => {
+      cb(err);
+    }
+  );
 }
 
-function segmentRuleMatchUser(rule, user, segmentKey, salt) {
-  for (let i = 0; i < (rule.clauses || []).length; i++) {
-    if (!clauseMatchUserNoSegments(rule.clauses[i], user)) {
-      return false;
+function segmentRuleMatchContext(rule, context, segmentKey, salt, queries, stateOut, cb, segmentsVisited) {
+  safeAsyncEachSeries(
+    rule.clauses,
+    (clause, callback) => {
+      clauseMatchContext(
+        clause,
+        context,
+        queries,
+        stateOut,
+        matched => {
+          // on the first clause that does *not* match, we raise an "error" to stop the loop
+          callback(matched ? null : clause);
+        },
+        segmentsVisited
+      );
+    },
+    err => {
+      if (err) {
+        return cb(false);
+      }
+      // If the weight is absent, this rule matches
+      if (rule.weight === undefined || rule.weight === null) {
+        return cb(true);
+      }
+
+      // All of the clauses are met. See if the user buckets in
+      const { invalid, refAttr } = validateReference(!rule.contextKind, rule.bucketBy || 'key');
+      if (invalid) {
+        stateOut.error = [new Error('Invalid attribute reference in rule.'), errorResult('MALFORMED_FLAG')]; // eslint-disable-line no-param-reassign
+        return cb(false);
+      }
+      const [bucket] = bucketContext(context, segmentKey, refAttr, salt, rule.contextKind);
+      const weight = rule.weight / 100000.0;
+      return cb(bucket < weight);
     }
-  }
-
-  // If the weight is absent, this rule matches
-  if (rule.weight === undefined || rule.weight === null) {
-    return true;
-  }
-
-  // All of the clauses are met. See if the user buckets in
-  const bucket = bucketUser(user, segmentKey, rule.bucketBy || 'key', salt);
-  const weight = rule.weight / 100000.0;
-  return bucket < weight;
+  );
 }
 
 function maybeNegate(c, b) {
@@ -9361,12 +10080,14 @@ function getOffResult(flag, reason, cb) {
   }
 }
 
-function getResultForVariationOrRollout(r, user, flag, reason, cb) {
+function getResultForVariationOrRollout(r, context, flag, reason, cb) {
   if (!r) {
     cb(new Error('Fallthrough variation undefined'), errorResult('MALFORMED_FLAG'));
   } else {
-    const [index, inExperiment] = variationForUser(r, user, flag);
-    if (index === null || index === undefined) {
+    const [index, inExperiment, errorData] = variationForUser(r, context, flag);
+    if (errorData !== undefined) {
+      cb(...errorData);
+    } else if (index === null || index === undefined) {
       cb(new Error('Variation/rollout object with no variation or rollout'), errorResult('MALFORMED_FLAG'));
     } else {
       const transformedReason = reason;
@@ -9382,12 +10103,12 @@ function errorResult(errorKind) {
   return { value: null, variationIndex: null, reason: { kind: 'ERROR', errorKind: errorKind } };
 }
 
-// Given a variation or rollout 'r', select the variation for the given user.
-// Returns an array of the form [variationIndex, inExperiment].
-function variationForUser(r, user, flag) {
+// Given a variation or rollout 'r', select the variation for the given context.
+// Returns an array of the form [variationIndex, inExperiment, Error].
+function variationForUser(r, context, flag) {
   if (r.variation !== null && r.variation !== undefined) {
     // This represets a fixed variation; return it
-    return [r.variation, false];
+    return [r.variation, false, undefined];
   }
   const rollout = r.rollout;
   if (rollout) {
@@ -9396,59 +10117,161 @@ function variationForUser(r, user, flag) {
     if (variations && variations.length > 0) {
       // This represents a percentage rollout. Assume
       // we're rolling out by key
-      const bucketBy = rollout.bucketBy || 'key';
-      const bucket = bucketUser(user, flag.key, bucketBy, flag.salt, rollout.seed);
+      const bucketBy = isExperiment ? 'key' : rollout.bucketBy || 'key';
+      const { invalid, refAttr } = validateReference(!rollout.contextKind, bucketBy);
+      if (invalid) {
+        return [
+          undefined,
+          undefined,
+          [new Error('Invalid attribute reference for bucketBy in rollout'), errorResult('MALFORMED_FLAG')],
+        ];
+      }
+      const [bucket, hadContext] = bucketContext(
+        context,
+        flag.key,
+        refAttr,
+        flag.salt,
+        rollout.seed,
+        rollout.contextKind
+      );
       let sum = 0;
       for (let i = 0; i < variations.length; i++) {
         const variate = variations[i];
         sum += variate.weight / 100000.0;
         if (bucket < sum) {
-          return [variate.variation, isExperiment && !variate.untracked];
+          return [variate.variation, isExperiment && hadContext && !variate.untracked, undefined];
         }
       }
 
-      // The user's bucket value was greater than or equal to the end of the last bucket. This could happen due
+      // The context's bucket value was greater than or equal to the end of the last bucket. This could happen due
       // to a rounding error, or due to the fact that we are scaling to 100000 rather than 99999, or the flag
       // data could contain buckets that don't actually add up to 100000. Rather than returning an error in
       // this case (or changing the scaling, which would potentially change the results for *all* users), we
-      // will simply put the user in the last bucket.
+      // will simply put the context in the last bucket.
       const lastVariate = variations[variations.length - 1];
-      return [lastVariate.variation, isExperiment && !lastVariate.untracked];
+      return [lastVariate.variation, isExperiment && !lastVariate.untracked, undefined];
     }
   }
 
   return [null, false];
 }
 
-// Fetch an attribute value from a user object. Automatically
+// Fetch an attribute value from a context object. Automatically
 // navigates into the custom array when necessary
-function userValue(user, attr) {
-  if (builtins.indexOf(attr) >= 0 && Object.hasOwnProperty.call(user, attr)) {
-    return user[attr];
+function legacyUserValue(context, attr) {
+  if (builtins.some(builtIn => AttributeReference.compare(attr, builtIn))) {
+    return contextValueByReference(context, attr);
   }
-  if (user.custom && Object.hasOwnProperty.call(user.custom, attr)) {
-    return user.custom[attr];
+  if (context.custom) {
+    return contextValueByReference(context.custom, attr);
   }
   return null;
 }
 
-// Compute a percentile for a user
-function bucketUser(user, key, attr, salt, seed) {
-  let idHash = bucketableStringValue(userValue(user, attr));
+/**
+ * Get a value from the context by the specified reference.
+ * @param {Object} context
+ * @param {string} reference
+ * @returns The value from the context, or undefined. If the value
+ * would have been a non-array object, then undefined will be returned.
+ * Objects are not valid for clauses.
+ */
+function contextValueByReference(context, reference) {
+  const value = AttributeReference.get(context, reference);
+  // Rules cannot use objects as a value.
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    return undefined;
+  }
+  return value;
+}
 
-  if (idHash === null) {
-    return 0;
+function legacyAttributeToReference(attr) {
+  return attr && attr.startsWith('/') ? AttributeReference.literalToReference(attr) : attr;
+}
+
+/**
+ * Get a value from the specified context that matches the kind and
+ * attribute reference.
+ * @param {Object} context The context to get a value from.
+ * @param {string} kind The kind that the value must be from.
+ * @param {string} attr An attribute reference to the value.
+ * @param {boolean} isLegacy Boolean flag indicating if the attribute is from
+ * a type which didn't specify a contextKind.
+ * @returns {[boolean, any]} A tuple where the first value indicates if the reference was valid and the second is the value
+ * of the attribute. The value will be undefined if the attribute does not exist, or if the type
+ * of the attribute is not suitable for evaluation (an object).
+ */
+function contextValue(context, kind, attr, isLegacy) {
+  //In the old format an attribute name could have started with a '/' but not
+  //been a reference. In this case these attributes need converted.
+  const { invalid, refAttr } = validateReference(isLegacy, attr);
+  if (invalid) {
+    return [!invalid, undefined];
   }
 
-  if (user.secondary) {
-    idHash += '.' + user.secondary;
+  // If anonymous is not defined, then it is considered false.
+  if (attr === 'anonymous') {
+    const forKind = getContextForKind(context, kind);
+    return [true, contextValueByReference(forKind, refAttr) || false];
+  }
+
+  if (!context.kind) {
+    if (kind === 'user') {
+      return [true, legacyUserValue(context, refAttr)];
+    }
+    return [true, undefined];
+  } else if (context.kind === 'multi') {
+    return [true, contextValueByReference(context[kind], refAttr)];
+  } else if (context.kind === kind) {
+    return [true, contextValueByReference(context, refAttr)];
+  }
+  return [true, undefined];
+}
+
+/**
+ * Validate an attribute and return an escaped version if needed.
+ * @param {boolean} isLegacy
+ * @param {string} attr
+ * @returns A pair where the first value indicates if the reference was valid,
+ * and the second value is the reference, possibly converted from a literal.
+ */
+function validateReference(isLegacy, attr) {
+  const refAttr = isLegacy ? legacyAttributeToReference(attr) : attr;
+
+  const invalid = attr === '' || (refAttr.startsWith('/') && !AttributeReference.isValidReference(refAttr));
+  return { invalid, refAttr };
+}
+
+/**
+ * Compute a bucket value for use in a rollout or experiment. If an error condition prevents us from
+ * computing a valid bucket value, we return zero, which will cause the evaluation to use the first
+ * bucket.
+ *
+ * @returns {[number, boolean]} A tuple where the first value is the bucket, and the second value
+ * indicates if there was a context for the value specified by `kindForRollout`. If there was not
+ * a context for the specified kind, then the `inExperiment` attribute should be `false`.
+ */
+function bucketContext(context, key, attr, salt, seed, kindForRollout) {
+  const kindOrDefault = kindForRollout || 'user';
+  //Key pre-validated. So we can disregard the validation here.
+  const [, value] = contextValue(context, kindOrDefault, attr, kindForRollout === undefined);
+
+  const idHash = bucketableStringValue(value);
+
+  if (idHash === null) {
+    // If we got a value, then we know there was a context, but if we didn't get a value, then
+    // it could either be there wasn't an attribute, the attribute was undefined/null, or there
+    // was not a context. So here check for the context.
+    const contextForKind = getContextForKind(context, kindForRollout);
+
+    return [0, !!contextForKind];
   }
 
   const prefix = seed ? util.format('%d.', seed) : util.format('%s.%s.', key, salt);
   const hashKey = prefix + idHash;
   const hashVal = parseInt(sha1Hex(hashKey).substring(0, 15), 16);
 
-  return hashVal / 0xfffffffffffffff;
+  return [hashVal / 0xfffffffffffffff, true];
 }
 
 function bucketableStringValue(value) {
@@ -9476,7 +10299,7 @@ function makeBigSegmentRef(segment) {
 
 module.exports = {
   Evaluator,
-  bucketUser,
+  bucketContext,
   makeBigSegmentRef,
 };
 
@@ -9512,13 +10335,13 @@ function isExperiment(flag, reason) {
 function EventFactory(withReasons) {
   const ef = {};
 
-  ef.newEvalEvent = (flag, user, detail, defaultVal, prereqOfFlag) => {
+  ef.newEvalEvent = (flag, context, detail, defaultVal, prereqOfFlag) => {
     const addExperimentData = isExperiment(flag, detail.reason);
     const e = {
       kind: 'feature',
       creationDate: new Date().getTime(),
       key: flag.key,
-      user: user,
+      context,
       value: detail.value,
       variation: detail.variationIndex,
       default: defaultVal,
@@ -9540,12 +10363,12 @@ function EventFactory(withReasons) {
     return e;
   };
 
-  ef.newDefaultEvent = (flag, user, detail) => {
+  ef.newDefaultEvent = (flag, context, detail) => {
     const e = {
       kind: 'feature',
       creationDate: new Date().getTime(),
       key: flag.key,
-      user: user,
+      context,
       value: detail.value,
       default: detail.value,
       version: flag.version,
@@ -9563,12 +10386,12 @@ function EventFactory(withReasons) {
     return e;
   };
 
-  ef.newUnknownFlagEvent = (key, user, detail) => {
+  ef.newUnknownFlagEvent = (key, context, detail) => {
     const e = {
       kind: 'feature',
       creationDate: new Date().getTime(),
       key: key,
-      user: user,
+      context,
       value: detail.value,
       default: detail.value,
     };
@@ -9578,19 +10401,18 @@ function EventFactory(withReasons) {
     return e;
   };
 
-  ef.newIdentifyEvent = user => ({
+  ef.newIdentifyEvent = context => ({
     kind: 'identify',
     creationDate: new Date().getTime(),
-    key: user.key,
-    user: user,
+    context,
   });
 
-  ef.newCustomEvent = (eventName, user, data, metricValue) => {
+  ef.newCustomEvent = (eventName, context, data, metricValue) => {
     const e = {
       kind: 'custom',
       creationDate: new Date().getTime(),
       key: eventName,
-      user: user,
+      context,
     };
     if (data !== null && data !== undefined) {
       e.data = data;
@@ -9599,18 +10421,6 @@ function EventFactory(withReasons) {
       e.metricValue = metricValue;
     }
     return e;
-  };
-
-  ef.newAliasEvent = (user, previousUser) => {
-    const userContextKind = u => (u.anonymous ? 'anonymousUser' : 'user');
-    return {
-      kind: 'alias',
-      key: user.key,
-      contextKind: userContextKind(user),
-      previousKey: previousUser.key,
-      previousContextKind: userContextKind(previousUser),
-      creationDate: new Date().getTime(),
-    };
   };
 
   return ef;
@@ -9631,31 +10441,19 @@ const LRUCache = __nccwpck_require__(7129);
 const { v4: uuidv4 } = __nccwpck_require__(5840);
 
 const EventSummarizer = __nccwpck_require__(1053);
-const UserFilter = __nccwpck_require__(4560);
+const ContextFilter = __nccwpck_require__(8895);
 const errors = __nccwpck_require__(7287);
 const httpUtils = __nccwpck_require__(2716);
 const messages = __nccwpck_require__(2505);
-const stringifyAttrs = __nccwpck_require__(3916);
 const wrapPromiseCallback = __nccwpck_require__(1213);
-
-const userAttrsToStringifyForEvents = [
-  'key',
-  'secondary',
-  'ip',
-  'country',
-  'email',
-  'firstName',
-  'lastName',
-  'avatar',
-  'name',
-];
+const { getCanonicalKey } = __nccwpck_require__(6105);
 
 function EventProcessor(sdkKey, config, errorReporter, diagnosticsManager) {
   const ep = {};
 
-  const userFilter = UserFilter(config),
-    summarizer = EventSummarizer(config),
-    userKeysCache = new LRUCache({ max: config.userKeysCapacity }),
+  const contextFilter = ContextFilter(config),
+    summarizer = EventSummarizer(),
+    contextKeysCache = new LRUCache({ max: config.contextKeysCapacity }),
     mainEventsUri = config.eventsUri + '/bulk',
     diagnosticEventsUri = config.eventsUri + '/diagnostic';
 
@@ -9711,13 +10509,10 @@ function EventProcessor(sdkKey, config, errorReporter, diagnosticsManager) {
         if (event.reason) {
           out.reason = event.reason;
         }
-        if (config.inlineUsersInEvents || debug) {
-          out.user = processUser(event);
+        if (debug) {
+          out.context = processContext(event);
         } else {
-          out.userKey = getUserKey(event);
-        }
-        if (event.user && event.user.anonymous) {
-          out.contextKind = 'anonymousUser';
+          out.contextKeys = getContextKeys(event);
         }
         return out;
       }
@@ -9725,8 +10520,7 @@ function EventProcessor(sdkKey, config, errorReporter, diagnosticsManager) {
         return {
           kind: 'identify',
           creationDate: event.creationDate,
-          key: getUserKey(event),
-          user: processUser(event),
+          context: processContext(event),
         };
       case 'custom': {
         const out = {
@@ -9734,20 +10528,16 @@ function EventProcessor(sdkKey, config, errorReporter, diagnosticsManager) {
           creationDate: event.creationDate,
           key: event.key,
         };
-        if (config.inlineUsersInEvents) {
-          out.user = processUser(event);
-        } else {
-          out.userKey = getUserKey(event);
-        }
+
+        out.contextKeys = getContextKeys(event);
+
         if (event.data !== null && event.data !== undefined) {
           out.data = event.data;
         }
         if (event.metricValue !== null && event.metricValue !== undefined) {
           out.metricValue = event.metricValue;
         }
-        if (event.user && event.user.anonymous) {
-          out.contextKind = 'anonymousUser';
-        }
+
         return out;
       }
       default:
@@ -9755,13 +10545,35 @@ function EventProcessor(sdkKey, config, errorReporter, diagnosticsManager) {
     }
   }
 
-  function processUser(event) {
-    const filtered = userFilter.filterUser(event.user);
-    return stringifyAttrs(filtered, userAttrsToStringifyForEvents);
+  function processContext(event) {
+    return contextFilter.filter(event.context);
   }
 
-  function getUserKey(event) {
-    return event.user && String(event.user.key);
+  function getCacheKey(event) {
+    const context = event.context;
+    return getCanonicalKey(context);
+  }
+
+  function getContextKeys(event) {
+    const keys = {};
+    const context = event.context;
+    if (context !== undefined) {
+      if (context.kind === undefined && context.key) {
+        keys.user = String(context.key);
+      } else if (context.kind !== 'multi') {
+        keys[context.kind] = String(context.key);
+      } else if (context.kind === 'multi') {
+        Object.keys(context)
+          .filter(key => key !== 'kind')
+          .forEach(key => {
+            if (context[key] !== undefined && context[key].key !== undefined) {
+              keys[key] = context[key].key;
+            }
+          });
+      }
+      return keys;
+    }
+    return undefined;
   }
 
   ep.sendEvent = event => {
@@ -9787,18 +10599,16 @@ function EventProcessor(sdkKey, config, errorReporter, diagnosticsManager) {
 
     // For each user we haven't seen before, we add an index event - unless this is already
     // an identify event for that user.
-    if (!addFullEvent || !config.inlineUsersInEvents) {
-      if (event.user) {
-        const isIdentify = event.kind === 'identify';
-        if (userKeysCache.get(event.user.key)) {
-          if (!isIdentify) {
-            deduplicatedUsers++;
-          }
-        } else {
-          userKeysCache.set(event.user.key, true);
-          if (!isIdentify) {
-            addIndexEvent = true;
-          }
+    if (event.context) {
+      const isIdentify = event.kind === 'identify';
+      if (contextKeysCache.get(getCacheKey(event))) {
+        if (!isIdentify) {
+          deduplicatedUsers++;
+        }
+      } else {
+        contextKeysCache.set(getCacheKey(event), true);
+        if (!isIdentify) {
+          addIndexEvent = true;
         }
       }
     }
@@ -9807,7 +10617,7 @@ function EventProcessor(sdkKey, config, errorReporter, diagnosticsManager) {
       enqueue({
         kind: 'index',
         creationDate: event.creationDate,
-        user: processUser(event),
+        context: processContext(event),
       });
     }
     if (addFullEvent) {
@@ -9866,7 +10676,7 @@ function EventProcessor(sdkKey, config, errorReporter, diagnosticsManager) {
     const headers = Object.assign({ 'Content-Type': 'application/json' }, httpUtils.getDefaultHeaders(sdkKey, config));
     if (payloadId) {
       headers['X-LaunchDarkly-Payload-ID'] = payloadId;
-      headers['X-LaunchDarkly-Event-Schema'] = '3';
+      headers['X-LaunchDarkly-Event-Schema'] = '4';
     }
 
     const options = { method: 'POST', headers };
@@ -9918,8 +10728,8 @@ function EventProcessor(sdkKey, config, errorReporter, diagnosticsManager) {
   }, config.flushInterval * 1000);
 
   const flushUsersTimer = setInterval(() => {
-    userKeysCache.reset();
-  }, config.userKeysFlushInterval * 1000);
+    contextKeysCache.reset();
+  }, config.contextKeysFlushInterval * 1000);
 
   ep.close = () => {
     clearInterval(flushTimer);
@@ -9952,14 +10762,27 @@ module.exports = EventProcessor;
 /***/ }),
 
 /***/ 1053:
-/***/ ((module) => {
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+const { getContextKinds } = __nccwpck_require__(6105);
+
+function getKinds(event) {
+  if (event.context) {
+    return getContextKinds(event.context);
+  }
+  if (event.contextKeys) {
+    return Object.keys(event.contextKeys);
+  }
+  return [];
+}
 
 function EventSummarizer() {
   const es = {};
 
   let startDate = 0,
     endDate = 0,
-    counters = {};
+    counters = {},
+    contextKinds = {};
 
   es.summarizeEvent = event => {
     if (event.kind === 'feature') {
@@ -9970,6 +10793,13 @@ function EventSummarizer() {
         ':' +
         (event.version !== null && event.version !== undefined ? event.version : '');
       const counterVal = counters[counterKey];
+      let kinds = contextKinds[event.key];
+      if (!kinds) {
+        kinds = new Set();
+        contextKinds[event.key] = kinds;
+      }
+      getKinds(event).forEach(kind => kinds.add(kind));
+
       if (counterVal) {
         counterVal.count = counterVal.count + 1;
       } else {
@@ -9999,6 +10829,7 @@ function EventSummarizer() {
         flag = {
           default: c.default,
           counters: [],
+          contextKinds: [...contextKinds[c.key]],
         };
         flagsOut[c.key] = flag;
       }
@@ -10027,6 +10858,7 @@ function EventSummarizer() {
     startDate = 0;
     endDate = 0;
     counters = {};
+    contextKinds = {};
   };
 
   return es;
@@ -10308,6 +11140,9 @@ function FeatureStoreEventWrapper(featureStore, emitter) {
       for (const prereq of item.prerequisites || []) {
         ret.set(dataKind.features.namespace, prereq.key, true);
       }
+    }
+
+    if (kind === dataKind.features || kind === dataKind.segments) {
       for (const rule of item.rules || []) {
         for (const clause of rule.clauses || []) {
           if (clause.op === 'segmentMatch') {
@@ -10702,6 +11537,7 @@ const errors = __nccwpck_require__(7287);
 const { safeAsyncEach } = __nccwpck_require__(2517);
 const wrapPromiseCallback = __nccwpck_require__(1213);
 const dataKind = __nccwpck_require__(2211);
+const { checkContext, getCanonicalKey } = __nccwpck_require__(6105);
 
 function createErrorReporter(emitter, logger) {
   return error => {
@@ -10858,12 +11694,12 @@ const newClient = function (sdkKey, originalConfig) {
     return waitForInitializationPromise;
   };
 
-  client.variation = (key, user, defaultVal, callback) =>
+  client.variation = (key, context, defaultVal, callback) =>
     wrapPromiseCallback(
       new Promise((resolve, reject) => {
         evaluateIfPossible(
           key,
-          user,
+          context,
           defaultVal,
           eventFactoryDefault,
           detail => {
@@ -10875,10 +11711,10 @@ const newClient = function (sdkKey, originalConfig) {
       callback
     );
 
-  client.variationDetail = (key, user, defaultVal, callback) =>
+  client.variationDetail = (key, context, defaultVal, callback) =>
     wrapPromiseCallback(
       new Promise((resolve, reject) => {
-        evaluateIfPossible(key, user, defaultVal, eventFactoryWithReasons, resolve, reject);
+        evaluateIfPossible(key, context, defaultVal, eventFactoryWithReasons, resolve, reject);
       }),
       callback
     );
@@ -10887,31 +11723,31 @@ const newClient = function (sdkKey, originalConfig) {
     return { value: defaultVal, variationIndex: null, reason: { kind: 'ERROR', errorKind: errorKind } };
   }
 
-  function evaluateIfPossible(key, user, defaultVal, eventFactory, resolve, reject) {
+  function evaluateIfPossible(key, context, defaultVal, eventFactory, resolve, reject) {
     if (!initComplete) {
       config.featureStore.initialized(storeInited => {
         if (storeInited) {
           config.logger.warn(
             "Variation called before LaunchDarkly client initialization completed (did you wait for the 'ready' event?) - using last known values from feature store"
           );
-          variationInternal(key, user, defaultVal, eventFactory, resolve, reject);
+          variationInternal(key, context, defaultVal, eventFactory, resolve, reject);
         } else {
           const err = new errors.LDClientError(
             "Variation called before LaunchDarkly client initialization completed (did you wait for the 'ready' event?) - using default value"
           );
           maybeReportError(err);
           const result = errorResult('CLIENT_NOT_READY', defaultVal);
-          eventProcessor.sendEvent(eventFactory.newUnknownFlagEvent(key, user, result));
+          eventProcessor.sendEvent(eventFactory.newUnknownFlagEvent(key, context, result));
           return resolve(result);
         }
       });
     } else {
-      variationInternal(key, user, defaultVal, eventFactory, resolve, reject);
+      variationInternal(key, context, defaultVal, eventFactory, resolve, reject);
     }
   }
 
   // resolves to a "detail" object with properties "value", "variationIndex", "reason"
-  function variationInternal(key, user, defaultVal, eventFactory, resolve) {
+  function variationInternal(key, context, defaultVal, eventFactory, resolve) {
     if (client.isOffline()) {
       config.logger.info('Variation called in offline mode. Returning default value.');
       return resolve(errorResult('CLIENT_NOT_READY', defaultVal));
@@ -10921,29 +11757,37 @@ const newClient = function (sdkKey, originalConfig) {
       return resolve(errorResult('FLAG_NOT_FOUND', defaultVal));
     }
 
-    if (user && user.key === '') {
+    // This only will handle single kind contexts with empty keys.
+    // Keys of multi-kind contexts are not touched until evaluation.
+    if (context && (!context.kind || context.kind !== 'multi') && context.key === '') {
       config.logger.warn(
         'User key is blank. Flag evaluation will proceed, but the user will not be stored in LaunchDarkly'
       );
     }
 
     config.featureStore.get(dataKind.features, key, flag => {
-      if (!flag) {
-        maybeReportError(new errors.LDClientError('Unknown feature flag "' + key + '"; returning default value'));
-        const result = errorResult('FLAG_NOT_FOUND', defaultVal);
-        eventProcessor.sendEvent(eventFactory.newUnknownFlagEvent(key, user, result));
-        return resolve(result);
-      }
-
-      if (!user) {
-        const variationErr = new errors.LDClientError('No user specified. Returning default value.');
+      if (!context) {
+        const variationErr = new errors.LDClientError('No context specified. Returning default value.');
         maybeReportError(variationErr);
         const result = errorResult('USER_NOT_SPECIFIED', defaultVal);
-        eventProcessor.sendEvent(eventFactory.newDefaultEvent(flag, user, result));
         return resolve(result);
       }
 
-      evaluator.evaluate(flag, user, eventFactory, (err, detailIn, events) => {
+      if (!checkContext(context, true)) {
+        const variationErr = new errors.LDClientError('Invalid context specified. Returning default value.');
+        maybeReportError(variationErr);
+        const result = errorResult('USER_NOT_SPECIFIED', defaultVal);
+        return resolve(result);
+      }
+
+      if (!flag) {
+        maybeReportError(new errors.LDClientError(`Unknown feature flag "${key}"; returning default value`));
+        const result = errorResult('FLAG_NOT_FOUND', defaultVal);
+        eventProcessor.sendEvent(eventFactory.newUnknownFlagEvent(key, context, result));
+        return resolve(result);
+      }
+
+      evaluator.evaluate(flag, context, eventFactory, (err, detailIn, events) => {
         const detail = detailIn;
         if (err) {
           maybeReportError(
@@ -10965,13 +11809,13 @@ const newClient = function (sdkKey, originalConfig) {
           config.logger.debug('Result value is null in variation');
           detail.value = defaultVal;
         }
-        eventProcessor.sendEvent(eventFactory.newEvalEvent(flag, user, detail, defaultVal));
+        eventProcessor.sendEvent(eventFactory.newEvalEvent(flag, context, detail, defaultVal));
         return resolve(detail);
       });
     });
   }
 
-  client.allFlagsState = (user, specifiedOptions, specifiedCallback) => {
+  client.allFlagsState = (context, specifiedOptions, specifiedCallback) => {
     let callback = specifiedCallback,
       options = specifiedOptions;
     if (callback === undefined && typeof options === 'function') {
@@ -10987,8 +11831,8 @@ const newClient = function (sdkKey, originalConfig) {
           return FlagsStateBuilder(false).build();
         }
 
-        if (!user) {
-          config.logger.info('allFlagsState() called without user. Returning empty state.');
+        if (!context) {
+          config.logger.info('allFlagsState() called without context. Returning empty state.');
           return FlagsStateBuilder(false).build();
         }
 
@@ -11021,7 +11865,7 @@ const newClient = function (sdkKey, originalConfig) {
                   iterateeCb();
                 } else {
                   // At the moment, we don't send any events here
-                  evaluator.evaluate(flag, user, eventFactoryDefault, (err, detail) => {
+                  evaluator.evaluate(flag, context, eventFactoryDefault, (err, detail) => {
                     if (err !== null) {
                       maybeReportError(
                         new Error('Error for feature flag "' + flag.key + '" while evaluating all flags: ' + err)
@@ -11050,9 +11894,10 @@ const newClient = function (sdkKey, originalConfig) {
     );
   };
 
-  client.secureModeHash = user => {
+  client.secureModeHash = context => {
+    const key = getCanonicalKey(context);
     const hmac = crypto.createHmac('sha256', sdkKey);
-    hmac.update(user.key);
+    hmac.update(key);
     return hmac.digest('hex');
   };
 
@@ -11067,39 +11912,23 @@ const newClient = function (sdkKey, originalConfig) {
 
   client.isOffline = () => config.offline;
 
-  client.alias = (user, previousUser) => {
-    if (!user || !previousUser) {
+  client.track = (eventName, context, data, metricValue) => {
+    if (!checkContext(context, false)) {
+      config.logger.warn(messages.missingContextKeyNoEvent());
       return;
     }
-
-    eventProcessor.sendEvent(eventFactoryDefault.newAliasEvent(user, previousUser));
+    eventProcessor.sendEvent(eventFactoryDefault.newCustomEvent(eventName, context, data, metricValue));
   };
 
-  client.track = (eventName, user, data, metricValue) => {
-    if (!userExistsAndHasKey(user)) {
-      config.logger.warn(messages.missingUserKeyNoEvent());
+  client.identify = context => {
+    if (!checkContext(context, false)) {
+      config.logger.warn(messages.missingContextKeyNoEvent());
       return;
     }
-    eventProcessor.sendEvent(eventFactoryDefault.newCustomEvent(eventName, user, data, metricValue));
-  };
-
-  client.identify = user => {
-    if (!userExistsAndHasKey(user)) {
-      config.logger.warn(messages.missingUserKeyNoEvent());
-      return;
-    }
-    eventProcessor.sendEvent(eventFactoryDefault.newIdentifyEvent(user));
+    eventProcessor.sendEvent(eventFactoryDefault.newIdentifyEvent(context));
   };
 
   client.flush = callback => eventProcessor.flush(callback);
-
-  function userExistsAndHasKey(user) {
-    if (user) {
-      const key = user.key;
-      return key !== undefined && key !== null && key !== '';
-    }
-    return false;
-  }
 
   /* eslint-disable no-unused-vars */
   // We may not currently have any deprecated methods, but if we do, we should
@@ -11293,7 +12122,7 @@ exports.httpErrorMessage = (err, context, retryMessage) => {
   return `Received ${desc} for ${context} - ${action}`;
 };
 
-exports.missingUserKeyNoEvent = () => 'User was unspecified or had no key; event will not be sent';
+exports.missingContextKeyNoEvent = () => 'User was unspecified or had no key; event will not be sent';
 
 exports.optionBelowMinimum = (name, value, min) =>
   `Config option "${name}" had invalid value of ${value}, using minimum of ${min} instead`;
@@ -11516,8 +12345,8 @@ const httpUtils = __nccwpck_require__(2716);
  * could use the Requestor to make a polling request even in streaming mode, for very large data sets,
  * but the LD infrastructure no longer uses that behavior.
  *
- * @param {String} the SDK key
- * @param {Object} the LaunchDarkly client configuration object
+ * @param {String} sdkKey the SDK key
+ * @param {Object} config the LaunchDarkly client configuration object
  **/
 function Requestor(sdkKey, config) {
   const requestor = {};
@@ -11758,80 +12587,6 @@ module.exports = StreamProcessor;
 
 /***/ }),
 
-/***/ 4560:
-/***/ ((module) => {
-
-/**
- * The UserFilter object transforms user objects into objects suitable to be sent as JSON to
- * the server, hiding any private user attributes.
- *
- * @param {Object} the LaunchDarkly client configuration object
- **/
-function UserFilter(config) {
-  const filter = {};
-  const allAttributesPrivate = config.allAttributesPrivate;
-  const privateAttributeNames = config.privateAttributeNames || [];
-  const ignoreAttrs = { key: true, custom: true, anonymous: true };
-  const allowedTopLevelAttrs = {
-    key: true,
-    secondary: true,
-    ip: true,
-    country: true,
-    email: true,
-    firstName: true,
-    lastName: true,
-    avatar: true,
-    name: true,
-    anonymous: true,
-    custom: true,
-  };
-
-  filter.filterUser = user => {
-    const userPrivateAttrs = user.privateAttributeNames || [];
-    const isPrivateAttr = name =>
-      !ignoreAttrs[name] &&
-      (allAttributesPrivate || userPrivateAttrs.indexOf(name) !== -1 || privateAttributeNames.indexOf(name) !== -1);
-    const filterAttrs = (props, isAttributeAllowed) =>
-      Object.keys(props).reduce(
-        (accIn, name) => {
-          const acc = accIn;
-          if (isAttributeAllowed(name)) {
-            if (isPrivateAttr(name)) {
-              // add to hidden list
-              acc[1][name] = true;
-            } else {
-              acc[0][name] = props[name];
-            }
-          }
-          return acc;
-        },
-        [{}, {}]
-      );
-
-    const result = filterAttrs(user, key => allowedTopLevelAttrs[key]);
-    const filteredProps = result[0];
-    const removedAttrs = result[1];
-    if (user.custom) {
-      const customResult = filterAttrs(user.custom, () => true);
-      filteredProps.custom = customResult[0];
-      Object.assign(removedAttrs, customResult[1]);
-    }
-    const removedAttrNames = Object.keys(removedAttrs);
-    if (removedAttrNames.length) {
-      removedAttrNames.sort();
-      filteredProps.privateAttrs = removedAttrNames;
-    }
-    return filteredProps;
-  };
-
-  return filter;
-}
-
-module.exports = UserFilter;
-
-
-/***/ }),
-
 /***/ 2517:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
@@ -11978,27 +12733,6 @@ module.exports = {
   getDefaultHeaders,
   httpRequest,
   httpWithETagCache,
-};
-
-
-/***/ }),
-
-/***/ 3916:
-/***/ ((module) => {
-
-module.exports = function stringifyAttrs(object, attrs) {
-  if (!object) {
-    return object;
-  }
-  let newObject;
-  for (const attr of attrs) {
-    const value = object[attr];
-    if (value !== undefined && typeof value !== 'string') {
-      newObject = newObject || Object.assign({}, object);
-      newObject[attr] = String(value);
-    }
-  }
-  return newObject || object;
 };
 
 
@@ -16226,7 +16960,7 @@ module.exports = require("util");
 /***/ ((module) => {
 
 "use strict";
-module.exports = JSON.parse('{"name":"launchdarkly-node-server-sdk","version":"6.4.2","description":"LaunchDarkly Server-Side SDK for Node.js","main":"index.js","scripts":{"test":"jest --ci","check-typescript":"node_modules/typescript/bin/tsc","lint":"eslint --format \'node_modules/eslint-formatter-pretty\' --ignore-path .eslintignore .","contract-test-service":"npm --prefix contract-tests install && npm --prefix contract-tests start","contract-test-harness":"curl -s https://raw.githubusercontent.com/launchdarkly/sdk-test-harness/master/downloader/run.sh \\\\ | VERSION=v1 PARAMS=\\"-url http://localhost:8000 -debug -stop-service-at-end $TEST_HARNESS_PARAMS\\" sh","contract-tests":"npm run contract-test-service & npm run contract-test-harness"},"types":"./index.d.ts","repository":{"type":"git","url":"https://github.com/launchdarkly/node-server-sdk.git"},"keywords":["launchdarkly","analytics","client"],"license":"Apache-2.0","bugs":{"url":"https://github.com/launchdarkly/node-server-sdk/issues"},"homepage":"https://github.com/launchdarkly/node-server-sdk","dependencies":{"async":"^3.1.0","launchdarkly-eventsource":"1.4.4","lru-cache":"^6.0.0","node-cache":"^5.1.0","semver":"^7.3.0","tunnel":"0.0.6","uuid":"^8.3.2"},"engines":{"node":">= 12.0.0"},"devDependencies":{"@babel/core":"^7.14.6","@babel/preset-env":"^7.14.5","@types/node":"^15.12.2","babel-jest":"^27.0.2","eslint":"^7.28.0","eslint-config-prettier":"^8.3.0","eslint-formatter-pretty":"^4.1.0","eslint-plugin-prettier":"^3.4.0","jest":"^27.0.4","jest-junit":"^12.2.0","launchdarkly-js-test-helpers":"^2.2.0","prettier":"^2.3.1","tmp":"^0.2.1","typescript":"~4.4.4","yaml":"^1.10.2"},"jest":{"rootDir":".","testEnvironment":"node","testMatch":["**/*-test.js"],"testResultsProcessor":"jest-junit"}}');
+module.exports = JSON.parse('{"name":"launchdarkly-node-server-sdk","version":"7.0.0","description":"LaunchDarkly Server-Side SDK for Node.js","main":"index.js","scripts":{"test":"jest --ci --coverage --runInBand","check-typescript":"node_modules/typescript/bin/tsc","lint":"eslint --format \'node_modules/eslint-formatter-pretty\' --ignore-path .eslintignore .","lint-fix":"eslint --fix --format \'node_modules/eslint-formatter-pretty\' --ignore-path .eslintignore .","contract-test-service":"npm --prefix contract-tests install && npm --prefix contract-tests start","contract-test-harness":"curl -s https://raw.githubusercontent.com/launchdarkly/sdk-test-harness/master/downloader/run.sh \\\\ | VERSION=v2 PARAMS=\\"-url http://localhost:8000 -debug -stop-service-at-end $TEST_HARNESS_PARAMS\\" sh","contract-tests":"npm run contract-test-service & npm run contract-test-harness"},"types":"./index.d.ts","repository":{"type":"git","url":"https://github.com/launchdarkly/node-server-sdk.git"},"keywords":["launchdarkly","analytics","client"],"license":"Apache-2.0","bugs":{"url":"https://github.com/launchdarkly/node-server-sdk/issues"},"homepage":"https://github.com/launchdarkly/node-server-sdk","dependencies":{"async":"^3.1.0","launchdarkly-eventsource":"1.4.4","lru-cache":"^6.0.0","node-cache":"^5.1.0","semver":"^7.3.0","tunnel":"0.0.6","uuid":"^8.3.2"},"engines":{"node":">= 12.0.0"},"devDependencies":{"@babel/core":"^7.14.6","@babel/preset-env":"^7.14.5","@types/jest":"^27.4.0","@types/node":"^15.12.2","babel-jest":"^27.0.2","eslint":"^7.28.0","eslint-config-prettier":"^8.3.0","eslint-formatter-pretty":"^4.1.0","eslint-plugin-prettier":"^3.4.0","jest":"^27.0.4","jest-junit":"^12.2.0","launchdarkly-js-test-helpers":"^2.2.0","prettier":"^2.3.1","tmp":"^0.2.1","typescript":"~4.4.4","yaml":"^1.10.2"},"jest":{"rootDir":".","testEnvironment":"node","testMatch":["**/*-test.js"],"testResultsProcessor":"jest-junit"}}');
 
 /***/ })
 
@@ -16325,10 +17059,9 @@ var launchdarkly_node_server_sdk_default = /*#__PURE__*/__nccwpck_require__.n(la
 
 
 class LDClient {
-  constructor(sdkKey, options = {}, userKey) {
+  constructor(sdkKey, options = {}) {
     core.debug(`Client options: ${JSON.stringify(options)}`);
     this.client = launchdarkly_node_server_sdk_default().init(sdkKey, options);
-    this.userKey = userKey;
   }
 
   close() {
@@ -16339,26 +17072,38 @@ class LDClient {
     this.client.flush();
   }
 
-  async evaluateFlag(flagKey, defaultValue, customProps = {}) {
-    await this.client.waitForInitialization();
-    const context = { key: this.userKey, custom: customProps };
-
+  async evaluateFlag(flagKey, ctx, defaultValue) {
+    const timeoutPromise = new Promise((resolve, reject) => {
+      setTimeout(reject, 5000);
+    });
     core.debug(`Evaluating flag ${flagKey}`);
-    core.debug(`with context ${JSON.stringify(context)}`);
-    const result = await this.client.variation(flagKey, context, defaultValue);
-    core.debug(`Flag ${flagKey} is ${JSON.stringify(result)}`);
+    core.debug(`with context ${JSON.stringify(ctx)}`);
+    try {
+      // Only await initialization if we're not in offline mode.
+      await Promise.race([timeoutPromise, this.client.waitForInitialization()]);
+      const result = await this.client.variation(flagKey, ctx, defaultValue);
+      core.debug(`Flag ${flagKey} is ${JSON.stringify(result)}`);
 
-    return result;
+      return result;
+    } catch (error) {
+      console.error(error);
+      core.setFailed('Failed to initialize SDK.');
+    }
   }
 
-  async evaluateFlags(flagKeys = [], customProps = {}) {
-    const promises = flagKeys.map((flagKey) => this.evaluateFlag(flagKey, null, customProps));
+  async evaluateFlags(flagInputs = [], customProps = {}) {
+    const parsedFlags = getParsedFlags(flagInputs);
+
+    const promises = parsedFlags.map((flag) => {
+      core.debug(flag);
+      return this.evaluateFlag(flag[0], customProps, flag[1]);
+    });
 
     const flags = {};
     try {
       const results = await Promise.all(promises);
       for (let i = 0; i < results.length; i++) {
-        flags[flagKeys[i]] = results[i];
+        flags[parsedFlags[i][0]] = results[i];
       }
     } catch (error) {
       console.error(error);
@@ -16367,6 +17112,18 @@ class LDClient {
 
     return flags;
   }
+}
+
+function getParsedFlags(flagInput) {
+  const parsedFlags = [];
+  flagInput.map((item) => {
+    const splitFlagKey = item.split(',').map((v) => v.trim());
+    const flagKey = splitFlagKey[0];
+    const defaultValue = splitFlagKey[1] ? splitFlagKey[1] : null;
+    parsedFlags.push([flagKey, defaultValue]);
+  });
+
+  return parsedFlags;
 }
 
 ;// CONCATENATED MODULE: ./configuration.js
@@ -16382,9 +17139,9 @@ const validate = (args) => {
     errors.push('sdk-key');
   }
 
-  if (!Array.isArray(args.flagKeys) || !args.flagKeys.length) {
+  if (!Array.isArray(args.flags) || !args.flags.length) {
     core.error('At least one flag key is required');
-    errors.push('flag-keys');
+    errors.push('flags');
   }
 
   return errors;
@@ -16400,20 +17157,20 @@ const run = async () => {
   core.startGroup('Validating arguments');
   const sdkKey = core.getInput('sdk-key');
   core.setSecret(sdkKey);
-  const flagKeys = core.getMultilineInput('flag-keys');
+  const flags = core.getMultilineInput('flags');
   const userKey = core.getInput('user-key');
   const sendEvents = core.getBooleanInput('send-events');
   const baseUri = core.getInput('base-uri');
   const eventsUri = core.getInput('events-uri');
   const streamUri = core.getInput('stream-uri');
+  const offline = core.getBooleanInput('offline');
   // these will be validated by SDK
   const proxyAuth = core.getInput('proxy-auth');
   const proxyHost = core.getInput('proxy-host');
   const proxyPort = core.getInput('proxy-port');
   const proxyScheme = core.getInput('proxy-scheme');
 
-  core.info(baseUri);
-  const validationErrors = validate({ sdkKey, flagKeys });
+  const validationErrors = validate({ sdkKey, flags });
   if (validationErrors.length > 0) {
     core.setFailed(`Invalid arguments: ${validationErrors.join(', ')}`);
     return;
@@ -16422,26 +17179,58 @@ const run = async () => {
 
   // build a context
   core.startGroup('Extracting action context');
-  const envFilters = [
+
+  // Setup Runner Context
+  const envRunnerFilters = [
     // Don't strip RUNNER_ and GITHUB_ env vars so we can avoid naming conflicts
     { prefix: 'RUNNER_', strip: false },
-    { prefix: 'GITHUB_', strip: false },
-    { prefix: 'LD_', strip: true },
   ];
-  var ctx = {};
-  Object.keys(process.env)
-    .filter(function (key) {
-      return process.env[key] != '';
+  const runnerKey = 'RUNNER_TRACKING_ID';
+
+  const githubRunnerCtx = process.env[runnerKey]
+    ? {
+        GithubRunner: {
+          key: process.env[runnerKey],
+          ...createContext(envRunnerFilters, runnerKey),
+        },
+      }
+    : {};
+
+  // Setup Github Context
+  const envGithubFilters = [{ prefix: 'GITHUB_', strip: false }];
+  const githubKey = 'GITHUB_REPOSITORY';
+  const githubCtx = process.env[githubKey]
+    ? {
+        Github: {
+          key: 'test',
+          ...createContext(envGithubFilters, githubKey),
+        },
+      }
+    : {};
+
+  // Setup LaunchDarkly Context
+  const envLDFilters = [{ prefix: 'LD_', strip: true }];
+  let ldCtx = {};
+  if (
+    Object.keys(process.env).some((i) => {
+      return i.startsWith('LD_');
     })
-    .forEach(function (key) {
-      envFilters.forEach(function (p) {
-        if (key.startsWith(p.prefix)) {
-          var contextKey = p.strip ? key.substring(p.prefix.length) : key;
-          ctx[contextKey] = process.env[key];
-          core.debug(contextKey + '="' + process.env[key]) + '"';
-        }
-      });
-    });
+  ) {
+    ldCtx = {
+      GithubCustomAttributes: {
+        key: userKey ? userKey : Date.now(),
+        ...createContext(envLDFilters),
+      },
+    };
+  }
+
+  const ctx = {
+    kind: 'multi',
+    ...githubRunnerCtx,
+    ...githubCtx,
+    ...ldCtx,
+  };
+
   core.endGroup();
 
   const options = {
@@ -16449,6 +17238,8 @@ const run = async () => {
     baseUri,
     eventsUri,
     streamUri,
+    offline,
+    wrapperName: 'github-flag-evaluation',
   };
 
   if (proxyAuth) {
@@ -16465,20 +17256,45 @@ const run = async () => {
   }
 
   // evaluate flags
-  const client = new LDClient(sdkKey, options, userKey);
+  const client = new LDClient(sdkKey, options);
   core.startGroup('Evaluating flags');
-  const flags = await client.evaluateFlags(flagKeys, ctx);
+  const evaledFlags = await client.evaluateFlags(flags, ctx);
   await client.flush();
   client.close();
   core.endGroup();
 
   // set output
-  for (const flagKey in flags) {
-    core.setOutput(flagKey, flags[flagKey]);
+  for (const flagKey in evaledFlags) {
+    core.setOutput(flagKey, evaledFlags[flagKey]);
   }
 
   return;
 };
+
+function createContext(envFilters, ignoreKey = '') {
+  const ctx = {};
+  Object.keys(process.env)
+    .filter(function (key) {
+      return process.env[key] != '';
+    })
+    .filter(function (key) {
+      if (key === ignoreKey) {
+        return false;
+      }
+      return true;
+    })
+    .forEach(function (key) {
+      envFilters.forEach(function (p) {
+        if (key.startsWith(p.prefix)) {
+          var contextKey = p.strip ? key.substring(p.prefix.length) : key;
+          ctx[contextKey] = process.env[key];
+          core.debug(contextKey + '="' + process.env[key]) + '"';
+        }
+      });
+    });
+
+  return ctx;
+}
 
 ;// CONCATENATED MODULE: ./index.js
 
