@@ -52,7 +52,7 @@ export const run = async () => {
   const githubCtx = process.env[githubKey]
     ? {
         Github: {
-          key: process.env[githubKey] ? process.env[githubKey] : process.env['GITHUB_RUN_ID'],
+          key: process.env[githubKey] ? process.env[githubKey].split('/')[-1].trim() : process.env['GITHUB_RUN_ID'],
           ...createContext(envGithubFilters, githubKey),
         },
       }
