@@ -8,9 +8,10 @@ const makeEnv = (envs = {}) =>
 
 const buildDefaultEnv = makeEnv({
   'sdk-key': 'sdk-xxxxxxxxx',
-  'flag-keys': 'key-1\nkey-2',
+  flags: 'key-1\nkey-2',
   'user-key': '',
   'send-events': 'false',
+  offline: 'false',
   'base-uri': '',
   'events-uri': '',
   'stream-uri': '',

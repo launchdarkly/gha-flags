@@ -19,23 +19,24 @@ describe('Action', () => {
 
   test('succeeds when all required inputs are provided', async () => {
     const errorSpy = jest.spyOn(core, 'setFailed');
-    await runAction({ 'sdk-key': 'sdk-xxxx', 'flag-keys': 'flag-key' });
+    await runAction({ 'sdk-key': 'sdk-xxxx', flags: 'flag-key' });
     expect(errorSpy).not.toHaveBeenCalled();
   });
 
   test('fails when required inputs are not provided', async () => {
     const errorSpy = jest.spyOn(core, 'setFailed');
-    await runAction({ 'sdk-key': '', 'flag-keys': '' });
-    expect(errorSpy).toHaveBeenCalledWith('Invalid arguments: sdk-key, flag-keys');
+    await runAction({ 'sdk-key': '', flags: '' });
+    expect(errorSpy).toHaveBeenCalledWith('Invalid arguments: sdk-key, flags');
   });
 
   test('input arguments are correctly passed to LaunchDarkly client', async () => {
     const clientInitSpy = jest.spyOn(LaunchDarkly, 'init');
     await runAction({
       'sdk-key': 'sdk-xxxx',
-      'flag-keys': 'flag-key',
+      flags: 'flag-key',
       'user-key': 'user-key',
       'send-events': 'false',
+      offline: 'false',
       'base-uri': 'https://base.uri',
       'events-uri': 'https://events.uri',
       'stream-uri': 'https://stream.uri',
@@ -50,6 +51,7 @@ describe('Action', () => {
         baseUri: 'https://base.uri',
         eventsUri: 'https://events.uri',
         sendEvents: false,
+        offline: false,
         streamUri: 'https://stream.uri',
         proxyAuth: 'username:password',
         proxyHost: 'https://proxy.host',
@@ -63,7 +65,7 @@ describe('Action', () => {
     const outputSpy = jest.spyOn(core, 'setOutput');
     await runAction({
       'sdk-key': 'sdk-xxxx',
-      'flag-keys': 'flag-key-1\nflag-key-2\nflag-key-3',
+      flags: 'flag-key-1\nflag-key-2\nflag-key-3',
     });
 
     expect(outputSpy).toHaveBeenNthCalledWith(1, 'flag-key-1', false);

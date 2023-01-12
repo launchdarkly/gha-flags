@@ -17059,10 +17059,9 @@ var launchdarkly_node_server_sdk_default = /*#__PURE__*/__nccwpck_require__.n(la
 
 
 class LDClient {
-  constructor(sdkKey, options = {}, userKey) {
+  constructor(sdkKey, options = {}) {
     core.debug(`Client options: ${JSON.stringify(options)}`);
     this.client = launchdarkly_node_server_sdk_default().init(sdkKey, options);
-    this.userKey = userKey;
   }
 
   close() {
@@ -17073,25 +17072,38 @@ class LDClient {
     this.client.flush();
   }
 
-  async evaluateFlag(flagKey, defaultValue, ctx) {
-    await this.client.waitForInitialization();
-
+  async evaluateFlag(flagKey, ctx, defaultValue) {
+    const timeoutPromise = new Promise((resolve, reject) => {
+      setTimeout(reject, 5000);
+    });
     core.debug(`Evaluating flag ${flagKey}`);
     core.debug(`with context ${JSON.stringify(ctx)}`);
-    const result = await this.client.variation(flagKey, ctx, defaultValue);
-    core.debug(`Flag ${flagKey} is ${JSON.stringify(result)}`);
+    try {
+      // Only await initialization if we're not in offline mode.
+      await Promise.race([timeoutPromise, this.client.waitForInitialization()]);
+      const result = await this.client.variation(flagKey, ctx, defaultValue);
+      core.debug(`Flag ${flagKey} is ${JSON.stringify(result)}`);
 
-    return result;
+      return result;
+    } catch (error) {
+      console.error(error);
+      core.setFailed('Failed to initialize SDK.');
+    }
   }
 
-  async evaluateFlags(flagKeys = [], customProps = {}) {
-    const promises = flagKeys.map((flagKey) => this.evaluateFlag(flagKey, null, customProps));
+  async evaluateFlags(flagInputs = [], customProps = {}) {
+    const parsedFlags = getParsedFlags(flagInputs);
+
+    const promises = parsedFlags.map((flag) => {
+      core.debug(flag);
+      return this.evaluateFlag(flag[0], customProps, flag[1]);
+    });
 
     const flags = {};
     try {
       const results = await Promise.all(promises);
       for (let i = 0; i < results.length; i++) {
-        flags[flagKeys[i]] = results[i];
+        flags[parsedFlags[i][0]] = results[i];
       }
     } catch (error) {
       console.error(error);
@@ -17100,6 +17112,18 @@ class LDClient {
 
     return flags;
   }
+}
+
+function getParsedFlags(flagInput) {
+  const parsedFlags = [];
+  flagInput.map((item) => {
+    const splitFlagKey = item.split(',').map((v) => v.trim());
+    const flagKey = splitFlagKey[0];
+    const defaultValue = splitFlagKey[1] ? splitFlagKey[1] : null;
+    parsedFlags.push([flagKey, defaultValue]);
+  });
+
+  return parsedFlags;
 }
 
 ;// CONCATENATED MODULE: ./configuration.js
@@ -17115,9 +17139,9 @@ const validate = (args) => {
     errors.push('sdk-key');
   }
 
-  if (!Array.isArray(args.flagKeys) || !args.flagKeys.length) {
+  if (!Array.isArray(args.flags) || !args.flags.length) {
     core.error('At least one flag key is required');
-    errors.push('flag-keys');
+    errors.push('flags');
   }
 
   return errors;
@@ -17133,20 +17157,20 @@ const run = async () => {
   core.startGroup('Validating arguments');
   const sdkKey = core.getInput('sdk-key');
   core.setSecret(sdkKey);
-  const flagKeys = core.getMultilineInput('flag-keys');
+  const flags = core.getMultilineInput('flags');
   const userKey = core.getInput('user-key');
   const sendEvents = core.getBooleanInput('send-events');
   const baseUri = core.getInput('base-uri');
   const eventsUri = core.getInput('events-uri');
   const streamUri = core.getInput('stream-uri');
+  const offline = core.getBooleanInput('offline');
   // these will be validated by SDK
   const proxyAuth = core.getInput('proxy-auth');
   const proxyHost = core.getInput('proxy-host');
   const proxyPort = core.getInput('proxy-port');
   const proxyScheme = core.getInput('proxy-scheme');
 
-  core.info(baseUri);
-  const validationErrors = validate({ sdkKey, flagKeys });
+  const validationErrors = validate({ sdkKey, flags });
   if (validationErrors.length > 0) {
     core.setFailed(`Invalid arguments: ${validationErrors.join(', ')}`);
     return;
@@ -17214,6 +17238,7 @@ const run = async () => {
     baseUri,
     eventsUri,
     streamUri,
+    offline,
     wrapperName: 'github-flag-evaluation',
   };
 
@@ -17231,16 +17256,16 @@ const run = async () => {
   }
 
   // evaluate flags
-  const client = new LDClient(sdkKey, options, userKey);
+  const client = new LDClient(sdkKey, options);
   core.startGroup('Evaluating flags');
-  const flags = await client.evaluateFlags(flagKeys, ctx);
+  const evaledFlags = await client.evaluateFlags(flags, ctx);
   await client.flush();
   client.close();
   core.endGroup();
 
   // set output
-  for (const flagKey in flags) {
-    core.setOutput(flagKey, flags[flagKey]);
+  for (const flagKey in evaledFlags) {
+    core.setOutput(flagKey, evaledFlags[flagKey]);
   }
 
   return;

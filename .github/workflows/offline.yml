@@ -1,7 +1,7 @@
-name: Conditional
+name: Offline Mode
 on: push
 jobs:
-  conditional:
+  offline-mode:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -14,10 +14,13 @@ jobs:
           events-uri: 'https://events.ld.catamorphic.com'
           base-uri: 'https://app.ld.catamorphic.com'
           sdk-key: ${{ secrets.SDK_KEY }}
-          flags: test-boolean-flag
-      - name: If true
-        if: steps.flags.outputs.test-boolean-flag == 'true'
-        run: echo "It's true"
-      - name: If false
-        if: steps.flags.outputs.test-boolean-flag == 'false'
-        run: echo "It's false"
+          flags: |
+            test-flag-false, false
+            test-flag-true, true
+          offline: true
+      - name: Test output
+        if: steps.flags.outputs.test-flag-false != 'false'
+        run: exit 1
+      - name: Test output
+        if: steps.flags.outputs.test-flag-true != 'true'
+        run: exit 1
