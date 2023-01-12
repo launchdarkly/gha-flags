@@ -43,7 +43,7 @@ _Read more: [Metadata syntax](https://docs.github.com/en/actions/creating-action
 - [Dynamic user key](#dynamic-user-key)
 - [Use value in expression](#use-value-in-expression)
 - [Parse output string to types](#parse-output-string-to-types)
-- [Setting custom user attributes](#setting-custom-user-attributes)
+- [Setting custom contexts](#setting-custom-contexts)
 - [Use with GitHub deployment environments](#use-with-github-deployment-environments)
 - [Disable analytics events](#disable-analytics-events)
 
@@ -151,13 +151,13 @@ jobs:
             run: echo "It's false"
 ```
 
-### Setting custom user attributes
+### Setting custom contexts
 
 If you would like to include additional custom properties in your user object you may specify environment variables with the `LD_` prefix. All values will be treated at strings.
 
 By default, all metadata associated with the workflow run is saved in custom properties.
 
-_Read more: [Setting custom user attributes](https://docs.launchdarkly.com/home/users/attributes#setting-custom-user-attributes)_
+_Read more: [Setting custom contexts](https://docs.launchdarkly.com/home/users/attributes#setting-custom-contexts)_
 
 ```yaml
 name: Evaluate LaunchDarkly flags
