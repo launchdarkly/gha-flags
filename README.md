@@ -2,7 +2,7 @@
 
 GitHub Action for evaluating LaunchDarkly flags in your workflow.
 
-This is a BETA - there may still be some bugs, and behavior may change in the future.
+_This version of the SDK is a beta version and should not be considered ready for production use while this message is visible._
 
 <!-- action-docs-inputs -->
 
