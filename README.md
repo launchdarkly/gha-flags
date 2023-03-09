@@ -1,6 +1,8 @@
-# LaunchDarkly Flag Evaluation GitHub Action
+# LaunchDarkly Flag Evaluation GitHub Action - Beta
 
 GitHub Action for evaluating LaunchDarkly flags in your workflow.
+
+This is a BETA - there may still be some bugs, and behavior may change in the future.
 
 <!-- action-docs-inputs -->
 
