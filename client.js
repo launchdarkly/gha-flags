@@ -1,5 +1,5 @@
 import * as core from '@actions/core';
-import LaunchDarkly from 'launchdarkly-node-server-sdk';
+import * as LaunchDarkly from '@launchdarkly/node-server-sdk';
 
 export default class LDClient {
   constructor(sdkKey, options = {}) {
