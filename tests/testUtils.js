@@ -1,4 +1,4 @@
-import * as action from '../action';
+import * as action from '../src/action';
 
 const makeEnv = (envs = {}) =>
   Object.keys(envs).reduce((result, envName) => {

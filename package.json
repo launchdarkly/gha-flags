@@ -2,9 +2,9 @@
   "name": "gha-flags",
   "version": "0.0.1",
   "description": "Evaluate LaunchDarkly flags in your GitHub Action workflow.",
-  "main": "index.js",
+  "main": "src/index.js",
   "scripts": {
-    "build": "ncc build index.js --license LICENSE",
+    "build": "ncc build src/index.js --license LICENSE",
     "docs": "action-docs -u --no-banner && npm run prettier:write:path README.md",
     "lint": "eslint *.js",
     "prettier": "prettier",
