@@ -1,15 +1,13 @@
-// mock LD client
-jest.mock('launchdarkly-node-server-sdk', () => ({
-  init: () => ({
-    variation: jest.fn().mockResolvedValue(false),
-    waitForInitialization: jest.fn().mockResolvedValue(),
-    flush: jest.fn(),
-    close: jest.fn(),
-  }),
-}));
+import * as LaunchDarkly from '@launchdarkly/node-server-sdk';
+
+initSpy = jest.spyOn(LaunchDarkly, 'init').mockReturnValue({
+  variation: jest.fn().mockResolvedValue(false),
+  waitForInitialization: jest.fn().mockResolvedValue(),
+  flush: jest.fn(),
+  close: jest.fn(),
+});
 
 import { runAction } from './testUtils';
-import LaunchDarkly from 'launchdarkly-node-server-sdk';
 import * as core from '@actions/core';
 
 describe('Action', () => {
@@ -30,7 +28,6 @@ describe('Action', () => {
   });
 
   test('input arguments are correctly passed to LaunchDarkly client', async () => {
-    const clientInitSpy = jest.spyOn(LaunchDarkly, 'init');
     await runAction({
       'sdk-key': 'sdk-xxxx',
       flags: 'flag-key',
@@ -45,7 +42,7 @@ describe('Action', () => {
       'proxy-port': '9999',
       'proxy-scheme': 'https',
     });
-    expect(clientInitSpy).toHaveBeenCalledWith(
+    expect(initSpy).toHaveBeenCalledWith(
       'sdk-xxxx',
       expect.objectContaining({
         baseUri: 'https://base.uri',

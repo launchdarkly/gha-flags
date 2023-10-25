@@ -1,5 +1,5 @@
 import * as core from '@actions/core';
-import LaunchDarkly from 'launchdarkly-node-server-sdk';
+import * as LaunchDarkly from '@launchdarkly/node-server-sdk';
 
 export default class LDClient {
   constructor(sdkKey, options = {}) {
@@ -16,8 +16,9 @@ export default class LDClient {
   }
 
   async evaluateFlag(flagKey, ctx, defaultValue) {
+    var timeout = null;
     const timeoutPromise = new Promise((resolve, reject) => {
-      setTimeout(reject, 5000);
+      timeout = setTimeout(reject, 5000);
     });
     core.debug(`Evaluating flag ${flagKey}`);
     core.debug(`with context ${JSON.stringify(ctx)}`);
@@ -31,6 +32,8 @@ export default class LDClient {
     } catch (error) {
       console.error(error);
       core.setFailed('Failed to initialize SDK.');
+    } finally {
+      clearTimeout(timeout);
     }
   }
 
