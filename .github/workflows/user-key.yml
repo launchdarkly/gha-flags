@@ -1,7 +1,7 @@
-name: Dynamic user key
+name: Dynamic context key
 on: push
 jobs:
-  dynamic-user-key:
+  dynamic-context-key:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -15,7 +15,7 @@ jobs:
           base-uri: 'https://app.ld.catamorphic.com'
           sdk-key: ${{ secrets.SDK_KEY }}
           flags: favorite-animal
-          user-key: ${{ github.actor }}
+          context-key: ${{ github.actor }}
       - name: Favorite animal
         if: steps.flags.outputs.favorite-animal != 'idk'
         run: echo "${{ github.actor }}'s favorite animal is a...${{ steps.flags.outputs.favorite-animal }}"

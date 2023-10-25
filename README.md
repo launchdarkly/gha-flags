@@ -12,7 +12,7 @@ _This version of the SDK is a beta version and should not be considered ready fo
 | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------- |
 | sdk-key      | Server-side SDK key for environment.                                                                                                            | `true`   |                                 |
 | flags        | Provide a list flag keys and default value in a comma separated format with a newline between each flag you want evaluated. `example-flag,true` | `true`   |                                 |
-| user-key     | The key of the user object used in a feature flag evaluation                                                                                    | `false`  | ld-github-action-flags          |
+| context-key  | The key of the context object used in a feature flag evaluation                                                                                 | `false`  | ld-github-action-flags          |
 | send-events  | Whether to send analytics events back to LaunchDarkly                                                                                           | `false`  | true                            |
 | offline      | Whether to use the LaunchDarkly SDK in offline mode                                                                                             | `false`  | false                           |
 | base-uri     | The base URI for the LaunchDarkly server. Most users should use the default value.                                                              | `false`  | https://app.launchdarkly.com    |
@@ -42,7 +42,7 @@ _Read more: [Metadata syntax](https://docs.github.com/en/actions/creating-action
 ## Examples
 
 - [Basic](#basic)
-- [Dynamic user key](#dynamic-user-key)
+- [Dynamic context key](#dynamic-context-key)
 - [Use value in expression](#use-value-in-expression)
 - [Parse output string to types](#parse-output-string-to-types)
 - [Setting custom contexts](#setting-custom-contexts)
@@ -78,9 +78,9 @@ jobs:
           echo ${{ toJSON(steps.flags.outputs.test-json-flag) }}
 ```
 
-### Dynamic user key
+### Dynamic context key
 
-This example evaluates a flag for a user. Here, the user key of the LaunchDarkly user is the username of the GitHub user who initiated the workflow run.
+This example evaluates a flag for a context. Here, the LaunchDarkly context key is the username of the GitHub user who initiated the workflow run.
 
 _Read more: [GitHub Actions Contexts](https://docs.github.com/en/actions/learn-github-actions/contexts)_
 
@@ -97,7 +97,7 @@ jobs:
         with:
           sdk-key: ${{ secrets.LD_SDK_KEY }}
           flags: favorite-animal
-          user-key: ${{ github.actor }}
+          context-key: ${{ github.actor }}
       - name: Favorite animal
         if: steps.flags.outputs.favorite-animal != 'idk'
         run: echo "${{ github.actor }}'s favorite animal is a...${{ steps.flags.outputs.favorite-animal }}"
@@ -155,7 +155,7 @@ jobs:
 
 ### Setting custom contexts
 
-If you would like to include additional custom properties in your user object you may specify environment variables with the `LD_` prefix. All values will be treated at strings.
+If you would like to include additional custom properties in your context object you may specify environment variables with the `LD_` prefix. All values will be treated at strings.
 
 By default, all metadata associated with the workflow run is saved in custom properties.
 

@@ -15,8 +15,8 @@ inputs:
     description: 'Provide a list flag keys and default value in a comma separated format with a newline between each flag you want evaluated. `example-flag,true`'
     required: true
     default: ''
-  user-key:
-    description: 'The key of the user object used in a feature flag evaluation'
+  context-key:
+    description: 'The key of the context object used in a feature flag evaluation'
     required: false
     default: 'ld-github-action-flags'
   send-events:

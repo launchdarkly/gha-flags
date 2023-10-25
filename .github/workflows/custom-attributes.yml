@@ -1,4 +1,4 @@
-name: Setting custom user attributes
+name: Setting custom context attributes
 on: push
 jobs:
   custom-attributes:

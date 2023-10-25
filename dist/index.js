@@ -41225,7 +41225,7 @@ const run = async () => {
   const sdkKey = core.getInput('sdk-key');
   core.setSecret(sdkKey);
   const flags = core.getMultilineInput('flags');
-  const userKey = core.getInput('user-key');
+  const contextKey = core.getInput('context-key');
   const sendEvents = core.getBooleanInput('send-events');
   const baseUri = core.getInput('base-uri');
   const eventsUri = core.getInput('events-uri');
@@ -41285,7 +41285,7 @@ const run = async () => {
   ) {
     ldCtx = {
       GithubCustomAttributes: {
-        key: userKey ? userKey : Date.now(),
+        key: contextKey ? contextKey : Date.now(),
         ...createContext(envLDFilters),
       },
     };

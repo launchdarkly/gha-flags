@@ -31,7 +31,7 @@ describe('Action', () => {
     await runAction({
       'sdk-key': 'sdk-xxxx',
       flags: 'flag-key',
-      'user-key': 'user-key',
+      'context-key': 'context-key',
       'send-events': 'false',
       offline: 'false',
       'base-uri': 'https://base.uri',
