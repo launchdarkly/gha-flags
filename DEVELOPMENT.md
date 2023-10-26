@@ -3,7 +3,7 @@
 ## Getting started
 
 1. Install and configure [pre-commit](https://pre-commit.com/) for the repository
-2. Install Node 16
+2. Install Node 20
 3. Install dependencies
    ```
    npm i
