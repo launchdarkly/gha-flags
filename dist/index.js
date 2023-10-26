@@ -41118,7 +41118,7 @@ __nccwpck_require__.r(__webpack_exports__);
 var core = __nccwpck_require__(2186);
 // EXTERNAL MODULE: ./node_modules/@launchdarkly/node-server-sdk/dist/src/index.js
 var src = __nccwpck_require__(8721);
-;// CONCATENATED MODULE: ./client.js
+;// CONCATENATED MODULE: ./src/client.js
 
 
 
@@ -41193,7 +41193,7 @@ function getParsedFlags(flagInput) {
   return parsedFlags;
 }
 
-;// CONCATENATED MODULE: ./configuration.js
+;// CONCATENATED MODULE: ./src/configuration.js
 
 
 const validate = (args) => {
@@ -41214,7 +41214,7 @@ const validate = (args) => {
   return errors;
 };
 
-;// CONCATENATED MODULE: ./action.js
+;// CONCATENATED MODULE: ./src/action.js
 
 
 
@@ -41363,7 +41363,7 @@ function createContext(envFilters, ignoreKey = '') {
   return ctx;
 }
 
-;// CONCATENATED MODULE: ./index.js
+;// CONCATENATED MODULE: ./src/index.js
 
 
 run();
