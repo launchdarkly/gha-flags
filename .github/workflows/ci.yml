@@ -1,0 +1,230 @@
+name: Run CI
+on:
+  push:
+    branches:
+      - main
+      - 'feat/**'
+    paths-ignore:
+      - '**.md' #Do not need to run CI for markdown changes.
+  pull_request:
+    branches:
+      - main
+      - 'feat/**'
+    paths-ignore:
+      - '**.md'
+
+jobs:
+  ci-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 #If you only need the current version keep this.
+
+      - uses: actions/setup-python@v3
+      - uses: actions/setup-node@v3
+      - run: npm ci
+      - name: Check build and formatting
+        uses: pre-commit/action@v3.0.0
+
+  basic:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Evaluate flags
+        id: flags
+        uses: ./
+        with:
+          stream-uri: 'https://stream.ld.catamorphic.com'
+          events-uri: 'https://events.ld.catamorphic.com'
+          base-uri: 'https://app.ld.catamorphic.com'
+          sdk-key: ${{ secrets.SDK_KEY }}
+          flags: |
+            test-boolean-flag
+            test-string-flag
+            test-number-flag
+            test-json-flag
+      - name: Print flag values
+        run: |
+          echo ${{ steps.flags.outputs.test-boolean-flag }}
+          echo ${{ steps.flags.outputs.test-string-flag }}
+          echo ${{ steps.flags.outputs.test-number-flag }}
+          echo ${{ toJSON(steps.flags.outputs.test-json-flag) }}
+
+  conditional:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Evaluate flags
+        id: flags
+        uses: ./
+        with:
+          stream-uri: 'https://stream.ld.catamorphic.com'
+          events-uri: 'https://events.ld.catamorphic.com'
+          base-uri: 'https://app.ld.catamorphic.com'
+          sdk-key: ${{ secrets.SDK_KEY }}
+          flags: test-boolean-flag
+      - name: If true
+        if: steps.flags.outputs.test-boolean-flag == 'true'
+        run: echo "It's true"
+      - name: If false
+        if: steps.flags.outputs.test-boolean-flag == 'false'
+        run: echo "It's false"
+
+  custom-attributes:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Evaluate flags
+        id: flags
+        uses: ./
+        with:
+          stream-uri: 'https://stream.ld.catamorphic.com'
+          events-uri: 'https://events.ld.catamorphic.com'
+          base-uri: 'https://app.ld.catamorphic.com'
+          sdk-key: ${{ secrets.SDK_KEY }}
+          flags: test-boolean-flag
+        env:
+          LD_group: beta
+      - name: Test output
+        if: steps.flags.outputs.test-boolean-flag != 'false'
+        run: exit 1
+
+  deploy-environment:
+    runs-on: ubuntu-latest
+    environment: Production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Evaluate flags
+        id: flags
+        uses: ./
+        with:
+          stream-uri: 'https://stream.ld.catamorphic.com'
+          events-uri: 'https://events.ld.catamorphic.com'
+          base-uri: 'https://app.ld.catamorphic.com'
+          sdk-key: ${{ secrets.SDK_KEY }} # configure environment-specific secret
+          flags: test-boolean-flag
+
+  disable-events:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Evaluate flags
+        id: flags
+        uses: ./
+        with:
+          stream-uri: 'https://stream.ld.catamorphic.com'
+          events-uri: 'https://events.ld.catamorphic.com'
+          base-uri: 'https://app.ld.catamorphic.com'
+          sdk-key: ${{ secrets.SDK_KEY }}
+          flags: test-boolean-flag
+          send-events: false
+
+  eval-flags:
+    name: Evaluate LaunchDarkly Flags
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Evaluate flags
+        id: flags
+        uses: ./
+        with:
+          stream-uri: 'https://stream.ld.catamorphic.com'
+          events-uri: 'https://events.ld.catamorphic.com'
+          base-uri: 'https://app.ld.catamorphic.com'
+          sdk-key: ${{ secrets.SDK_KEY }}
+          flags: |
+            test-boolean-flag
+            test-string-flag
+            test-number-flag
+            test-json-flag
+      - name: Print flag values
+        run: |
+          echo ${{ steps.flags.outputs.test-boolean-flag }}
+          echo ${{ steps.flags.outputs.test-string-flag }}
+          echo ${{ steps.flags.outputs.test-number-flag }}
+          echo ${{ toJSON(steps.flags.outputs.test-json-flag) }}
+      - name: If boolean flag
+        if: fromJSON(steps.flags.outputs.test-boolean-flag) == true
+        run: echo "It's true"
+      - name: If not boolean flag
+        if: fromJSON(steps.flags.outputs.test-boolean-flag) == false
+        run: echo "It's false"
+
+  offline-mode:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Evaluate flags
+        id: flags
+        uses: ./
+        with:
+          stream-uri: 'https://stream.ld.catamorphic.com'
+          events-uri: 'https://events.ld.catamorphic.com'
+          base-uri: 'https://app.ld.catamorphic.com'
+          sdk-key: ${{ secrets.SDK_KEY }}
+          flags: |
+            test-flag-false, false
+            test-flag-true, true
+          offline: true
+      - name: Test output
+        if: steps.flags.outputs.test-flag-false != 'false'
+        run: exit 1
+      - name: Test output
+        if: steps.flags.outputs.test-flag-true != 'true'
+        run: exit 1
+
+  parse-values:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Evaluate flags
+        id: flags
+        uses: ./
+        with:
+          stream-uri: 'https://stream.ld.catamorphic.com'
+          events-uri: 'https://events.ld.catamorphic.com'
+          base-uri: 'https://app.ld.catamorphic.com'
+          sdk-key: ${{ secrets.SDK_KEY }}
+          flags: |
+            test-boolean-flag
+            test-number-flag
+      - name: If true
+        if: fromJSON(steps.flags.outputs.test-boolean-flag) == true
+        run: echo "It's true"
+      - name: If false
+        if: fromJSON(steps.flags.outputs.test-boolean-flag) == false
+        run: echo "It's false"
+      - name: If number is 100
+        if: fromJSON(steps.flags.outputs.test-number-flag) == 100
+        run: echo "Number is 100"
+      - name: If number is 200
+        if: fromJSON(steps.flags.outputs.test-number-flag) == 200
+        run: echo "Number is 200"
+
+  context-key:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Evaluate flags
+        id: flags
+        uses: ./
+        with:
+          stream-uri: 'https://stream.ld.catamorphic.com'
+          events-uri: 'https://events.ld.catamorphic.com'
+          base-uri: 'https://app.ld.catamorphic.com'
+          sdk-key: ${{ secrets.SDK_KEY }}
+          flags: favorite-animal
+          context-key: ${{ github.actor }}
+      - name: Favorite animal
+        if: steps.flags.outputs.favorite-animal != 'idk'
+        run: echo "${{ github.actor }}'s favorite animal is a...${{ steps.flags.outputs.favorite-animal }}"

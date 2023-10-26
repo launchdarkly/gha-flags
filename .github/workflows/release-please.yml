@@ -1,0 +1,20 @@
+name: Run Release Please
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  release-package:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Contents and pull-requests are for release-please to make releases.
+      pull-requests: write
+    steps:
+      - uses: google-github-actions/release-please-action@v3
+        id: release
+        with:
+          command: manifest
+          token: ${{secrets.GITHUB_TOKEN}}
+          default-branch: main

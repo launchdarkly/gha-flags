@@ -1,7 +1,0 @@
-## [Unreleased]
-
-### Added
-
-### Changed
-
-### Fixed
