@@ -31,48 +31,29 @@ export const run = async () => {
   core.startGroup('Extracting action context');
 
   // Setup Runner Context
-  const envRunnerFilters = [
-    // Don't strip RUNNER_ and GITHUB_ env vars so we can avoid naming conflicts
-    { prefix: 'RUNNER_', strip: false },
-  ];
+  // Don't strip RUNNER_ and GITHUB_ env vars so we can avoid naming conflicts
   const runnerKey = 'RUNNER_TRACKING_ID';
-
   const githubRunnerCtx = process.env[runnerKey]
     ? {
-        GithubRunner: {
-          key: process.env[runnerKey],
-          ...createContext(envRunnerFilters, runnerKey),
-        },
+        GithubRunner: createContext(process.env[runnerKey], { prefix: 'RUNNER_', strip: false }, runnerKey),
       }
     : {};
 
   // Setup Github Context
-  const envGithubFilters = [{ prefix: 'GITHUB_', strip: false }];
   const githubKey = 'GITHUB_REPOSITORY';
   const githubCtx = process.env[githubKey]
     ? {
-        Github: {
-          key: process.env[githubKey] ? process.env[githubKey].split('/').pop().trim() : process.env['GITHUB_RUN_ID'],
-          ...createContext(envGithubFilters, githubKey),
-        },
+        Github: createContext(
+          process.env[githubKey].split('/').pop().trim(),
+          { prefix: 'GITHUB_', strip: false },
+          githubKey,
+        ),
       }
     : {};
 
   // Setup LaunchDarkly Context
-  const envLDFilters = [{ prefix: 'LD_', strip: true }];
-  let ldCtx = {};
-  if (
-    Object.keys(process.env).some((i) => {
-      return i.startsWith('LD_');
-    })
-  ) {
-    ldCtx = {
-      GithubCustomAttributes: {
-        key: contextKey ? contextKey : Date.now(),
-        ...createContext(envLDFilters),
-      },
-    };
-  }
+  let context = createContext(contextKey ? contextKey : Date.now(), { prefix: 'LD_', strip: true });
+  let ldCtx = { GithubCustomAttributes: context };
 
   const ctx = {
     kind: 'multi',
@@ -121,27 +102,20 @@ export const run = async () => {
   return;
 };
 
-function createContext(envFilters, ignoreKey = '') {
+function createContext(contextKey, filter, ignoreKey = '') {
   const ctx = {};
+
   Object.keys(process.env)
-    .filter(function (key) {
-      return process.env[key] != '';
-    })
-    .filter(function (key) {
-      if (key === ignoreKey) {
-        return false;
-      }
-      return true;
-    })
-    .forEach(function (key) {
-      envFilters.forEach(function (p) {
-        if (key.startsWith(p.prefix)) {
-          var contextKey = p.strip ? key.substring(p.prefix.length) : key;
-          ctx[contextKey] = process.env[key];
-          core.debug(contextKey + '="' + process.env[key]) + '"';
-        }
-      });
+    .filter((key) => process.env[key] != '')
+    .filter((key) => key !== ignoreKey)
+    .filter((key) => key.startsWith(filter.prefix))
+    .forEach((key) => {
+      var contextKey = filter.strip ? key.substring(filter.prefix.length) : key;
+      ctx[contextKey] = process.env[key];
+      core.debug(contextKey + '="' + process.env[key]) + '"';
     });
+
+  ctx['key'] = contextKey;
 
   return ctx;
 }
