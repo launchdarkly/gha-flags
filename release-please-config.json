@@ -1,9 +1,10 @@
 {
   "packages": {
     ".": {
-      "release-type": "simple",
+      "release-type": "node",
       "bump-minor-pre-major": true,
-      "versioning": "default"
+      "versioning": "default",
+      "extra-files": ["README.md"]
     }
   }
 }
