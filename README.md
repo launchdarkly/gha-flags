@@ -1,8 +1,6 @@
-# LaunchDarkly Flag Evaluation GitHub Action - Beta
+# LaunchDarkly Flag Evaluation GitHub Action
 
 GitHub Action for evaluating LaunchDarkly flags in your workflow.
-
-_This version of the SDK is a beta version and should not be considered ready for production use while this message is visible._
 
 <!-- action-docs-inputs -->
 
