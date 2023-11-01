@@ -64,7 +64,7 @@ jobs:
     steps:
       - name: Evaluate flags
         id: flags
-        uses: launchdarkly/gha-flags@v0.0.1
+        uses: launchdarkly/gha-flags@v1.0.0
         with:
           sdk-key: ${{ secrets.LD_SDK_KEY }}
           flags: |
@@ -99,7 +99,7 @@ jobs:
     steps:
       - name: Evaluate flags
         id: flags
-        uses: launchdarkly/gha-flags@v0.0.1
+        uses: launchdarkly/gha-flags@v1.0.0
         with:
           sdk-key: ${{ secrets.LD_SDK_KEY }}
           flags: favorite-animal
@@ -126,7 +126,7 @@ jobs:
     steps:
       - name: Evaluate flags
         id: ld
-        uses: launchdarkly/gha-flags@v0.0.1
+        uses: launchdarkly/gha-flags@v1.0.0
         with:
           sdk-key: ${{ secrets.LD_SDK_KEY }}
           flags: test-boolean-flag
@@ -155,7 +155,7 @@ jobs:
     steps:
       - name: Evaluate flags
         id: ld
-        uses: launchdarkly/gha-flags@v0.0.1
+        uses: launchdarkly/gha-flags@v1.0.0
         with:
           sdk-key: ${{ secrets.LD_SDK_KEY }}
           flags: test-boolean-flag
@@ -188,7 +188,7 @@ job:
     steps:
       - name: Evaluate flags
         id: ld
-        uses: launchdarkly/gha-flags@v0.0.1
+        uses: launchdarkly/gha-flags@v1.0.0
         with:
           sdk-key: ${{ secrets.LD_SDK_KEY }}
           flags: test-boolean-flag
@@ -214,7 +214,7 @@ job:
     steps:
       - name: Evaluate flags
         id: ld
-        uses: launchdarkly/gha-flags@v0.0.1
+        uses: launchdarkly/gha-flags@v1.0.0
         with:
           sdk-key: ${{ secrets.LD_SDK_KEY }} # configure environment-specific secret
           flags: test-boolean-flag
@@ -239,7 +239,7 @@ jobs:
     steps:
       - name: Evaluate flags
         id: flags
-        uses: launchdarkly/gha-flags@v0.0.1
+        uses: launchdarkly/gha-flags@v1.0.0
         with:
           sdk-key: ${{ secrets.LD_SDK_KEY }}
           flags: test-boolean-flag
