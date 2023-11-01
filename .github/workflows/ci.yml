@@ -30,6 +30,7 @@ jobs:
   #
   # Flag variation tests
   #
+
   flag-variations:
     runs-on: ubuntu-latest
     steps:
@@ -130,6 +131,26 @@ jobs:
         if: steps.flags.outputs.test-string-flag != 'custom'
         run: exit 1
 
+  can-target-custom-context-with-default-key:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Evaluate flags
+        id: flags
+        uses: ./
+        with:
+          stream-uri: 'https://stream.ld.catamorphic.com'
+          events-uri: 'https://events.ld.catamorphic.com'
+          base-uri: 'https://app.ld.catamorphic.com'
+          sdk-key: ${{ secrets.SDK_KEY }}
+          flags: test-string-flag, default
+
+      - name: Fail if it doesn't match
+        if: steps.flags.outputs.test-string-flag != 'custom'
+        run: exit 1
+
   can-target-custom-context-with-custom-attribute:
     runs-on: ubuntu-latest
     steps:
@@ -168,6 +189,7 @@ jobs:
           base-uri: 'https://app.ld.catamorphic.com'
           sdk-key: ${{ secrets.SDK_KEY }}
           flags: test-string-flag, default
+          context-key: non-matching-key
         env:
           RUNNER_TAG: GitHub Actions
 
@@ -190,6 +212,7 @@ jobs:
           base-uri: 'https://app.ld.catamorphic.com'
           sdk-key: ${{ secrets.SDK_KEY }}
           flags: test-string-flag, default
+          context-key: non-matching-key
         env:
           RUNNER_TAG: non-matching-tag
 

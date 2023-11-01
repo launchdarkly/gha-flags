@@ -52,7 +52,7 @@ export const run = async () => {
     : {};
 
   // Setup LaunchDarkly Context
-  let context = createContext(contextKey ? contextKey : Date.now(), { prefix: 'LD_', strip: true });
+  let context = createContext(contextKey, { prefix: 'LD_', strip: true });
   let ldCtx = { GithubCustomAttributes: context };
 
   const ctx = {
@@ -110,9 +110,9 @@ function createContext(contextKey, filter, ignoreKey = '') {
     .filter((key) => key !== ignoreKey)
     .filter((key) => key.startsWith(filter.prefix))
     .forEach((key) => {
-      var contextKey = filter.strip ? key.substring(filter.prefix.length) : key;
-      ctx[contextKey] = process.env[key];
-      core.debug(contextKey + '="' + process.env[key]) + '"';
+      var k = filter.strip ? key.substring(filter.prefix.length) : key;
+      ctx[k] = process.env[key];
+      core.debug(k + '="' + process.env[key]) + '"';
     });
 
   ctx['key'] = contextKey;
