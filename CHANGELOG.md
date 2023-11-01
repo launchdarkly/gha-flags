@@ -2,7 +2,7 @@
 
 All notable changes to this GitHub Action will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
-## [1.0.0](https://github.com/launchdarkly/gha-flags/compare/v1.0.0...v1.0.0) (2023-11-01)
+## [1.0.0](https://github.com/launchdarkly/gha-flags/compare/v0.0.1...v1.0.0) (2023-11-01)
 
 
 ### Features
