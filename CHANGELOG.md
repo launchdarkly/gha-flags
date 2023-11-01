@@ -2,7 +2,7 @@
 
 All notable changes to this GitHub Action will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
-## [1.0.0](https://github.com/launchdarkly/gha-flags/compare/gha-flags-v0.0.1...gha-flags-v1.0.0) (2023-11-01)
+## [1.0.0](https://github.com/launchdarkly/gha-flags/compare/v0.0.1...v1.0.0) (2023-11-01)
 
 
 ### Features
@@ -13,4 +13,4 @@ All notable changes to this GitHub Action will be documented in this file. This 
 
 ### Miscellaneous Chores
 
-* prepare for v1.0.0 release ([fc25bff](https://github.com/launchdarkly/gha-flags/commit/fc25bff43f4ffb58076063fbcb16388161fd0264))
+* Prepare for v1.0.0 release ([fc25bff](https://github.com/launchdarkly/gha-flags/commit/fc25bff43f4ffb58076063fbcb16388161fd0264))
