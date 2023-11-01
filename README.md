@@ -53,6 +53,7 @@ _Read more: [Metadata syntax](https://docs.github.com/en/actions/creating-action
 
 This example evaluates flag keys of different types and prints their values.
 
+<!-- x-release-please-start-version -->
 ```yaml
 name: Evaluate LaunchDarkly flags
 on: push
@@ -77,6 +78,7 @@ jobs:
           echo ${{ steps.flags.outputs.test-number-flag }}
           echo ${{ toJSON(steps.flags.outputs.test-json-flag) }}
 ```
+<!-- x-release-please-end -->
 
 ### Dynamic context key
 
@@ -84,6 +86,7 @@ This example evaluates a flag for a context. Here, the LaunchDarkly context key 
 
 _Read more: [GitHub Actions Contexts](https://docs.github.com/en/actions/learn-github-actions/contexts)_
 
+<!-- x-release-please-start-version -->
 ```yaml
 name: Evaluate LaunchDarkly flags
 on: push
@@ -102,11 +105,13 @@ jobs:
         if: steps.flags.outputs.favorite-animal != 'idk'
         run: echo "${{ github.actor }}'s favorite animal is a...${{ steps.flags.outputs.favorite-animal }}"
 ```
+<!-- x-release-please-end -->
 
 ### Use value in expression
 
 This example evaluates a flag key and uses the value in an expression in a subsequent step.
 
+<!-- x-release-please-start-version -->
 ```yaml
 name: Evaluate LaunchDarkly flags
 on: push
@@ -127,11 +132,13 @@ jobs:
         if: steps.flags.outputs.test-boolean-flag == 'false'
         run: echo "It's false"
 ```
+<!-- x-release-please-end -->
 
 ### Parse output string to types
 
 This example illustrates how output values are stored as strings. You can parse them to JSON or a JSON data type using [fromJSON()](https://docs.github.com/en/actions/learn-github-actions/expressions#fromjson).
 
+<!-- x-release-please-start-version -->
 ```yaml
 name: Evaluate LaunchDarkly flags
 on: push
@@ -152,6 +159,7 @@ jobs:
             if: fromJSON(steps.flags.outputs.test-boolean-flag) == false
             run: echo "It's false"
 ```
+<!-- x-release-please-end -->
 
 ### Setting custom contexts
 
@@ -161,6 +169,7 @@ By default, all metadata associated with the workflow run is saved in custom pro
 
 _Read more: [Setting custom contexts](https://docs.launchdarkly.com/home/users/attributes#setting-custom-contexts)_
 
+<!-- x-release-please-start-version -->
 ```yaml
 name: Evaluate LaunchDarkly flags
 on: push
@@ -177,11 +186,13 @@ job:
         env:
           LD_group: beta
 ```
+<!-- x-release-please-end -->
 
 ### Use with GitHub deployment environments
 
 _Read more: [Using environments for deployment](https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment)_
 
+<!-- x-release-please-start-version -->
 ```yaml
 name: Deploy to environment
 on: push
@@ -197,6 +208,7 @@ job:
           sdk-key: ${{ secrets.LD_SDK_KEY }} # configure environment-specific secret
           flags: test-boolean-flag
 ```
+<!-- x-release-please-end -->
 
 ### Disable analytics events
 
@@ -204,6 +216,7 @@ This example evaluates flag keys without sending events to LaunchDarkly.
 
 _Read more: [Analytics events](https://docs.launchdarkly.com/sdk/concepts/events/)_
 
+<!-- x-release-please-start-version -->
 ```yaml
 name: Evaluate LaunchDarkly flags
 on: push
@@ -219,6 +232,7 @@ jobs:
           flags: test-boolean-flag
           send-events: false
 ```
+<!-- x-release-please-end -->
 
 ## Contributing
 
