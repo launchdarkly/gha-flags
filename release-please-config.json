@@ -3,7 +3,8 @@
     ".": {
       "release-type": "node",
       "versioning": "default",
-      "extra-files": ["README.md"]
+      "extra-files": ["README.md"],
+      "include-component-in-tag": false
     }
   }
 }
