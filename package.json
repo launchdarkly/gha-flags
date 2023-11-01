@@ -1,6 +1,6 @@
 {
   "name": "gha-flags",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Evaluate LaunchDarkly flags in your GitHub Action workflow.",
   "main": "src/index.js",
   "scripts": {
