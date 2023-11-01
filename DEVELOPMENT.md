@@ -25,6 +25,7 @@ In order to evaluate the test workflows successfully, your test environment must
 **test-string-flag** is a string flag that should evaluate to "fallthrough" when on and "off" when "off". It should also have the below targeting rules:
 
 1. A context kind of `GithubCustomAttributes` and a key of `context-key` should return `custom`.
+1. A context kind of `GithubCustomAttributes` and a key of `ld-github-action-flags` should return `custom`.
 1. A context kind of `GithubCustomAttributes` and a group of `beta` should return `custom`.
 1. A context kind of `GitHubRunner` and a `RUNNER_TAG` of `GitHub Actions` should return `runner`.
 1. A context kind of `GitHub` with any `GITHUB_ACTOR` set should return `github`.
