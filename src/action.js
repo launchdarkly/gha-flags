@@ -90,7 +90,7 @@ export const run = async () => {
   const client = new LDClient(sdkKey, options);
   core.startGroup('Evaluating flags');
   const evaledFlags = await client.evaluateFlags(flags, ctx);
-  if (evaledFlags === null) {
+  if (evaledFlags === undefined) {
     return 1;
   }
   await client.flush();

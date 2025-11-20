@@ -31296,7 +31296,7 @@ class LDClient {
       clearTimeout(timeout);
     }
 
-    return null;
+    return undefined;
   }
 
   async evaluateFlags(flagInputs = [], customProps = {}) {
@@ -31311,8 +31311,8 @@ class LDClient {
     try {
       const results = await Promise.all(promises);
       for (let i = 0; i < results.length; i++) {
-        if (results[i] === null) {
-          return null;
+        if (results[i] === undefined) {
+          return undefined;
         }
 
         flags[parsedFlags[i][0]] = results[i];
@@ -31320,7 +31320,7 @@ class LDClient {
     } catch (error) {
       console.error(error);
       core.error('Failed to evaluate flags');
-      return null;
+      return undefined;
     }
 
     return flags;
@@ -31453,7 +31453,7 @@ const run = async () => {
   const client = new LDClient(sdkKey, options);
   core.startGroup('Evaluating flags');
   const evaledFlags = await client.evaluateFlags(flags, ctx);
-  if (evaledFlags === null) {
+  if (evaledFlags === undefined) {
     return 1;
   }
   await client.flush();

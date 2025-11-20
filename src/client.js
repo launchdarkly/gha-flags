@@ -36,7 +36,7 @@ export default class LDClient {
       clearTimeout(timeout);
     }
 
-    return null;
+    return undefined;
   }
 
   async evaluateFlags(flagInputs = [], customProps = {}) {
@@ -51,8 +51,8 @@ export default class LDClient {
     try {
       const results = await Promise.all(promises);
       for (let i = 0; i < results.length; i++) {
-        if (results[i] === null) {
-          return null;
+        if (results[i] === undefined) {
+          return undefined;
         }
 
         flags[parsedFlags[i][0]] = results[i];
@@ -60,7 +60,7 @@ export default class LDClient {
     } catch (error) {
       console.error(error);
       core.error('Failed to evaluate flags');
-      return null;
+      return undefined;
     }
 
     return flags;
