@@ -31243,6 +31243,268 @@ exports["default"] = _default;
 
 /***/ }),
 
+/***/ 4250:
+/***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
+
+"use strict";
+
+// EXPORTS
+__nccwpck_require__.d(__webpack_exports__, {
+  "K": () => (/* binding */ run)
+});
+
+// EXTERNAL MODULE: ./node_modules/@actions/core/lib/core.js
+var core = __nccwpck_require__(2186);
+// EXTERNAL MODULE: ./node_modules/@launchdarkly/node-server-sdk/dist/src/index.js
+var src = __nccwpck_require__(8721);
+;// CONCATENATED MODULE: ./src/client.js
+
+
+
+class LDClient {
+  constructor(sdkKey, options = {}) {
+    core.debug(`Client options: ${JSON.stringify(options)}`);
+    this.client = src.init(sdkKey, options);
+  }
+
+  close() {
+    this.client.close();
+  }
+
+  async flush() {
+    this.client.flush();
+  }
+
+  async evaluateFlag(flagKey, ctx, defaultValue) {
+    var timeout = null;
+    const timeoutPromise = new Promise((resolve, reject) => {
+      timeout = setTimeout(reject, 5000);
+    });
+    core.debug(`Evaluating flag ${flagKey}`);
+    core.debug(`with context ${JSON.stringify(ctx)}`);
+    try {
+      // Only await initialization if we're not in offline mode.
+      await Promise.race([timeoutPromise, this.client.waitForInitialization()]);
+      const result = await this.client.variation(flagKey, ctx, defaultValue);
+      core.debug(`Flag ${flagKey} is ${JSON.stringify(result)}`);
+
+      return result;
+    } catch (error) {
+      console.error(error);
+      core.error('Failed to initialize SDK.');
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    return null;
+  }
+
+  async evaluateFlags(flagInputs = [], customProps = {}) {
+    const parsedFlags = getParsedFlags(flagInputs);
+
+    const promises = parsedFlags.map((flag) => {
+      core.debug(flag);
+      return this.evaluateFlag(flag[0], customProps, flag[1]);
+    });
+
+    const flags = {};
+    try {
+      const results = await Promise.all(promises);
+      for (let i = 0; i < results.length; i++) {
+        if (results[i] === null) {
+          return null;
+        }
+
+        flags[parsedFlags[i][0]] = results[i];
+      }
+    } catch (error) {
+      console.error(error);
+      core.error('Failed to evaluate flags');
+      return null;
+    }
+
+    return flags;
+  }
+}
+
+function getParsedFlags(flagInput) {
+  const parsedFlags = [];
+  flagInput.map((item) => {
+    const splitFlagKey = item.split(',').map((v) => v.trim());
+    const flagKey = splitFlagKey[0];
+    const defaultValue = splitFlagKey[1] ? splitFlagKey[1] : null;
+    parsedFlags.push([flagKey, defaultValue]);
+  });
+
+  return parsedFlags;
+}
+
+;// CONCATENATED MODULE: ./src/configuration.js
+
+
+const validate = (args) => {
+  const errors = [];
+  if (!args.sdkKey) {
+    core.error('SDK key is required');
+    errors.push('sdk-key');
+  } else if (!args.sdkKey.startsWith('sdk-')) {
+    core.error('SDK key must start with "sdk-"');
+    errors.push('sdk-key');
+  }
+
+  if (!Array.isArray(args.flags) || !args.flags.length) {
+    core.error('At least one flag key is required');
+    errors.push('flags');
+  }
+
+  return errors;
+};
+
+;// CONCATENATED MODULE: ./src/action.js
+
+
+
+
+const run = async () => {
+  // parse and validate args
+  core.startGroup('Validating arguments');
+  const sdkKey = core.getInput('sdk-key');
+  core.setSecret(sdkKey);
+  const flags = core.getMultilineInput('flags');
+  const contextKey = core.getInput('context-key');
+  const sendEvents = core.getBooleanInput('send-events');
+  const baseUri = core.getInput('base-uri');
+  const eventsUri = core.getInput('events-uri');
+  const streamUri = core.getInput('stream-uri');
+  const offline = core.getBooleanInput('offline');
+  // these will be validated by SDK
+  const proxyAuth = core.getInput('proxy-auth');
+  const proxyHost = core.getInput('proxy-host');
+  const proxyPort = core.getInput('proxy-port');
+  const proxyScheme = core.getInput('proxy-scheme');
+
+  const validationErrors = validate({ sdkKey, flags });
+  if (validationErrors.length > 0) {
+    core.error(`Invalid arguments: ${validationErrors.join(', ')}`);
+    return 1;
+  }
+  core.endGroup();
+
+  // build a context
+  core.startGroup('Extracting action context');
+
+  // Setup Runner Context
+  // Don't strip RUNNER_ and GITHUB_ env vars so we can avoid naming conflicts
+  const runnerKey = 'RUNNER_TRACKING_ID';
+  const githubRunnerCtx = process.env[runnerKey]
+    ? {
+        GithubRunner: createContext(process.env[runnerKey], { prefix: 'RUNNER_', strip: false }, runnerKey),
+      }
+    : {};
+
+  // Setup Github Context
+  const githubKey = 'GITHUB_REPOSITORY';
+  const githubCtx = process.env[githubKey]
+    ? {
+        Github: createContext(
+          process.env[githubKey].split('/').pop().trim(),
+          { prefix: 'GITHUB_', strip: false },
+          githubKey,
+        ),
+      }
+    : {};
+
+  // Setup LaunchDarkly Context
+  let context = createContext(contextKey, { prefix: 'LD_', strip: true });
+  let ldCtx = { GithubCustomAttributes: context };
+
+  const ctx = {
+    kind: 'multi',
+    ...githubRunnerCtx,
+    ...githubCtx,
+    ...ldCtx,
+  };
+
+  core.endGroup();
+
+  const options = {
+    sendEvents,
+    baseUri,
+    eventsUri,
+    streamUri,
+    offline,
+    wrapperName: 'github-flag-evaluation',
+  };
+
+  if (proxyAuth) {
+    options.proxyAuth = proxyAuth;
+  }
+  if (proxyHost) {
+    options.proxyHost = proxyHost;
+  }
+  if (proxyPort) {
+    options.proxyPort = proxyPort;
+  }
+  if (proxyScheme) {
+    options.proxyScheme = proxyScheme;
+  }
+
+  // evaluate flags
+  const client = new LDClient(sdkKey, options);
+  core.startGroup('Evaluating flags');
+  const evaledFlags = await client.evaluateFlags(flags, ctx);
+  if (evaledFlags === null) {
+    return 1;
+  }
+  await client.flush();
+  client.close();
+  core.endGroup();
+
+  // set output
+  for (const flagKey in evaledFlags) {
+    core.setOutput(flagKey, evaledFlags[flagKey]);
+  }
+
+  return 0;
+};
+
+function createContext(contextKey, filter, ignoreKey = '') {
+  const ctx = {};
+
+  Object.keys(process.env)
+    .filter((key) => process.env[key] != '')
+    .filter((key) => key !== ignoreKey)
+    .filter((key) => key.startsWith(filter.prefix))
+    .forEach((key) => {
+      var k = filter.strip ? key.substring(filter.prefix.length) : key;
+      ctx[k] = process.env[key];
+      core.debug(k + '="' + process.env[key]) + '"';
+    });
+
+  ctx['key'] = contextKey;
+
+  return ctx;
+}
+
+
+/***/ }),
+
+/***/ 4351:
+/***/ ((module, __webpack_exports__, __nccwpck_require__) => {
+
+"use strict";
+__nccwpck_require__.a(module, async (__webpack_handle_async_dependencies__, __webpack_async_result__) => { try {
+__nccwpck_require__.r(__webpack_exports__);
+/* harmony import */ var _action__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(4250);
+
+
+process.exit(await _action__WEBPACK_IMPORTED_MODULE_0__/* .run */ .K());
+
+__webpack_async_result__();
+} catch(e) { __webpack_async_result__(e); } }, 1);
+
+/***/ }),
+
 /***/ 9491:
 /***/ ((module) => {
 
@@ -41091,6 +41353,92 @@ module.exports = JSON.parse('{"name":"@launchdarkly/node-server-sdk","version":"
 /******/ 	}
 /******/ 	
 /************************************************************************/
+/******/ 	/* webpack/runtime/async module */
+/******/ 	(() => {
+/******/ 		var webpackQueues = typeof Symbol === "function" ? Symbol("webpack queues") : "__webpack_queues__";
+/******/ 		var webpackExports = typeof Symbol === "function" ? Symbol("webpack exports") : "__webpack_exports__";
+/******/ 		var webpackError = typeof Symbol === "function" ? Symbol("webpack error") : "__webpack_error__";
+/******/ 		var resolveQueue = (queue) => {
+/******/ 			if(queue && !queue.d) {
+/******/ 				queue.d = 1;
+/******/ 				queue.forEach((fn) => (fn.r--));
+/******/ 				queue.forEach((fn) => (fn.r-- ? fn.r++ : fn()));
+/******/ 			}
+/******/ 		}
+/******/ 		var wrapDeps = (deps) => (deps.map((dep) => {
+/******/ 			if(dep !== null && typeof dep === "object") {
+/******/ 				if(dep[webpackQueues]) return dep;
+/******/ 				if(dep.then) {
+/******/ 					var queue = [];
+/******/ 					queue.d = 0;
+/******/ 					dep.then((r) => {
+/******/ 						obj[webpackExports] = r;
+/******/ 						resolveQueue(queue);
+/******/ 					}, (e) => {
+/******/ 						obj[webpackError] = e;
+/******/ 						resolveQueue(queue);
+/******/ 					});
+/******/ 					var obj = {};
+/******/ 					obj[webpackQueues] = (fn) => (fn(queue));
+/******/ 					return obj;
+/******/ 				}
+/******/ 			}
+/******/ 			var ret = {};
+/******/ 			ret[webpackQueues] = x => {};
+/******/ 			ret[webpackExports] = dep;
+/******/ 			return ret;
+/******/ 		}));
+/******/ 		__nccwpck_require__.a = (module, body, hasAwait) => {
+/******/ 			var queue;
+/******/ 			hasAwait && ((queue = []).d = 1);
+/******/ 			var depQueues = new Set();
+/******/ 			var exports = module.exports;
+/******/ 			var currentDeps;
+/******/ 			var outerResolve;
+/******/ 			var reject;
+/******/ 			var promise = new Promise((resolve, rej) => {
+/******/ 				reject = rej;
+/******/ 				outerResolve = resolve;
+/******/ 			});
+/******/ 			promise[webpackExports] = exports;
+/******/ 			promise[webpackQueues] = (fn) => (queue && fn(queue), depQueues.forEach(fn), promise["catch"](x => {}));
+/******/ 			module.exports = promise;
+/******/ 			body((deps) => {
+/******/ 				currentDeps = wrapDeps(deps);
+/******/ 				var fn;
+/******/ 				var getResult = () => (currentDeps.map((d) => {
+/******/ 					if(d[webpackError]) throw d[webpackError];
+/******/ 					return d[webpackExports];
+/******/ 				}))
+/******/ 				var promise = new Promise((resolve) => {
+/******/ 					fn = () => (resolve(getResult));
+/******/ 					fn.r = 0;
+/******/ 					var fnQueue = (q) => (q !== queue && !depQueues.has(q) && (depQueues.add(q), q && !q.d && (fn.r++, q.push(fn))));
+/******/ 					currentDeps.map((dep) => (dep[webpackQueues](fnQueue)));
+/******/ 				});
+/******/ 				return fn.r ? promise : getResult();
+/******/ 			}, (err) => ((err ? reject(promise[webpackError] = err) : outerResolve(exports)), resolveQueue(queue)));
+/******/ 			queue && (queue.d = 0);
+/******/ 		};
+/******/ 	})();
+/******/ 	
+/******/ 	/* webpack/runtime/define property getters */
+/******/ 	(() => {
+/******/ 		// define getter functions for harmony exports
+/******/ 		__nccwpck_require__.d = (exports, definition) => {
+/******/ 			for(var key in definition) {
+/******/ 				if(__nccwpck_require__.o(definition, key) && !__nccwpck_require__.o(exports, key)) {
+/******/ 					Object.defineProperty(exports, key, { enumerable: true, get: definition[key] });
+/******/ 				}
+/******/ 			}
+/******/ 		};
+/******/ 	})();
+/******/ 	
+/******/ 	/* webpack/runtime/hasOwnProperty shorthand */
+/******/ 	(() => {
+/******/ 		__nccwpck_require__.o = (obj, prop) => (Object.prototype.hasOwnProperty.call(obj, prop))
+/******/ 	})();
+/******/ 	
 /******/ 	/* webpack/runtime/make namespace object */
 /******/ 	(() => {
 /******/ 		// define __esModule on exports
@@ -41107,243 +41455,12 @@ module.exports = JSON.parse('{"name":"@launchdarkly/node-server-sdk","version":"
 /******/ 	if (typeof __nccwpck_require__ !== 'undefined') __nccwpck_require__.ab = __dirname + "/";
 /******/ 	
 /************************************************************************/
-var __webpack_exports__ = {};
-// This entry need to be wrapped in an IIFE because it need to be in strict mode.
-(() => {
-"use strict";
-// ESM COMPAT FLAG
-__nccwpck_require__.r(__webpack_exports__);
-
-// EXTERNAL MODULE: ./node_modules/@actions/core/lib/core.js
-var core = __nccwpck_require__(2186);
-// EXTERNAL MODULE: ./node_modules/@launchdarkly/node-server-sdk/dist/src/index.js
-var src = __nccwpck_require__(8721);
-;// CONCATENATED MODULE: ./src/client.js
-
-
-
-class LDClient {
-  constructor(sdkKey, options = {}) {
-    core.debug(`Client options: ${JSON.stringify(options)}`);
-    this.client = src.init(sdkKey, options);
-  }
-
-  close() {
-    this.client.close();
-  }
-
-  async flush() {
-    this.client.flush();
-  }
-
-  async evaluateFlag(flagKey, ctx, defaultValue) {
-    var timeout = null;
-    const timeoutPromise = new Promise((resolve, reject) => {
-      timeout = setTimeout(reject, 5000);
-    });
-    core.debug(`Evaluating flag ${flagKey}`);
-    core.debug(`with context ${JSON.stringify(ctx)}`);
-    try {
-      // Only await initialization if we're not in offline mode.
-      await Promise.race([timeoutPromise, this.client.waitForInitialization()]);
-      const result = await this.client.variation(flagKey, ctx, defaultValue);
-      core.debug(`Flag ${flagKey} is ${JSON.stringify(result)}`);
-
-      return result;
-    } catch (error) {
-      console.error(error);
-      core.setFailed('Failed to initialize SDK.');
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-
-  async evaluateFlags(flagInputs = [], customProps = {}) {
-    const parsedFlags = getParsedFlags(flagInputs);
-
-    const promises = parsedFlags.map((flag) => {
-      core.debug(flag);
-      return this.evaluateFlag(flag[0], customProps, flag[1]);
-    });
-
-    const flags = {};
-    try {
-      const results = await Promise.all(promises);
-      for (let i = 0; i < results.length; i++) {
-        flags[parsedFlags[i][0]] = results[i];
-      }
-    } catch (error) {
-      console.error(error);
-      core.setFailed('Failed to evaluate flags');
-    }
-
-    return flags;
-  }
-}
-
-function getParsedFlags(flagInput) {
-  const parsedFlags = [];
-  flagInput.map((item) => {
-    const splitFlagKey = item.split(',').map((v) => v.trim());
-    const flagKey = splitFlagKey[0];
-    const defaultValue = splitFlagKey[1] ? splitFlagKey[1] : null;
-    parsedFlags.push([flagKey, defaultValue]);
-  });
-
-  return parsedFlags;
-}
-
-;// CONCATENATED MODULE: ./src/configuration.js
-
-
-const validate = (args) => {
-  const errors = [];
-  if (!args.sdkKey) {
-    core.error('SDK key is required');
-    errors.push('sdk-key');
-  } else if (!args.sdkKey.startsWith('sdk-')) {
-    core.error('SDK key must start with "sdk-"');
-    errors.push('sdk-key');
-  }
-
-  if (!Array.isArray(args.flags) || !args.flags.length) {
-    core.error('At least one flag key is required');
-    errors.push('flags');
-  }
-
-  return errors;
-};
-
-;// CONCATENATED MODULE: ./src/action.js
-
-
-
-
-const run = async () => {
-  // parse and validate args
-  core.startGroup('Validating arguments');
-  const sdkKey = core.getInput('sdk-key');
-  core.setSecret(sdkKey);
-  const flags = core.getMultilineInput('flags');
-  const contextKey = core.getInput('context-key');
-  const sendEvents = core.getBooleanInput('send-events');
-  const baseUri = core.getInput('base-uri');
-  const eventsUri = core.getInput('events-uri');
-  const streamUri = core.getInput('stream-uri');
-  const offline = core.getBooleanInput('offline');
-  // these will be validated by SDK
-  const proxyAuth = core.getInput('proxy-auth');
-  const proxyHost = core.getInput('proxy-host');
-  const proxyPort = core.getInput('proxy-port');
-  const proxyScheme = core.getInput('proxy-scheme');
-
-  const validationErrors = validate({ sdkKey, flags });
-  if (validationErrors.length > 0) {
-    core.setFailed(`Invalid arguments: ${validationErrors.join(', ')}`);
-    return;
-  }
-  core.endGroup();
-
-  // build a context
-  core.startGroup('Extracting action context');
-
-  // Setup Runner Context
-  // Don't strip RUNNER_ and GITHUB_ env vars so we can avoid naming conflicts
-  const runnerKey = 'RUNNER_TRACKING_ID';
-  const githubRunnerCtx = process.env[runnerKey]
-    ? {
-        GithubRunner: createContext(process.env[runnerKey], { prefix: 'RUNNER_', strip: false }, runnerKey),
-      }
-    : {};
-
-  // Setup Github Context
-  const githubKey = 'GITHUB_REPOSITORY';
-  const githubCtx = process.env[githubKey]
-    ? {
-        Github: createContext(
-          process.env[githubKey].split('/').pop().trim(),
-          { prefix: 'GITHUB_', strip: false },
-          githubKey,
-        ),
-      }
-    : {};
-
-  // Setup LaunchDarkly Context
-  let context = createContext(contextKey, { prefix: 'LD_', strip: true });
-  let ldCtx = { GithubCustomAttributes: context };
-
-  const ctx = {
-    kind: 'multi',
-    ...githubRunnerCtx,
-    ...githubCtx,
-    ...ldCtx,
-  };
-
-  core.endGroup();
-
-  const options = {
-    sendEvents,
-    baseUri,
-    eventsUri,
-    streamUri,
-    offline,
-    wrapperName: 'github-flag-evaluation',
-  };
-
-  if (proxyAuth) {
-    options.proxyAuth = proxyAuth;
-  }
-  if (proxyHost) {
-    options.proxyHost = proxyHost;
-  }
-  if (proxyPort) {
-    options.proxyPort = proxyPort;
-  }
-  if (proxyScheme) {
-    options.proxyScheme = proxyScheme;
-  }
-
-  // evaluate flags
-  const client = new LDClient(sdkKey, options);
-  core.startGroup('Evaluating flags');
-  const evaledFlags = await client.evaluateFlags(flags, ctx);
-  await client.flush();
-  client.close();
-  core.endGroup();
-
-  // set output
-  for (const flagKey in evaledFlags) {
-    core.setOutput(flagKey, evaledFlags[flagKey]);
-  }
-
-  return;
-};
-
-function createContext(contextKey, filter, ignoreKey = '') {
-  const ctx = {};
-
-  Object.keys(process.env)
-    .filter((key) => process.env[key] != '')
-    .filter((key) => key !== ignoreKey)
-    .filter((key) => key.startsWith(filter.prefix))
-    .forEach((key) => {
-      var k = filter.strip ? key.substring(filter.prefix.length) : key;
-      ctx[k] = process.env[key];
-      core.debug(k + '="' + process.env[key]) + '"';
-    });
-
-  ctx['key'] = contextKey;
-
-  return ctx;
-}
-
-;// CONCATENATED MODULE: ./src/index.js
-
-
-run();
-
-})();
-
-module.exports = __webpack_exports__;
+/******/ 	
+/******/ 	// startup
+/******/ 	// Load entry module and return exports
+/******/ 	// This entry module used 'module' so it can't be inlined
+/******/ 	var __webpack_exports__ = __nccwpck_require__(4351);
+/******/ 	module.exports = __webpack_exports__;
+/******/ 	
 /******/ })()
 ;

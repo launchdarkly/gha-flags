@@ -31,10 +31,12 @@ export default class LDClient {
       return result;
     } catch (error) {
       console.error(error);
-      core.setFailed('Failed to initialize SDK.');
+      core.error('Failed to initialize SDK.');
     } finally {
       clearTimeout(timeout);
     }
+
+    return null;
   }
 
   async evaluateFlags(flagInputs = [], customProps = {}) {
@@ -49,11 +51,16 @@ export default class LDClient {
     try {
       const results = await Promise.all(promises);
       for (let i = 0; i < results.length; i++) {
+        if (results[i] === null) {
+          return null;
+        }
+
         flags[parsedFlags[i][0]] = results[i];
       }
     } catch (error) {
       console.error(error);
-      core.setFailed('Failed to evaluate flags');
+      core.error('Failed to evaluate flags');
+      return null;
     }
 
     return flags;
