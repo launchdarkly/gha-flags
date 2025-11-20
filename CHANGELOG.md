@@ -2,6 +2,14 @@
 
 All notable changes to this GitHub Action will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [1.0.2](https://github.com/launchdarkly/gha-flags/compare/v1.0.1...v1.0.2) (2025-11-20)
+
+
+### Bug Fixes
+
+* Nest proxy options appropriately ([#69](https://github.com/launchdarkly/gha-flags/issues/69)) ([c448395](https://github.com/launchdarkly/gha-flags/commit/c448395516d37afe7dd244dc4233489eaba89b3f))
+* Replace process.exitCode usage with process.exit ([#71](https://github.com/launchdarkly/gha-flags/issues/71)) ([5b05c24](https://github.com/launchdarkly/gha-flags/commit/5b05c2450990f98eff1a13c4717f7b07d2093110))
+
 ## [1.0.1](https://github.com/launchdarkly/gha-flags/compare/v1.0.0...v1.0.1) (2023-11-01)
 
 
