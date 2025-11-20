@@ -22,8 +22,8 @@ export const run = async () => {
 
   const validationErrors = validate({ sdkKey, flags });
   if (validationErrors.length > 0) {
-    core.setFailed(`Invalid arguments: ${validationErrors.join(', ')}`);
-    return;
+    core.error(`Invalid arguments: ${validationErrors.join(', ')}`);
+    return 1;
   }
   core.endGroup();
 
@@ -85,6 +85,9 @@ export const run = async () => {
   const client = new LDClient(sdkKey, options);
   core.startGroup('Evaluating flags');
   const evaledFlags = await client.evaluateFlags(flags, ctx);
+  if (evaledFlags === undefined) {
+    return 1;
+  }
   await client.flush();
   client.close();
   core.endGroup();
@@ -94,7 +97,7 @@ export const run = async () => {
     core.setOutput(flagKey, evaledFlags[flagKey]);
   }
 
-  return;
+  return 0;
 };
 
 function createContext(contextKey, filter, ignoreKey = '') {

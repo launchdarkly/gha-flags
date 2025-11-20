@@ -16,19 +16,21 @@ describe('Action', () => {
   });
 
   test('succeeds when all required inputs are provided', async () => {
-    const errorSpy = jest.spyOn(core, 'setFailed');
-    await runAction({ 'sdk-key': 'sdk-xxxx', flags: 'flag-key' });
+    const errorSpy = jest.spyOn(core, 'error');
+    const exitCode = await runAction({ 'sdk-key': 'sdk-xxxx', flags: 'flag-key' });
     expect(errorSpy).not.toHaveBeenCalled();
+    expect(exitCode).toBe(0);
   });
 
   test('fails when required inputs are not provided', async () => {
-    const errorSpy = jest.spyOn(core, 'setFailed');
-    await runAction({ 'sdk-key': '', flags: '' });
+    const errorSpy = jest.spyOn(core, 'error');
+    const exitCode = await runAction({ 'sdk-key': '', flags: '' });
     expect(errorSpy).toHaveBeenCalledWith('Invalid arguments: sdk-key, flags');
+    expect(exitCode).toBe(1);
   });
 
   test('input arguments are correctly passed to LaunchDarkly client', async () => {
-    await runAction({
+    const exitCode = await runAction({
       'sdk-key': 'sdk-xxxx',
       flags: 'flag-key',
       'context-key': 'context-key',
@@ -42,6 +44,7 @@ describe('Action', () => {
       'proxy-port': '9999',
       'proxy-scheme': 'https',
     });
+    expect(exitCode).toBe(0);
     expect(initSpy).toHaveBeenCalledWith(
       'sdk-xxxx',
       expect.objectContaining({
@@ -62,10 +65,11 @@ describe('Action', () => {
 
   test('successfully executes action and returns the flags', async () => {
     const outputSpy = jest.spyOn(core, 'setOutput');
-    await runAction({
+    const exitCode = await runAction({
       'sdk-key': 'sdk-xxxx',
       flags: 'flag-key-1\nflag-key-2\nflag-key-3',
     });
+    expect(exitCode).toBe(0);
 
     expect(outputSpy).toHaveBeenNthCalledWith(1, 'flag-key-1', false);
     expect(outputSpy).toHaveBeenNthCalledWith(2, 'flag-key-2', false);
