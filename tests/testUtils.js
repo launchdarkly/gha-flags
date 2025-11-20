@@ -26,8 +26,10 @@ export const runAction = async (envs = {}) => {
   const savedEnvironment = process.env;
   process.env = { ...buildDefaultEnv, ...makeEnv(envs) };
 
-  await action.run();
+  const exitCode = await action.run();
 
   // restore environment
   process.env = { ...savedEnvironment };
+
+  return exitCode;
 };

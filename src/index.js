@@ -1,3 +1,3 @@
 import * as action from './action';
 
-action.run();
+process.exit(await action.run());
