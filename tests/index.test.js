@@ -53,10 +53,12 @@ describe('Action', () => {
         sendEvents: false,
         offline: false,
         streamUri: 'https://stream.uri',
-        proxyAuth: 'username:password',
-        proxyHost: 'https://proxy.host',
-        proxyPort: '9999',
-        proxyScheme: 'https',
+        proxyOptions: {
+          auth: 'username:password',
+          host: 'https://proxy.host',
+          port: '9999',
+          scheme: 'https',
+        },
       }),
     );
   });

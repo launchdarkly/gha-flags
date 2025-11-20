@@ -73,17 +73,12 @@ export const run = async () => {
     wrapperName: 'github-flag-evaluation',
   };
 
-  if (proxyAuth) {
-    options.proxyAuth = proxyAuth;
-  }
-  if (proxyHost) {
-    options.proxyHost = proxyHost;
-  }
-  if (proxyPort) {
-    options.proxyPort = proxyPort;
-  }
-  if (proxyScheme) {
-    options.proxyScheme = proxyScheme;
+  if (proxyAuth || proxyHost || proxyPort || proxyScheme) {
+    options.proxyOptions = {};
+    if (proxyAuth) options.proxyOptions.auth = proxyAuth;
+    if (proxyHost) options.proxyOptions.host = proxyHost;
+    if (proxyPort) options.proxyOptions.port = proxyPort;
+    if (proxyScheme) options.proxyOptions.scheme = proxyScheme;
   }
 
   // evaluate flags
