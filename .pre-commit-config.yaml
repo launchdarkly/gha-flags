@@ -35,6 +35,7 @@ repos:
         entry: npm run test
         types_or: [javascript]
         language: node
+        pass_filenames: false
 
       - id: action-docs
         name: action-docs
