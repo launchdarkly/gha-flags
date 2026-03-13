@@ -1,10 +1,21 @@
+import { describe, test, expect, vi, afterEach } from 'vitest';
 import * as LaunchDarkly from '@launchdarkly/node-server-sdk';
 
-initSpy = jest.spyOn(LaunchDarkly, 'init').mockReturnValue({
-  variation: jest.fn().mockResolvedValue(false),
-  waitForInitialization: jest.fn().mockResolvedValue(),
-  flush: jest.fn(),
-  close: jest.fn(),
+vi.spyOn(LaunchDarkly, 'init').mockReturnValue({
+  variation: vi.fn().mockResolvedValue(false),
+  waitForInitialization: vi.fn().mockResolvedValue(),
+  flush: vi.fn(),
+  close: vi.fn(),
+});
+
+vi.mock('@actions/core', async (importOriginal) => {
+  const original = await importOriginal();
+  return {
+    ...original,
+    error: vi.fn(),
+    setOutput: vi.fn(),
+    setSecret: vi.fn(),
+  };
 });
 
 import { runAction } from './testUtils';
@@ -12,20 +23,18 @@ import * as core from '@actions/core';
 
 describe('Action', () => {
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   test('succeeds when all required inputs are provided', async () => {
-    const errorSpy = jest.spyOn(core, 'error');
     const exitCode = await runAction({ 'sdk-key': 'sdk-xxxx', flags: 'flag-key' });
-    expect(errorSpy).not.toHaveBeenCalled();
+    expect(core.error).not.toHaveBeenCalled();
     expect(exitCode).toBe(0);
   });
 
   test('fails when required inputs are not provided', async () => {
-    const errorSpy = jest.spyOn(core, 'error');
     const exitCode = await runAction({ 'sdk-key': '', flags: '' });
-    expect(errorSpy).toHaveBeenCalledWith('Invalid arguments: sdk-key, flags');
+    expect(core.error).toHaveBeenCalledWith('Invalid arguments: sdk-key, flags');
     expect(exitCode).toBe(1);
   });
 
@@ -45,7 +54,7 @@ describe('Action', () => {
       'proxy-scheme': 'https',
     });
     expect(exitCode).toBe(0);
-    expect(initSpy).toHaveBeenCalledWith(
+    expect(LaunchDarkly.init).toHaveBeenCalledWith(
       'sdk-xxxx',
       expect.objectContaining({
         baseUri: 'https://base.uri',
@@ -64,15 +73,14 @@ describe('Action', () => {
   });
 
   test('successfully executes action and returns the flags', async () => {
-    const outputSpy = jest.spyOn(core, 'setOutput');
     const exitCode = await runAction({
       'sdk-key': 'sdk-xxxx',
       flags: 'flag-key-1\nflag-key-2\nflag-key-3',
     });
     expect(exitCode).toBe(0);
 
-    expect(outputSpy).toHaveBeenNthCalledWith(1, 'flag-key-1', false);
-    expect(outputSpy).toHaveBeenNthCalledWith(2, 'flag-key-2', false);
-    expect(outputSpy).toHaveBeenNthCalledWith(3, 'flag-key-3', false);
+    expect(core.setOutput).toHaveBeenNthCalledWith(1, 'flag-key-1', false);
+    expect(core.setOutput).toHaveBeenNthCalledWith(2, 'flag-key-2', false);
+    expect(core.setOutput).toHaveBeenNthCalledWith(3, 'flag-key-3', false);
   });
 });
