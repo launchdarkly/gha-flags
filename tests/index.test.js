@@ -12,9 +12,9 @@ vi.mock('@actions/core', async (importOriginal) => {
   const original = await importOriginal();
   return {
     ...original,
-    error: vi.fn(original.error),
-    setOutput: vi.fn(original.setOutput),
-    setSecret: vi.fn(original.setSecret),
+    error: vi.fn(),
+    setOutput: vi.fn(),
+    setSecret: vi.fn(),
   };
 });
 
