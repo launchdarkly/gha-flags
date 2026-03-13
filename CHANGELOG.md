@@ -2,6 +2,13 @@
 
 All notable changes to this GitHub Action will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [1.0.3](https://github.com/launchdarkly/gha-flags/compare/v1.0.2...v1.0.3) (2026-03-13)
+
+
+### Bug Fixes
+
+* Bump to github runner to node 24 ([#76](https://github.com/launchdarkly/gha-flags/issues/76)) ([03e0c4a](https://github.com/launchdarkly/gha-flags/commit/03e0c4a57ef439a7fb311ff37a5fc3e225d506bc)), closes [#75](https://github.com/launchdarkly/gha-flags/issues/75)
+
 ## [1.0.2](https://github.com/launchdarkly/gha-flags/compare/v1.0.1...v1.0.2) (2025-11-20)
 
 
