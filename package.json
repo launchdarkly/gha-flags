@@ -5,7 +5,7 @@
   "type": "module",
   "main": "src/index.js",
   "scripts": {
-    "build": "ncc build src/index.js --license LICENSE",
+    "build": "esbuild src/index.js --bundle --platform=node --target=node24 --format=esm --outfile=dist/index.js --banner:js='import{createRequire}from\"module\";const require=createRequire(import.meta.url);'",
     "docs": "action-docs -u --no-banner && npm run prettier:write:path README.md",
     "lint": "eslint src/ tests/",
     "prettier": "prettier",
@@ -30,8 +30,8 @@
     "@launchdarkly/node-server-sdk": "^9.0.1"
   },
   "devDependencies": {
-    "@vercel/ncc": "^0.38.0",
     "action-docs": "^1.0.4",
+    "esbuild": "^0.27.4",
     "eslint": "^8.17.0",
     "eslint-config-prettier": "^9.0.0",
     "eslint-plugin-import": "^2.26.0",
