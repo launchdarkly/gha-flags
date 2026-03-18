@@ -12,7 +12,7 @@ export default class LDClient {
   }
 
   async flush() {
-    this.client.flush();
+    await this.client.flush();
   }
 
   async evaluateFlag(flagKey, ctx, defaultValue) {
