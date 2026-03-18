@@ -83,4 +83,37 @@ describe('Action', () => {
     expect(core.setOutput).toHaveBeenNthCalledWith(2, 'flag-key-2', false);
     expect(core.setOutput).toHaveBeenNthCalledWith(3, 'flag-key-3', false);
   });
+
+  test('flush() completes before close() is called', async () => {
+    let flushResolved = false;
+    const mockFlush = vi.fn().mockImplementation(() => {
+      return new Promise((resolve) => {
+        setTimeout(() => {
+          flushResolved = true;
+          resolve();
+        }, 10);
+      });
+    });
+
+    const mockClose = vi.fn().mockImplementation(() => {
+      // If flush wasn't awaited, this would be called before flushResolved is true
+      expect(flushResolved).toBe(true);
+    });
+
+    vi.spyOn(LaunchDarkly, 'init').mockReturnValue({
+      variation: vi.fn().mockResolvedValue(false),
+      waitForInitialization: vi.fn().mockResolvedValue(),
+      flush: mockFlush,
+      close: mockClose,
+    });
+
+    const exitCode = await runAction({
+      'sdk-key': 'sdk-xxxx',
+      flags: 'flag-key',
+    });
+    expect(exitCode).toBe(0);
+    expect(mockFlush).toHaveBeenCalledOnce();
+    expect(mockClose).toHaveBeenCalledOnce();
+    expect(flushResolved).toBe(true);
+  });
 });

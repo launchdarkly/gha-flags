@@ -31423,7 +31423,7 @@ var LDClient = class {
     this.client.close();
   }
   async flush() {
-    this.client.flush();
+    await this.client.flush();
   }
   async evaluateFlag(flagKey, ctx, defaultValue) {
     var timeout = null;
