@@ -2,6 +2,13 @@
 
 All notable changes to this GitHub Action will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [1.0.4](https://github.com/launchdarkly/gha-flags/compare/v1.0.3...v1.0.4) (2026-03-18)
+
+
+### Bug Fixes
+
+* Await flush to ensure events are sent on shutdown ([#81](https://github.com/launchdarkly/gha-flags/issues/81)) ([e048a44](https://github.com/launchdarkly/gha-flags/commit/e048a441849acd8b168dd7b3d6acf45d9555fe33))
+
 ## [1.0.3](https://github.com/launchdarkly/gha-flags/compare/v1.0.2...v1.0.3) (2026-03-13)
 
 
