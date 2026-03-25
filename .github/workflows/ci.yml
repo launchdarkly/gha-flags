@@ -23,7 +23,7 @@ jobs:
       - uses: actions/setup-node@v3
       - run: npm ci
       - name: Check build and formatting
-        uses: pre-commit/action@v3.0.0
+        uses: pre-commit/action@646c83fcd040023954eafda54b4db0192ce70507 # v3.0.0
 
   #
   # Flag variation tests
