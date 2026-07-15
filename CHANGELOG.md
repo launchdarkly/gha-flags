@@ -2,6 +2,13 @@
 
 All notable changes to this GitHub Action will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [1.0.5](https://github.com/launchdarkly/gha-flags/compare/v1.0.4...v1.0.5) (2026-07-15)
+
+
+### Bug Fixes
+
+* remediate high & critical Dependabot and Wiz vulnerabilities ([#89](https://github.com/launchdarkly/gha-flags/issues/89)) ([7cfef5c](https://github.com/launchdarkly/gha-flags/commit/7cfef5c0fcf63bc225db946fac3d426e28021433))
+
 ## [1.0.4](https://github.com/launchdarkly/gha-flags/compare/v1.0.3...v1.0.4) (2026-03-18)
 
 
