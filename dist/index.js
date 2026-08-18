@@ -20945,7 +20945,7 @@ var require_cjs = __commonJS({
           if (shouldSample(inputEvent.samplingRatio)) {
             const migrationEvent = {
               ...inputEvent,
-              context: inputEvent.context ? this._contextFilter.filter(inputEvent.context) : void 0
+              context: inputEvent.context ? this._contextFilter.filter(inputEvent.context, this._config.redactAnonymousAllEvents ?? false) : void 0
             };
             if (migrationEvent.samplingRatio === 1) {
               delete migrationEvent.samplingRatio;
@@ -21027,7 +21027,7 @@ var require_cjs = __commonJS({
               kind: "custom",
               creationDate: event.creationDate,
               key: event.key,
-              context: this._contextFilter.filter(event.context)
+              context: this._contextFilter.filter(event.context, this._config.redactAnonymousAllEvents ?? false)
             };
             if (event.samplingRatio !== 1) {
               out.samplingRatio = event.samplingRatio;
@@ -23049,6 +23049,124 @@ var require_FileLoader = __commonJS({
   }
 });
 
+// node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/FileDataSource.js
+var require_FileDataSource = __commonJS({
+  "node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/FileDataSource.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.makeFlagWithValue = void 0;
+    var serialization_1 = require_serialization();
+    var VersionedDataKinds_1 = require_VersionedDataKinds();
+    var FileLoader_1 = require_FileLoader();
+    function makeFlagWithValue(key, value, version) {
+      return {
+        key,
+        on: true,
+        fallthrough: { variation: 0 },
+        variations: [value],
+        version
+      };
+    }
+    exports.makeFlagWithValue = makeFlagWithValue;
+    var FileDataSource = class {
+      /**
+       * This is internal because we want instances to only be created with the
+       * factory.
+       * @internal
+       */
+      constructor(options, filesystem, _featureStore, _initSuccessHandler = () => {
+      }, _errorHandler) {
+        var _a;
+        this._featureStore = _featureStore;
+        this._initSuccessHandler = _initSuccessHandler;
+        this._errorHandler = _errorHandler;
+        this._allData = {};
+        this._fileLoader = new FileLoader_1.default(filesystem, options.paths, (_a = options.autoUpdate) !== null && _a !== void 0 ? _a : false, (results) => {
+          var _a2, _b;
+          try {
+            this._processFileData(results);
+          } catch (err) {
+            (_a2 = this._errorHandler) === null || _a2 === void 0 ? void 0 : _a2.call(this, err);
+            (_b = this._logger) === null || _b === void 0 ? void 0 : _b.error(`Error processing files: ${err}`);
+          }
+        });
+        this._logger = options.logger;
+        this._yamlParser = options.yamlParser;
+      }
+      start() {
+        (async () => {
+          var _a;
+          try {
+            await this._fileLoader.loadAndWatch();
+          } catch (err) {
+            (_a = this._errorHandler) === null || _a === void 0 ? void 0 : _a.call(this, err);
+          }
+        })();
+      }
+      stop() {
+        this._fileLoader.close();
+      }
+      close() {
+        this.stop();
+      }
+      _addItem(kind, item) {
+        if (!this._allData[kind.namespace]) {
+          this._allData[kind.namespace] = {};
+        }
+        if (this._allData[kind.namespace][item.key]) {
+          throw new Error(`found duplicate key: "${item.key}"`);
+        } else {
+          this._allData[kind.namespace][item.key] = item;
+        }
+      }
+      _processFileData(fileData) {
+        const oldData = this._allData;
+        this._allData = {};
+        fileData.forEach((fd) => {
+          let parsed;
+          if (fd.path.endsWith(".yml") || fd.path.endsWith(".yaml")) {
+            if (this._yamlParser) {
+              parsed = this._yamlParser(fd.data);
+            } else {
+              throw new Error(`Attempted to parse yaml file (${fd.path}) without parser.`);
+            }
+          } else {
+            parsed = JSON.parse(fd.data);
+          }
+          this._processParsedData(parsed, oldData);
+        });
+        this._featureStore.init(this._allData, () => {
+          this._initSuccessHandler();
+          this._initSuccessHandler = () => {
+          };
+        });
+      }
+      _processParsedData(parsed, oldData) {
+        Object.keys(parsed.flags || {}).forEach((key) => {
+          (0, serialization_1.processFlag)(parsed.flags[key]);
+          this._addItem(VersionedDataKinds_1.default.Features, parsed.flags[key]);
+        });
+        Object.keys(parsed.flagValues || {}).forEach((key) => {
+          var _a, _b;
+          const previousInstance = (_a = oldData[VersionedDataKinds_1.default.Features.namespace]) === null || _a === void 0 ? void 0 : _a[key];
+          let { version } = previousInstance !== null && previousInstance !== void 0 ? previousInstance : { version: 1 };
+          if (previousInstance && JSON.stringify(parsed.flagValues[key]) !== JSON.stringify((_b = previousInstance === null || previousInstance === void 0 ? void 0 : previousInstance.variations) === null || _b === void 0 ? void 0 : _b[0])) {
+            version += 1;
+          }
+          const flag = makeFlagWithValue(key, parsed.flagValues[key], version);
+          (0, serialization_1.processFlag)(flag);
+          this._addItem(VersionedDataKinds_1.default.Features, flag);
+        });
+        Object.keys(parsed.segments || {}).forEach((key) => {
+          (0, serialization_1.processSegment)(parsed.segments[key]);
+          this._addItem(VersionedDataKinds_1.default.Segments, parsed.segments[key]);
+        });
+      }
+    };
+    exports.default = FileDataSource;
+  }
+});
+
 // node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/fileDataInitilizerFDv2.js
 var require_fileDataInitilizerFDv2 = __commonJS({
   "node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/fileDataInitilizerFDv2.js"(exports) {
@@ -23057,6 +23175,7 @@ var require_fileDataInitilizerFDv2 = __commonJS({
     var js_sdk_common_1 = require_cjs();
     var serialization_1 = require_serialization();
     var FileLoader_1 = require_FileLoader();
+    var FileDataSource_1 = require_FileDataSource();
     var FileDataInitializerFDv2 = class {
       constructor(options, platform2, logger) {
         this._validateInputs(options, platform2);
@@ -23118,7 +23237,7 @@ var require_fileDataInitilizerFDv2 = __commonJS({
       }
       _processFileData(results) {
         const combined = results.reduce((acc, curr) => {
-          var _a, _b;
+          var _a, _b, _c;
           let parsed;
           if (curr.path.endsWith(".yml") || curr.path.endsWith(".yaml")) {
             if (this._yamlParser) {
@@ -23129,9 +23248,13 @@ var require_fileDataInitilizerFDv2 = __commonJS({
           } else {
             parsed = JSON.parse(curr.data);
           }
+          const flagsFromValues = {};
+          Object.entries((_a = parsed.flagValues) !== null && _a !== void 0 ? _a : {}).forEach(([key, value]) => {
+            flagsFromValues[key] = (0, FileDataSource_1.makeFlagWithValue)(key, value, 1);
+          });
           return {
-            segments: Object.assign(Object.assign({}, acc.segments), (_a = parsed.segments) !== null && _a !== void 0 ? _a : {}),
-            flags: Object.assign(Object.assign({}, acc.flags), (_b = parsed.flags) !== null && _b !== void 0 ? _b : {})
+            segments: Object.assign(Object.assign({}, acc.segments), (_b = parsed.segments) !== null && _b !== void 0 ? _b : {}),
+            flags: Object.assign(Object.assign(Object.assign({}, acc.flags), (_c = parsed.flags) !== null && _c !== void 0 ? _c : {}), flagsFromValues)
           };
         }, {
           segments: {},
@@ -23956,6 +24079,17 @@ var require_TransactionalFeatureStore = __commonJS({
       getDescription() {
         return "transactional persistent store";
       }
+      // applyChanges always writes here first, so the memory store has the latest
+      // metadata/selector even while _activeStore still points at the persistence
+      // store; the plain LDFeatureStore contract has no equivalent to read them from
+      getInitMetaData() {
+        var _a, _b;
+        return (_b = (_a = this._memoryStore).getInitMetaData) === null || _b === void 0 ? void 0 : _b.call(_a);
+      }
+      getSelector() {
+        var _a, _b;
+        return (_b = (_a = this._memoryStore).getSelector) === null || _b === void 0 ? void 0 : _b.call(_a);
+      }
     };
     exports.default = TransactionalFeatureStore;
   }
@@ -24416,7 +24550,7 @@ var require_StreamingProcessorFDv2 = __commonJS({
     var js_sdk_common_1 = require_cjs();
     var serialization_1 = require_serialization();
     var StreamingProcessorFDv2 = class {
-      constructor(clientContext, _streamUriPath, _parameters, baseHeaders, _diagnosticsManager, _streamInitialReconnectDelay = 1) {
+      constructor(clientContext, _streamUriPath, _parameters, baseHeaders, _diagnosticsManager, _streamInitialReconnectDelay = 1, serviceEndpointsOverride) {
         this._streamUriPath = _streamUriPath;
         this._parameters = _parameters;
         this._diagnosticsManager = _diagnosticsManager;
@@ -24425,7 +24559,7 @@ var require_StreamingProcessorFDv2 = __commonJS({
         const { logger, serviceEndpoints } = basicConfiguration;
         const { requests } = platform2;
         this._headers = Object.assign({}, baseHeaders);
-        this._serviceEndpoints = serviceEndpoints;
+        this._serviceEndpoints = serviceEndpointsOverride !== null && serviceEndpointsOverride !== void 0 ? serviceEndpointsOverride : serviceEndpoints;
         this._logger = logger;
         this._requests = requests;
       }
@@ -24659,6 +24793,7 @@ var require_Configuration = __commonJS({
     var js_sdk_common_1 = require_cjs();
     var LDDataSystemOptions_1 = require_LDDataSystemOptions();
     var InMemoryFeatureStore_1 = require_InMemoryFeatureStore();
+    var TransactionalFeatureStore_1 = require_TransactionalFeatureStore();
     var validations = {
       baseUri: js_sdk_common_1.TypeValidators.String,
       streamUri: js_sdk_common_1.TypeValidators.String,
@@ -24810,6 +24945,13 @@ var require_Configuration = __commonJS({
       });
       return { errors, validatedOptions };
     }
+    function rejectDataSourceBaseUri(dataSource, validatedDataSource) {
+      if (!Object.prototype.hasOwnProperty.call(dataSource, "baseUri")) {
+        return [];
+      }
+      delete validatedDataSource.baseUri;
+      return [js_sdk_common_1.OptionMessages.unknownOption("dataSystem.dataSource.baseUri")];
+    }
     function validateDataSystemOptions(options) {
       const allErrors = [];
       const validatedOptions = Object.assign({}, options);
@@ -24832,10 +24974,13 @@ var require_Configuration = __commonJS({
         let validatedDataSourceOptions;
         if ((0, LDDataSystemOptions_1.isStandardOptions)(options.dataSource)) {
           ({ errors, validatedOptions: validatedDataSourceOptions } = validateTypesAndNames(options.dataSource, defaultStandardDataSourceOptions));
+          errors.push(...rejectDataSourceBaseUri(options.dataSource, validatedDataSourceOptions));
         } else if ((0, LDDataSystemOptions_1.isStreamingOnlyOptions)(options.dataSource)) {
           ({ errors, validatedOptions: validatedDataSourceOptions } = validateTypesAndNames(options.dataSource, defaultStreamingDataSourceOptions));
+          errors.push(...rejectDataSourceBaseUri(options.dataSource, validatedDataSourceOptions));
         } else if ((0, LDDataSystemOptions_1.isPollingOnlyOptions)(options.dataSource)) {
           ({ errors, validatedOptions: validatedDataSourceOptions } = validateTypesAndNames(options.dataSource, defaultPollingDataSourceOptions));
+          errors.push(...rejectDataSourceBaseUri(options.dataSource, validatedDataSourceOptions));
         } else if ((0, LDDataSystemOptions_1.isCustomOptions)(options.dataSource)) {
           validatedDataSourceOptions = options.dataSource;
           errors = [];
@@ -24871,15 +25016,20 @@ var require_Configuration = __commonJS({
             dataSource: validatedDSOptions.dataSource,
             useLdd: validatedDSOptions.useLdd,
             fdv1Fallback: validatedDSOptions.fdv1Fallback,
-            // @ts-ignore
             featureStoreFactory: (clientContext) => {
-              if (validatedDSOptions.persistentStore === void 0) {
-                return new InMemoryFeatureStore_1.default();
+              const { persistentStore } = validatedDSOptions;
+              let store;
+              if (persistentStore === void 0) {
+                store = new InMemoryFeatureStore_1.default();
+              } else if (js_sdk_common_1.TypeValidators.Function.is(persistentStore)) {
+                store = persistentStore(clientContext);
+              } else {
+                store = persistentStore;
               }
-              if (js_sdk_common_1.TypeValidators.Function.is(validatedDSOptions.persistentStore)) {
-                return validatedDSOptions.persistentStore(clientContext);
+              if (js_sdk_common_1.TypeValidators.Function.is(store.applyChanges)) {
+                return store;
               }
-              return validatedDSOptions.persistentStore;
+              return new TransactionalFeatureStore_1.default(store);
             }
           };
           dsErrors.forEach((error2) => {
@@ -28922,7 +29072,7 @@ var require_LDClientImpl = __commonJS({
     var STRING_VARIATION_DETAIL_METHOD_NAME = "LDClient.stringVariationDetail";
     var JSON_VARIATION_DETAIL_METHOD_NAME = "LDClient.jsonVariationDetail";
     var VARIATION_METHOD_DETAIL_NAME = "LDClient.variationDetail";
-    function constructFDv1(sdkKey, platform2, config, callbacks, initSuccess, dataSourceErrorHandler, hooks, instanceId, startEventProcessor) {
+    function constructFDv1(sdkKey, platform2, config, callbacks, initSuccess, dataSourceErrorHandler, hooks, instanceId, userAgentHeaderName, startEventProcessor) {
       var _a, _b, _c, _d, _e;
       const { onUpdate, hasEventListeners } = callbacks;
       const hookRunner = new HookRunner_1.default(config.logger, hooks);
@@ -28930,7 +29080,7 @@ var require_LDClientImpl = __commonJS({
         throw new Error("You must configure the client with an SDK key");
       }
       const { logger } = config;
-      const baseHeaders = (0, js_sdk_common_1.defaultHeaders)(sdkKey, platform2.info, config.tags, true, "user-agent", instanceId);
+      const baseHeaders = (0, js_sdk_common_1.defaultHeaders)(sdkKey, platform2.info, config.tags, true, userAgentHeaderName, instanceId);
       const clientContext = new js_sdk_common_1.ClientContext(sdkKey, config, platform2);
       const featureStore = config.featureStoreFactory(clientContext);
       const dataSourceUpdates = new DataSourceUpdates_1.default(featureStore, hasEventListeners, onUpdate);
@@ -28942,7 +29092,7 @@ var require_LDClientImpl = __commonJS({
       if (!config.sendEvents || config.offline) {
         eventProcessor = new NullEventProcessor();
       } else {
-        eventProcessor = new js_sdk_common_1.internal.EventProcessor(config, clientContext, baseHeaders, new ContextDeduplicator_1.default(config), diagnosticsManager, startEventProcessor);
+        eventProcessor = new js_sdk_common_1.internal.EventProcessor(Object.assign(Object.assign({}, config), { redactAnonymousAllEvents: true }), clientContext, baseHeaders, new ContextDeduplicator_1.default(config), diagnosticsManager, startEventProcessor);
       }
       const bigSegmentsManager = new BigSegmentsManager_1.default((_b = (_a = config.bigSegments) === null || _a === void 0 ? void 0 : _a.store) === null || _b === void 0 ? void 0 : _b.call(_a, clientContext), (_c = config.bigSegments) !== null && _c !== void 0 ? _c : {}, config.logger, platform2.crypto);
       const queries = {
@@ -28979,7 +29129,11 @@ var require_LDClientImpl = __commonJS({
         onReady: callbacks.onReady
       };
     }
-    function constructFDv2(sdkKey, platform2, config, callbacks, initSuccess, hooks, instanceId, startEventProcessor) {
+    function scopedServiceEndpoints(base, overrides) {
+      var _a, _b;
+      return new js_sdk_common_1.ServiceEndpoints((_a = overrides.streaming) !== null && _a !== void 0 ? _a : base.streaming, (_b = overrides.polling) !== null && _b !== void 0 ? _b : base.polling, base.events, base.analyticsEventPath, base.diagnosticEventPath, base.includeAuthorizationHeader, base.payloadFilterKey);
+    }
+    function constructFDv2(sdkKey, platform2, config, callbacks, initSuccess, hooks, instanceId, userAgentHeaderName, startEventProcessor) {
       var _a, _b, _c, _d, _e, _f;
       const { onUpdate, hasEventListeners } = callbacks;
       const hookRunner = new HookRunner_1.default(config.logger, hooks);
@@ -28987,7 +29141,7 @@ var require_LDClientImpl = __commonJS({
         throw new Error("You must configure the client with an SDK key");
       }
       const { logger } = config;
-      const baseHeaders = (0, js_sdk_common_1.defaultHeaders)(sdkKey, platform2.info, config.tags, true, "user-agent", instanceId);
+      const baseHeaders = (0, js_sdk_common_1.defaultHeaders)(sdkKey, platform2.info, config.tags, true, userAgentHeaderName, instanceId);
       const clientContext = new js_sdk_common_1.ClientContext(sdkKey, config, platform2);
       const dataSystem = config.dataSystem;
       const featureStore = dataSystem.featureStoreFactory(clientContext);
@@ -29000,7 +29154,7 @@ var require_LDClientImpl = __commonJS({
       if (!config.sendEvents || config.offline) {
         eventProcessor = new NullEventProcessor();
       } else {
-        eventProcessor = new js_sdk_common_1.internal.EventProcessor(config, clientContext, baseHeaders, new ContextDeduplicator_1.default(config), diagnosticsManager, startEventProcessor);
+        eventProcessor = new js_sdk_common_1.internal.EventProcessor(Object.assign(Object.assign({}, config), { redactAnonymousAllEvents: true }), clientContext, baseHeaders, new ContextDeduplicator_1.default(config), diagnosticsManager, startEventProcessor);
       }
       const bigSegmentsManager = new BigSegmentsManager_1.default((_b = (_a = config.bigSegments) === null || _a === void 0 ? void 0 : _a.store) === null || _b === void 0 ? void 0 : _b.call(_a, clientContext), (_c = config.bigSegments) !== null && _c !== void 0 ? _c : {}, config.logger, platform2.crypto);
       const queries = {
@@ -29030,7 +29184,10 @@ var require_LDClientImpl = __commonJS({
                 break;
               }
               case "polling": {
-                initializers.push(() => new OneShotInitializerFDv2_1.default(new Requestor_1.default(config, platform2.requests, baseHeaders, "/sdk/poll", config.logger), config.logger));
+                const pollingEndpoints = initializerConfig.baseUri ? scopedServiceEndpoints(config.serviceEndpoints, {
+                  polling: initializerConfig.baseUri
+                }) : void 0;
+                initializers.push(() => new OneShotInitializerFDv2_1.default(new Requestor_1.default(config, platform2.requests, baseHeaders, "/sdk/poll", config.logger, pollingEndpoints), config.logger));
                 break;
               }
               default: {
@@ -29042,12 +29199,18 @@ var require_LDClientImpl = __commonJS({
             switch (synchronizerConfig.type) {
               case "streaming": {
                 const { streamInitialReconnectDelay = Configuration_1.DEFAULT_STREAM_RECONNECT_DELAY } = synchronizerConfig;
-                synchronizers.push(() => new StreamingProcessorFDv2_1.default(clientContext, "/sdk/stream", [], baseHeaders, diagnosticsManager, streamInitialReconnectDelay));
+                const streamingEndpoints = synchronizerConfig.baseUri ? scopedServiceEndpoints(config.serviceEndpoints, {
+                  streaming: synchronizerConfig.baseUri
+                }) : void 0;
+                synchronizers.push(() => new StreamingProcessorFDv2_1.default(clientContext, "/sdk/stream", [], baseHeaders, diagnosticsManager, streamInitialReconnectDelay, streamingEndpoints));
                 break;
               }
               case "polling": {
                 const { pollInterval = Configuration_1.DEFAULT_POLL_INTERVAL } = synchronizerConfig;
-                synchronizers.push(() => new PollingProcessorFDv2_1.default(new Requestor_1.default(config, platform2.requests, baseHeaders, "/sdk/poll", config.logger), pollInterval, config.logger));
+                const pollingEndpoints = synchronizerConfig.baseUri ? scopedServiceEndpoints(config.serviceEndpoints, {
+                  polling: synchronizerConfig.baseUri
+                }) : void 0;
+                synchronizers.push(() => new PollingProcessorFDv2_1.default(new Requestor_1.default(config, platform2.requests, baseHeaders, "/sdk/poll", config.logger, pollingEndpoints), pollInterval, config.logger));
                 break;
               }
               default: {
@@ -29072,7 +29235,9 @@ var require_LDClientImpl = __commonJS({
         const fdv1FallbackConfig = dataSystem.fdv1Fallback;
         if (fdv1FallbackConfig !== null) {
           const fdv1FallbackPollInterval = (_f = (_e = fdv1FallbackConfig === null || fdv1FallbackConfig === void 0 ? void 0 : fdv1FallbackConfig.pollInterval) !== null && _e !== void 0 ? _e : config.pollInterval) !== null && _f !== void 0 ? _f : Configuration_1.DEFAULT_POLL_INTERVAL;
-          const fdv1FallbackEndpoints = (fdv1FallbackConfig === null || fdv1FallbackConfig === void 0 ? void 0 : fdv1FallbackConfig.baseUri) ? new js_sdk_common_1.ServiceEndpoints(config.serviceEndpoints.streaming, fdv1FallbackConfig.baseUri, config.serviceEndpoints.events, config.serviceEndpoints.analyticsEventPath, config.serviceEndpoints.diagnosticEventPath, config.serviceEndpoints.includeAuthorizationHeader, config.serviceEndpoints.payloadFilterKey) : void 0;
+          const fdv1FallbackEndpoints = (fdv1FallbackConfig === null || fdv1FallbackConfig === void 0 ? void 0 : fdv1FallbackConfig.baseUri) ? scopedServiceEndpoints(config.serviceEndpoints, {
+            polling: fdv1FallbackConfig.baseUri
+          }) : void 0;
           fdv1FallbackSynchronizers.push(() => new PollingProcessorFDv2_1.default(new Requestor_1.default(config, platform2.requests, baseHeaders, "/sdk/latest-all", config.logger, fdv1FallbackEndpoints), fdv1FallbackPollInterval, config.logger, true));
         }
         dataSource = new js_sdk_common_1.CompositeDataSource(initializers, synchronizers, fdv1FallbackSynchronizers, logger);
@@ -29126,7 +29291,7 @@ var require_LDClientImpl = __commonJS({
             onError: this._onError,
             onFailed: this._onFailed,
             onReady: this._onReady
-          } = constructFDv1(_sdkKey, _platform, config, callbacks, () => this._initSuccess(), (e) => this._dataSourceErrorHandler(e), hooks, internalOptions === null || internalOptions === void 0 ? void 0 : internalOptions.instanceId, startEventProcessor));
+          } = constructFDv1(_sdkKey, _platform, config, callbacks, () => this._initSuccess(), (e) => this._dataSourceErrorHandler(e), hooks, internalOptions === null || internalOptions === void 0 ? void 0 : internalOptions.instanceId, internalOptions === null || internalOptions === void 0 ? void 0 : internalOptions.userAgentHeaderName, startEventProcessor));
           this.bigSegmentStatusProviderInternal = this._bigSegmentsManager.statusProvider;
           if (this._updateProcessor) {
             this._updateProcessor.start();
@@ -29149,7 +29314,7 @@ var require_LDClientImpl = __commonJS({
             onError: this._onError,
             onFailed: this._onFailed,
             onReady: this._onReady
-          } = constructFDv2(_sdkKey, _platform, config, callbacks, () => this._initSuccess(), hooks, internalOptions === null || internalOptions === void 0 ? void 0 : internalOptions.instanceId, startEventProcessor));
+          } = constructFDv2(_sdkKey, _platform, config, callbacks, () => this._initSuccess(), hooks, internalOptions === null || internalOptions === void 0 ? void 0 : internalOptions.instanceId, internalOptions === null || internalOptions === void 0 ? void 0 : internalOptions.userAgentHeaderName, startEventProcessor));
           this._featureStore = transactionalStore;
           this.bigSegmentStatusProviderInternal = this._bigSegmentsManager.statusProvider;
           if (this._dataSource) {
@@ -29775,122 +29940,6 @@ var require_Migration = __commonJS({
       return new Migration(client, config);
     }
     exports.createMigration = createMigration;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/FileDataSource.js
-var require_FileDataSource = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/FileDataSource.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var serialization_1 = require_serialization();
-    var VersionedDataKinds_1 = require_VersionedDataKinds();
-    var FileLoader_1 = require_FileLoader();
-    function makeFlagWithValue(key, value, version) {
-      return {
-        key,
-        on: true,
-        fallthrough: { variation: 0 },
-        variations: [value],
-        version
-      };
-    }
-    var FileDataSource = class {
-      /**
-       * This is internal because we want instances to only be created with the
-       * factory.
-       * @internal
-       */
-      constructor(options, filesystem, _featureStore, _initSuccessHandler = () => {
-      }, _errorHandler) {
-        var _a;
-        this._featureStore = _featureStore;
-        this._initSuccessHandler = _initSuccessHandler;
-        this._errorHandler = _errorHandler;
-        this._allData = {};
-        this._fileLoader = new FileLoader_1.default(filesystem, options.paths, (_a = options.autoUpdate) !== null && _a !== void 0 ? _a : false, (results) => {
-          var _a2, _b;
-          try {
-            this._processFileData(results);
-          } catch (err) {
-            (_a2 = this._errorHandler) === null || _a2 === void 0 ? void 0 : _a2.call(this, err);
-            (_b = this._logger) === null || _b === void 0 ? void 0 : _b.error(`Error processing files: ${err}`);
-          }
-        });
-        this._logger = options.logger;
-        this._yamlParser = options.yamlParser;
-      }
-      start() {
-        (async () => {
-          var _a;
-          try {
-            await this._fileLoader.loadAndWatch();
-          } catch (err) {
-            (_a = this._errorHandler) === null || _a === void 0 ? void 0 : _a.call(this, err);
-          }
-        })();
-      }
-      stop() {
-        this._fileLoader.close();
-      }
-      close() {
-        this.stop();
-      }
-      _addItem(kind, item) {
-        if (!this._allData[kind.namespace]) {
-          this._allData[kind.namespace] = {};
-        }
-        if (this._allData[kind.namespace][item.key]) {
-          throw new Error(`found duplicate key: "${item.key}"`);
-        } else {
-          this._allData[kind.namespace][item.key] = item;
-        }
-      }
-      _processFileData(fileData) {
-        const oldData = this._allData;
-        this._allData = {};
-        fileData.forEach((fd) => {
-          let parsed;
-          if (fd.path.endsWith(".yml") || fd.path.endsWith(".yaml")) {
-            if (this._yamlParser) {
-              parsed = this._yamlParser(fd.data);
-            } else {
-              throw new Error(`Attempted to parse yaml file (${fd.path}) without parser.`);
-            }
-          } else {
-            parsed = JSON.parse(fd.data);
-          }
-          this._processParsedData(parsed, oldData);
-        });
-        this._featureStore.init(this._allData, () => {
-          this._initSuccessHandler();
-          this._initSuccessHandler = () => {
-          };
-        });
-      }
-      _processParsedData(parsed, oldData) {
-        Object.keys(parsed.flags || {}).forEach((key) => {
-          (0, serialization_1.processFlag)(parsed.flags[key]);
-          this._addItem(VersionedDataKinds_1.default.Features, parsed.flags[key]);
-        });
-        Object.keys(parsed.flagValues || {}).forEach((key) => {
-          var _a, _b;
-          const previousInstance = (_a = oldData[VersionedDataKinds_1.default.Features.namespace]) === null || _a === void 0 ? void 0 : _a[key];
-          let { version } = previousInstance !== null && previousInstance !== void 0 ? previousInstance : { version: 1 };
-          if (previousInstance && JSON.stringify(parsed.flagValues[key]) !== JSON.stringify((_b = previousInstance === null || previousInstance === void 0 ? void 0 : previousInstance.variations) === null || _b === void 0 ? void 0 : _b[0])) {
-            version += 1;
-          }
-          const flag = makeFlagWithValue(key, parsed.flagValues[key], version);
-          (0, serialization_1.processFlag)(flag);
-          this._addItem(VersionedDataKinds_1.default.Features, flag);
-        });
-        Object.keys(parsed.segments || {}).forEach((key) => {
-          (0, serialization_1.processSegment)(parsed.segments[key]);
-          this._addItem(VersionedDataKinds_1.default.Segments, parsed.segments[key]);
-        });
-      }
-    };
-    exports.default = FileDataSource;
   }
 });
 
@@ -30915,7 +30964,7 @@ var require_NodeInfo = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     var os5 = __require("os");
     var sdkName = "@launchdarkly/node-server-sdk";
-    var sdkVersion = "9.12.1";
+    var sdkVersion = "9.13.1";
     function processPlatformName(name) {
       switch (name) {
         case "darwin":
@@ -33689,22 +33738,16 @@ var LDClient = class {
     await this.client.flush();
   }
   async evaluateFlag(flagKey, ctx, defaultValue) {
-    var timeout = null;
-    const timeoutPromise = new Promise((resolve, reject) => {
-      timeout = setTimeout(reject, 5e3);
-    });
     debug(`Evaluating flag ${flagKey}`);
     debug(`with context ${JSON.stringify(ctx)}`);
     try {
-      await Promise.race([timeoutPromise, this.client.waitForInitialization()]);
+      await this.client.waitForInitialization({ timeout: 5 });
       const result = await this.client.variation(flagKey, ctx, defaultValue);
       debug(`Flag ${flagKey} is ${JSON.stringify(result)}`);
       return result;
     } catch (error2) {
       console.error(error2);
       error("Failed to initialize SDK.");
-    } finally {
-      clearTimeout(timeout);
     }
     return void 0;
   }
