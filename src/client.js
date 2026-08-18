@@ -16,15 +16,10 @@ export default class LDClient {
   }
 
   async evaluateFlag(flagKey, ctx, defaultValue) {
-    var timeout = null;
-    const timeoutPromise = new Promise((resolve, reject) => {
-      timeout = setTimeout(reject, 5000);
-    });
     core.debug(`Evaluating flag ${flagKey}`);
     core.debug(`with context ${JSON.stringify(ctx)}`);
     try {
-      // Only await initialization if we're not in offline mode.
-      await Promise.race([timeoutPromise, this.client.waitForInitialization()]);
+      await this.client.waitForInitialization({ timeout: 5 });
       const result = await this.client.variation(flagKey, ctx, defaultValue);
       core.debug(`Flag ${flagKey} is ${JSON.stringify(result)}`);
 
@@ -32,8 +27,6 @@ export default class LDClient {
     } catch (error) {
       console.error(error);
       core.error('Failed to initialize SDK.');
-    } finally {
-      clearTimeout(timeout);
     }
 
     return undefined;
