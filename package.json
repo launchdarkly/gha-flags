@@ -12,7 +12,8 @@
     "prettier:check": "prettier -c ./",
     "prettier:write": "prettier -w ./",
     "prettier:write:path": "prettier -w",
-    "test": "vitest run"
+    "test": "vitest run",
+    "verify": "npm run lint && npm run prettier:check && npm run test && npm run build && git diff --exit-code dist/ && npm run docs && git diff --exit-code README.md"
   },
   "repository": {
     "type": "git",
