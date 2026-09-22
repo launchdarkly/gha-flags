@@ -2,7 +2,7 @@
 
 ## Getting started
 
-1. Install and configure [pre-commit](https://pre-commit.com/) for the repository
+1. Run `npm run verify` locally before committing — it is the same gate CI runs (lint, prettier, tests, committed bundle, README docs)
 1. Install Node 20
 1. Install dependencies
    ```
