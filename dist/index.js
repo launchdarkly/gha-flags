@@ -21213,6 +21213,28 @@ var require_cjs = __commonJS({
         return new InputCustomEvent(context, key, data ?? void 0, metricValue ?? void 0, samplingRatio);
       }
     };
+    function readFallbackDirective(headers) {
+      const fallback = headers.get("x-ld-fd-fallback");
+      if (fallback === null || fallback.toLowerCase() !== "true") {
+        return { fdv1Fallback: false };
+      }
+      const raw = headers.get("x-ld-fd-fallback-ttl");
+      if (raw === null) {
+        return { fdv1Fallback: true };
+      }
+      const seconds = parseInt(raw, 10);
+      if (Number.isNaN(seconds)) {
+        return { fdv1Fallback: true };
+      }
+      return { fdv1Fallback: true, fdv1FallbackTtlMs: Math.max(0, seconds) * 1e3 };
+    }
+    function readGoodbyeFallbackDirective(data) {
+      const rawTtl = data?.protocolFallbackTTL;
+      if (typeof rawTtl !== "number" || !Number.isFinite(rawTtl)) {
+        return { fdv1Fallback: false };
+      }
+      return { fdv1Fallback: true, fdv1FallbackTtlMs: Math.max(0, rawTtl) * 1e3 };
+    }
     var PAYLOAD_ID = "FDv1Fallback";
     function fdv1PayloadAdaptor(processor) {
       return {
@@ -21591,6 +21613,8 @@ var require_cjs = __commonJS({
       isLegacyUser,
       isMultiKind,
       isSingleKind,
+      readFallbackDirective,
+      readGoodbyeFallbackDirective,
       safeGetHooks,
       safeGetName,
       safeRegisterPlugins,
@@ -23174,8 +23198,8 @@ var require_fileDataInitilizerFDv2 = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     var js_sdk_common_1 = require_cjs();
     var serialization_1 = require_serialization();
-    var FileLoader_1 = require_FileLoader();
     var FileDataSource_1 = require_FileDataSource();
+    var FileLoader_1 = require_FileLoader();
     var FileDataInitializerFDv2 = class {
       constructor(options, platform2, logger) {
         this._validateInputs(options, platform2);
@@ -23767,8 +23791,9 @@ var require_PersistentDataStoreWrapper = __commonJS({
       };
     }
     var PersistentDataStoreWrapper = class {
-      constructor(_core, ttl) {
+      constructor(_core, ttl, _logger) {
         this._core = _core;
+        this._logger = _logger;
         this._isInitialized = false;
         this._queue = new UpdateQueue_1.default();
         if (ttl) {
@@ -23878,13 +23903,16 @@ var require_PersistentDataStoreWrapper = __commonJS({
           }
           const persistKind = persistentStoreKinds_1.persistentStoreKinds[kind.namespace];
           this._core.upsert(persistKind, data.key, persistKind.serialize(data), (err, updatedDescriptor) => {
-            var _a, _b;
+            var _a, _b, _c;
+            if (err) {
+              (_a = this._logger) === null || _a === void 0 ? void 0 : _a.error(`Persistent store returned error: ${err instanceof Error ? err.message : err}`);
+            }
             if (!err && updatedDescriptor) {
               if (updatedDescriptor.serializedItem) {
                 const value = deserialize(persistKind, updatedDescriptor);
-                (_a = this._itemCache) === null || _a === void 0 ? void 0 : _a.set(cacheKey(kind, data.key), value);
+                (_b = this._itemCache) === null || _b === void 0 ? void 0 : _b.set(cacheKey(kind, data.key), value);
               } else if (updatedDescriptor.deleted) {
-                (_b = this._itemCache) === null || _b === void 0 ? void 0 : _b.set(data.key, {
+                (_c = this._itemCache) === null || _c === void 0 ? void 0 : _c.set(data.key, {
                   key: data.key,
                   version: updatedDescriptor.version,
                   deleted: true
@@ -29141,6 +29169,9 @@ var require_LDClientImpl = __commonJS({
         throw new Error("You must configure the client with an SDK key");
       }
       const { logger } = config;
+      if (config.payloadFilterKey !== void 0) {
+        logger === null || logger === void 0 ? void 0 : logger.warn("Payload filtering is not supported with the FDv2 data system; the configured payload filter has no effect on FDv2 requests");
+      }
       const baseHeaders = (0, js_sdk_common_1.defaultHeaders)(sdkKey, platform2.info, config.tags, true, userAgentHeaderName, instanceId);
       const clientContext = new js_sdk_common_1.ClientContext(sdkKey, config, platform2);
       const dataSystem = config.dataSystem;
@@ -30964,7 +30995,7 @@ var require_NodeInfo = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     var os5 = __require("os");
     var sdkName = "@launchdarkly/node-server-sdk";
-    var sdkVersion = "9.13.1";
+    var sdkVersion = "9.13.4";
     function processPlatformName(name) {
       switch (name) {
         case "darwin":

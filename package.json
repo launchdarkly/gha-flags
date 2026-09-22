@@ -12,7 +12,8 @@
     "prettier:check": "prettier -c ./",
     "prettier:write": "prettier -w ./",
     "prettier:write:path": "prettier -w",
-    "test": "vitest run"
+    "test": "vitest run",
+    "verify": "npm run lint && npm run prettier:check && npm run test && npm run build && git diff --exit-code dist/ && npm run docs && git diff --exit-code README.md"
   },
   "repository": {
     "type": "git",
@@ -27,17 +28,17 @@
   "homepage": "https://github.com/launchdarkly/gha-flags#readme",
   "dependencies": {
     "@actions/core": "^3.0.1",
-    "@launchdarkly/node-server-sdk": "^9.13.1"
+    "@launchdarkly/node-server-sdk": "^9.13.4"
   },
   "devDependencies": {
-    "action-docs": "^1.0.4",
+    "action-docs": "^2.5.1",
     "esbuild": "^0.28.1",
     "eslint": "^8.17.0",
-    "eslint-config-prettier": "^9.0.0",
+    "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-import": "^2.26.0",
     "eslint-plugin-prettier": "^5.5.6",
-    "prettier": "^3.8.4",
-    "vitest": "^4.1.0"
+    "prettier": "^3.9.6",
+    "vitest": "^5.0.1"
   },
   "overrides": {
     "vite": "^8.0.5"
