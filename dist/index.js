@@ -2051,13 +2051,21 @@ var require_dispatcher_base = __commonJS({
     var kOnDestroyed = /* @__PURE__ */ Symbol("onDestroyed");
     var kOnClosed = /* @__PURE__ */ Symbol("onClosed");
     var kInterceptedDispatch = /* @__PURE__ */ Symbol("Intercepted Dispatch");
+    var kWebSocketOptions = /* @__PURE__ */ Symbol("webSocketOptions");
     var DispatcherBase = class extends Dispatcher {
-      constructor() {
+      constructor(opts) {
         super();
         this[kDestroyed] = false;
         this[kOnDestroyed] = null;
         this[kClosed] = false;
         this[kOnClosed] = [];
+        this[kWebSocketOptions] = opts?.webSocket ?? {};
+      }
+      get webSocketOptions() {
+        return {
+          maxFragments: this[kWebSocketOptions].maxFragments ?? 131072,
+          maxPayloadSize: this[kWebSocketOptions].maxPayloadSize ?? 128 * 1024 * 1024
+        };
       }
       get destroyed() {
         return this[kDestroyed];
@@ -5710,6 +5718,9 @@ var require_client_h1 = __commonJS({
     var FastBuffer = Buffer[Symbol.species];
     var addListener = util.addListener;
     var removeAllListeners = util.removeAllListeners;
+    var kIdleSocketValidation = /* @__PURE__ */ Symbol("kIdleSocketValidation");
+    var kIdleSocketValidationTimeout = /* @__PURE__ */ Symbol("kIdleSocketValidationTimeout");
+    var kSocketUsed = /* @__PURE__ */ Symbol("kSocketUsed");
     var extractBody;
     async function lazyllhttp() {
       const llhttpWasmData = process.env.JEST_WORKER_ID ? require_llhttp_wasm() : void 0;
@@ -5872,23 +5883,54 @@ var require_client_h1 = __commonJS({
             currentBufferRef = null;
           }
           const offset = llhttp.llhttp_get_error_pos(this.ptr) - currentBufferPtr;
-          if (ret === constants3.ERROR.PAUSED_UPGRADE) {
-            this.onUpgrade(data.slice(offset));
-          } else if (ret === constants3.ERROR.PAUSED) {
-            this.paused = true;
-            socket.unshift(data.slice(offset));
-          } else if (ret !== constants3.ERROR.OK) {
-            const ptr = llhttp.llhttp_get_error_reason(this.ptr);
-            let message = "";
-            if (ptr) {
-              const len = new Uint8Array(llhttp.memory.buffer, ptr).indexOf(0);
-              message = "Response does not match the HTTP/1.1 protocol (" + Buffer.from(llhttp.memory.buffer, ptr, len).toString() + ")";
+          if (ret !== constants3.ERROR.OK) {
+            const body = data.subarray(offset);
+            if (ret === constants3.ERROR.PAUSED_UPGRADE) {
+              this.onUpgrade(body);
+            } else if (ret === constants3.ERROR.PAUSED) {
+              this.paused = true;
+              socket.unshift(body);
+            } else {
+              throw this.createError(ret, body);
             }
-            throw new HTTPParserError(message, constants3.ERROR[ret], data.slice(offset));
           }
         } catch (err) {
           util.destroy(socket, err);
         }
+      }
+      finish() {
+        assert(currentParser === null);
+        assert(this.ptr != null);
+        assert(!this.paused);
+        const { llhttp } = this;
+        let ret;
+        try {
+          currentParser = this;
+          ret = llhttp.llhttp_finish(this.ptr);
+        } finally {
+          currentParser = null;
+        }
+        if (ret === constants3.ERROR.OK) {
+          return null;
+        }
+        if (ret === constants3.ERROR.PAUSED || ret === constants3.ERROR.PAUSED_UPGRADE) {
+          this.paused = true;
+          return null;
+        }
+        return this.createError(ret, EMPTY_BUF);
+      }
+      createError(ret, data) {
+        const { llhttp, contentLength, bytesRead } = this;
+        if (contentLength && bytesRead !== parseInt(contentLength, 10)) {
+          return new ResponseContentLengthMismatchError();
+        }
+        const ptr = llhttp.llhttp_get_error_reason(this.ptr);
+        let message = "";
+        if (ptr) {
+          const len = new Uint8Array(llhttp.memory.buffer, ptr).indexOf(0);
+          message = "Response does not match the HTTP/1.1 protocol (" + Buffer.from(llhttp.memory.buffer, ptr, len).toString() + ")";
+        }
+        return new HTTPParserError(message, constants3.ERROR[ret], data);
       }
       destroy() {
         assert(this.ptr != null);
@@ -5907,6 +5949,10 @@ var require_client_h1 = __commonJS({
       onMessageBegin() {
         const { socket, client } = this;
         if (socket.destroyed) {
+          return -1;
+        }
+        if (client[kRunning] === 0) {
+          util.destroy(socket, new SocketError("bad response", util.getSocketInfo(socket)));
           return -1;
         }
         const request = client[kQueue][client[kRunningIdx]];
@@ -5986,6 +6032,10 @@ var require_client_h1 = __commonJS({
       onHeadersComplete(statusCode, upgrade, shouldKeepAlive) {
         const { client, socket, headers, statusText } = this;
         if (socket.destroyed) {
+          return -1;
+        }
+        if (client[kRunning] === 0) {
+          util.destroy(socket, new SocketError("bad response", util.getSocketInfo(socket)));
           return -1;
         }
         const request = client[kQueue][client[kRunningIdx]];
@@ -6113,6 +6163,7 @@ var require_client_h1 = __commonJS({
         }
         request.onComplete(headers);
         client[kQueue][client[kRunningIdx]++] = null;
+        socket[kSocketUsed] = true;
         if (socket[kWriting]) {
           assert(client[kRunning] === 0);
           util.destroy(socket, new InformationalError("reset"));
@@ -6156,12 +6207,19 @@ var require_client_h1 = __commonJS({
       socket[kWriting] = false;
       socket[kReset] = false;
       socket[kBlocking] = false;
+      socket[kIdleSocketValidation] = 0;
+      socket[kIdleSocketValidationTimeout] = null;
+      socket[kSocketUsed] = false;
       socket[kParser] = new Parser(client, socket, llhttpInstance);
       addListener(socket, "error", function(err) {
         assert(err.code !== "ERR_TLS_CERT_ALTNAME_INVALID");
         const parser = this[kParser];
         if (err.code === "ECONNRESET" && parser.statusCode && !parser.shouldKeepAlive) {
-          parser.onMessageComplete();
+          const parserErr = parser.finish();
+          if (parserErr) {
+            this[kError] = parserErr;
+            this[kClient][kOnError](parserErr);
+          }
           return;
         }
         this[kError] = err;
@@ -6176,7 +6234,10 @@ var require_client_h1 = __commonJS({
       addListener(socket, "end", function() {
         const parser = this[kParser];
         if (parser.statusCode && !parser.shouldKeepAlive) {
-          parser.onMessageComplete();
+          const parserErr = parser.finish();
+          if (parserErr) {
+            util.destroy(this, parserErr);
+          }
           return;
         }
         util.destroy(this, new SocketError("other side closed", util.getSocketInfo(this)));
@@ -6184,9 +6245,10 @@ var require_client_h1 = __commonJS({
       addListener(socket, "close", function() {
         const client2 = this[kClient];
         const parser = this[kParser];
+        clearIdleSocketValidation(this);
         if (parser) {
           if (!this[kError] && parser.statusCode && !parser.shouldKeepAlive) {
-            parser.onMessageComplete();
+            this[kError] = parser.finish() || this[kError];
           }
           this[kParser].destroy();
           this[kParser] = null;
@@ -6235,7 +6297,7 @@ var require_client_h1 = __commonJS({
           return socket.destroyed;
         },
         busy(request) {
-          if (socket[kWriting] || socket[kReset] || socket[kBlocking]) {
+          if (socket[kWriting] || socket[kReset] || socket[kBlocking] || socket[kIdleSocketValidation] === 1) {
             return true;
           }
           if (request) {
@@ -6253,6 +6315,24 @@ var require_client_h1 = __commonJS({
         }
       };
     }
+    function clearIdleSocketValidation(socket) {
+      if (socket[kIdleSocketValidationTimeout]) {
+        clearTimeout(socket[kIdleSocketValidationTimeout]);
+        socket[kIdleSocketValidationTimeout] = null;
+      }
+      socket[kIdleSocketValidation] = 0;
+    }
+    function scheduleIdleSocketValidation(client, socket) {
+      socket[kIdleSocketValidation] = 1;
+      socket[kIdleSocketValidationTimeout] = setTimeout(() => {
+        socket[kIdleSocketValidationTimeout] = null;
+        socket[kIdleSocketValidation] = 2;
+        if (client[kSocket] === socket && !socket.destroyed) {
+          client[kResume]();
+        }
+      }, 0);
+      socket[kIdleSocketValidationTimeout].unref?.();
+    }
     function resumeH1(client) {
       const socket = client[kSocket];
       if (socket && !socket.destroyed) {
@@ -6264,6 +6344,29 @@ var require_client_h1 = __commonJS({
         } else if (socket[kNoRef] && socket.ref) {
           socket.ref();
           socket[kNoRef] = false;
+        }
+        if (client[kRunning] === 0 && client[kPending] > 0 && socket[kSocketUsed]) {
+          if (socket[kIdleSocketValidation] === 0) {
+            scheduleIdleSocketValidation(client, socket);
+            socket[kParser].readMore();
+            if (socket.destroyed) {
+              return;
+            }
+            return;
+          }
+          if (socket[kIdleSocketValidation] === 1) {
+            socket[kParser].readMore();
+            if (socket.destroyed) {
+              return;
+            }
+            return;
+          }
+        }
+        if (client[kRunning] === 0) {
+          socket[kParser].readMore();
+          if (socket.destroyed) {
+            return;
+          }
         }
         if (client[kSize] === 0) {
           if (socket[kParser].timeoutType !== TIMEOUT_KEEP_ALIVE) {
@@ -6317,6 +6420,7 @@ var require_client_h1 = __commonJS({
         process.emitWarning(new RequestContentLengthMismatchError());
       }
       const socket = client[kSocket];
+      clearIdleSocketValidation(socket);
       const abort = (err) => {
         if (request.aborted || request.completed) {
           return;
@@ -7496,9 +7600,10 @@ var require_client = __commonJS({
         autoSelectFamilyAttemptTimeout,
         // h2
         maxConcurrentStreams,
-        allowH2
+        allowH2,
+        webSocket
       } = {}) {
-        super();
+        super({ webSocket });
         if (keepAlive !== void 0) {
           throw new InvalidArgumentError("unsupported keepAlive, use pipelining=0 instead");
         }
@@ -8004,8 +8109,8 @@ var require_pool_base = __commonJS({
     var kRemoveClient = /* @__PURE__ */ Symbol("remove client");
     var kStats = /* @__PURE__ */ Symbol("stats");
     var PoolBase = class extends DispatcherBase {
-      constructor() {
-        super();
+      constructor(opts) {
+        super(opts);
         this[kQueue] = new FixedQueue();
         this[kClients] = [];
         this[kQueued] = 0;
@@ -8176,7 +8281,6 @@ var require_pool = __commonJS({
         allowH2,
         ...options
       } = {}) {
-        super();
         if (connections != null && (!Number.isFinite(connections) || connections < 0)) {
           throw new InvalidArgumentError("invalid connections");
         }
@@ -8197,6 +8301,7 @@ var require_pool = __commonJS({
             ...connect
           });
         }
+        super(options);
         this[kInterceptors] = options.interceptors?.Pool && Array.isArray(options.interceptors.Pool) ? options.interceptors.Pool : [];
         this[kConnections] = connections || null;
         this[kUrl] = util.parseOrigin(origin);
@@ -8396,7 +8501,6 @@ var require_agent = __commonJS({
     }
     var Agent = class extends DispatcherBase {
       constructor({ factory = defaultFactory, maxRedirections = 0, connect, ...options } = {}) {
-        super();
         if (typeof factory !== "function") {
           throw new InvalidArgumentError("factory must be a function.");
         }
@@ -8406,6 +8510,7 @@ var require_agent = __commonJS({
         if (!Number.isInteger(maxRedirections) || maxRedirections < 0) {
           throw new InvalidArgumentError("maxRedirections must be a positive number");
         }
+        super(options);
         if (connect && typeof connect !== "function") {
           connect = { ...connect };
         }
@@ -16100,18 +16205,14 @@ var require_parse = __commonJS({
       } else if (attributeNameLowercase === "httponly") {
         cookieAttributeList.httpOnly = true;
       } else if (attributeNameLowercase === "samesite") {
-        let enforcement = "Default";
         const attributeValueLowercase = attributeValue.toLowerCase();
-        if (attributeValueLowercase.includes("none")) {
-          enforcement = "None";
+        if (attributeValueLowercase === "none") {
+          cookieAttributeList.sameSite = "None";
+        } else if (attributeValueLowercase === "strict") {
+          cookieAttributeList.sameSite = "Strict";
+        } else if (attributeValueLowercase === "lax") {
+          cookieAttributeList.sameSite = "Lax";
         }
-        if (attributeValueLowercase.includes("strict")) {
-          enforcement = "Strict";
-        }
-        if (attributeValueLowercase.includes("lax")) {
-          enforcement = "Lax";
-        }
-        cookieAttributeList.sameSite = enforcement;
       } else {
         cookieAttributeList.unparsed ??= [];
         cookieAttributeList.unparsed.push(`${attributeName}=${attributeValue}`);
@@ -17039,31 +17140,26 @@ var require_permessage_deflate = __commonJS({
     var tail = Buffer.from([0, 0, 255, 255]);
     var kBuffer = /* @__PURE__ */ Symbol("kBuffer");
     var kLength = /* @__PURE__ */ Symbol("kLength");
-    var kDefaultMaxDecompressedSize = 4 * 1024 * 1024;
     var PerMessageDeflate = class {
       /** @type {import('node:zlib').InflateRaw} */
       #inflate;
       #options = {};
-      /** @type {number} */
-      #maxDecompressedSize;
-      /** @type {boolean} */
-      #aborted = false;
-      /** @type {Function|null} */
-      #currentCallback = null;
+      #maxPayloadSize = 0;
       /**
        * @param {Map<string, string>} extensions
-       * @param {{ maxDecompressedMessageSize?: number }} [options]
        */
-      constructor(extensions, options = {}) {
+      constructor(extensions, options) {
         this.#options.serverNoContextTakeover = extensions.has("server_no_context_takeover");
         this.#options.serverMaxWindowBits = extensions.get("server_max_window_bits");
-        this.#maxDecompressedSize = options.maxDecompressedMessageSize ?? kDefaultMaxDecompressedSize;
+        this.#maxPayloadSize = options.maxPayloadSize;
       }
+      /**
+       * Decompress a compressed payload.
+       * @param {Buffer} chunk Compressed data
+       * @param {boolean} fin Final fragment flag
+       * @param {Function} callback Callback function
+       */
       decompress(chunk, fin, callback) {
-        if (this.#aborted) {
-          callback(new MessageSizeExceededError());
-          return;
-        }
         if (!this.#inflate) {
           let windowBits = Z_DEFAULT_WINDOWBITS;
           if (this.#options.serverMaxWindowBits) {
@@ -17082,20 +17178,11 @@ var require_permessage_deflate = __commonJS({
           this.#inflate[kBuffer] = [];
           this.#inflate[kLength] = 0;
           this.#inflate.on("data", (data) => {
-            if (this.#aborted) {
-              return;
-            }
             this.#inflate[kLength] += data.length;
-            if (this.#inflate[kLength] > this.#maxDecompressedSize) {
-              this.#aborted = true;
+            if (this.#maxPayloadSize > 0 && this.#inflate[kLength] > this.#maxPayloadSize) {
+              callback(new MessageSizeExceededError());
               this.#inflate.removeAllListeners();
-              this.#inflate.destroy();
               this.#inflate = null;
-              if (this.#currentCallback) {
-                const cb = this.#currentCallback;
-                this.#currentCallback = null;
-                cb(new MessageSizeExceededError());
-              }
               return;
             }
             this.#inflate[kBuffer].push(data);
@@ -17105,19 +17192,17 @@ var require_permessage_deflate = __commonJS({
             callback(err);
           });
         }
-        this.#currentCallback = callback;
         this.#inflate.write(chunk);
         if (fin) {
           this.#inflate.write(tail);
         }
         this.#inflate.flush(() => {
-          if (this.#aborted || !this.#inflate) {
+          if (!this.#inflate) {
             return;
           }
           const full = Buffer.concat(this.#inflate[kBuffer], this.#inflate[kLength]);
           this.#inflate[kBuffer].length = 0;
           this.#inflate[kLength] = 0;
-          this.#currentCallback = null;
           callback(null, full);
         });
       }
@@ -17148,8 +17233,14 @@ var require_receiver = __commonJS({
     var { WebsocketFrameSend } = require_frame();
     var { closeWebSocketConnection } = require_connection();
     var { PerMessageDeflate } = require_permessage_deflate();
+    var { MessageSizeExceededError } = require_errors();
+    function failWebsocketConnectionWithCode(ws, code, reason) {
+      closeWebSocketConnection(ws, code, reason, Buffer.byteLength(reason));
+      failWebsocketConnection(ws, reason);
+    }
     var ByteParser = class extends Writable {
       #buffers = [];
+      #fragmentsBytes = 0;
       #byteOffset = 0;
       #loop = false;
       #state = parserStates.INFO;
@@ -17157,18 +17248,21 @@ var require_receiver = __commonJS({
       #fragments = [];
       /** @type {Map<string, PerMessageDeflate>} */
       #extensions;
-      /** @type {{ maxDecompressedMessageSize?: number }} */
-      #options;
+      /** @type {number} */
+      #maxFragments;
+      /** @type {number} */
+      #maxPayloadSize;
       /**
        * @param {import('./websocket').WebSocket} ws
        * @param {Map<string, string>|null} extensions
-       * @param {{ maxDecompressedMessageSize?: number }} [options]
+       * @param {{ maxFragments?: number, maxPayloadSize?: number }} [options]
        */
       constructor(ws, extensions, options = {}) {
         super();
         this.ws = ws;
         this.#extensions = extensions == null ? /* @__PURE__ */ new Map() : extensions;
-        this.#options = options;
+        this.#maxFragments = options.maxFragments ?? 0;
+        this.#maxPayloadSize = options.maxPayloadSize ?? 0;
         if (this.#extensions.has("permessage-deflate")) {
           this.#extensions.set("permessage-deflate", new PerMessageDeflate(extensions, options));
         }
@@ -17182,6 +17276,13 @@ var require_receiver = __commonJS({
         this.#byteOffset += chunk.length;
         this.#loop = true;
         this.run(callback);
+      }
+      #validatePayloadLength() {
+        if (this.#maxPayloadSize > 0 && !isControlFrame(this.#info.opcode) && this.#info.payloadLength + this.#fragmentsBytes > this.#maxPayloadSize) {
+          failWebsocketConnectionWithCode(this.ws, 1009, "Payload size exceeds maximum allowed size");
+          return false;
+        }
+        return true;
       }
       /**
        * Runs whenever a new chunk is received.
@@ -17242,6 +17343,9 @@ var require_receiver = __commonJS({
             if (payloadLength <= 125) {
               this.#info.payloadLength = payloadLength;
               this.#state = parserStates.READ_DATA;
+              if (!this.#validatePayloadLength()) {
+                return;
+              }
             } else if (payloadLength === 126) {
               this.#state = parserStates.PAYLOADLENGTH_16;
             } else if (payloadLength === 127) {
@@ -17262,6 +17366,9 @@ var require_receiver = __commonJS({
             const buffer = this.consume(2);
             this.#info.payloadLength = buffer.readUInt16BE(0);
             this.#state = parserStates.READ_DATA;
+            if (!this.#validatePayloadLength()) {
+              return;
+            }
           } else if (this.#state === parserStates.PAYLOADLENGTH_64) {
             if (this.#byteOffset < 8) {
               return callback();
@@ -17275,6 +17382,9 @@ var require_receiver = __commonJS({
             }
             this.#info.payloadLength = lower;
             this.#state = parserStates.READ_DATA;
+            if (!this.#validatePayloadLength()) {
+              return;
+            }
           } else if (this.#state === parserStates.READ_DATA) {
             if (this.#byteOffset < this.#info.payloadLength) {
               return callback();
@@ -17285,32 +17395,46 @@ var require_receiver = __commonJS({
               this.#state = parserStates.INFO;
             } else {
               if (!this.#info.compressed) {
-                this.#fragments.push(body);
+                if (!this.writeFragments(body)) {
+                  return;
+                }
+                if (this.#maxPayloadSize > 0 && this.#fragmentsBytes > this.#maxPayloadSize) {
+                  failWebsocketConnectionWithCode(this.ws, 1009, new MessageSizeExceededError().message);
+                  return;
+                }
                 if (!this.#info.fragmented && this.#info.fin) {
-                  const fullMessage = Buffer.concat(this.#fragments);
-                  websocketMessageReceived(this.ws, this.#info.binaryType, fullMessage);
-                  this.#fragments.length = 0;
+                  websocketMessageReceived(this.ws, this.#info.binaryType, this.consumeFragments());
                 }
                 this.#state = parserStates.INFO;
               } else {
-                this.#extensions.get("permessage-deflate").decompress(body, this.#info.fin, (error2, data) => {
-                  if (error2) {
-                    failWebsocketConnection(this.ws, error2.message);
-                    return;
-                  }
-                  this.#fragments.push(data);
-                  if (!this.#info.fin) {
-                    this.#state = parserStates.INFO;
+                this.#extensions.get("permessage-deflate").decompress(
+                  body,
+                  this.#info.fin,
+                  (error2, data) => {
+                    if (error2) {
+                      const code = error2 instanceof MessageSizeExceededError ? 1009 : 1007;
+                      failWebsocketConnectionWithCode(this.ws, code, error2.message);
+                      return;
+                    }
+                    if (!this.writeFragments(data)) {
+                      return;
+                    }
+                    if (this.#maxPayloadSize > 0 && this.#fragmentsBytes > this.#maxPayloadSize) {
+                      failWebsocketConnectionWithCode(this.ws, 1009, new MessageSizeExceededError().message);
+                      return;
+                    }
+                    if (!this.#info.fin) {
+                      this.#state = parserStates.INFO;
+                      this.#loop = true;
+                      this.run(callback);
+                      return;
+                    }
+                    websocketMessageReceived(this.ws, this.#info.binaryType, this.consumeFragments());
                     this.#loop = true;
+                    this.#state = parserStates.INFO;
                     this.run(callback);
-                    return;
                   }
-                  websocketMessageReceived(this.ws, this.#info.binaryType, Buffer.concat(this.#fragments));
-                  this.#loop = true;
-                  this.#state = parserStates.INFO;
-                  this.#fragments.length = 0;
-                  this.run(callback);
-                });
+                );
                 this.#loop = false;
                 break;
               }
@@ -17352,6 +17476,26 @@ var require_receiver = __commonJS({
         }
         this.#byteOffset -= n;
         return buffer;
+      }
+      writeFragments(fragment) {
+        if (this.#maxFragments > 0 && this.#fragments.length === this.#maxFragments) {
+          failWebsocketConnectionWithCode(this.ws, 1008, "Too many message fragments");
+          return false;
+        }
+        this.#fragmentsBytes += fragment.length;
+        this.#fragments.push(fragment);
+        return true;
+      }
+      consumeFragments() {
+        const fragments = this.#fragments;
+        if (fragments.length === 1) {
+          this.#fragmentsBytes = 0;
+          return fragments.shift();
+        }
+        const output = Buffer.concat(fragments, this.#fragmentsBytes);
+        this.#fragments = [];
+        this.#fragmentsBytes = 0;
+        return output;
       }
       parseCloseBody(data) {
         assert(data.length !== 1);
@@ -17564,8 +17708,6 @@ var require_websocket = __commonJS({
       #extensions = "";
       /** @type {SendQueue} */
       #sendQueue;
-      /** @type {{ maxDecompressedMessageSize?: number }} */
-      #options;
       /**
        * @param {string} url
        * @param {string|string[]} protocols
@@ -17609,9 +17751,6 @@ var require_websocket = __commonJS({
           throw new DOMException("Invalid Sec-WebSocket-Protocol value", "SyntaxError");
         }
         this[kWebSocketURL] = new URL(urlRecord.href);
-        this.#options = {
-          maxDecompressedMessageSize: options.maxDecompressedMessageSize
-        };
         const client = environmentSettingsObject.settingsObject;
         this[kController] = establishWebSocketConnection(
           urlRecord,
@@ -17795,7 +17934,13 @@ var require_websocket = __commonJS({
        */
       #onConnectionEstablished(response, parsedExtensions) {
         this[kResponse] = response;
-        const parser = new ByteParser(this, parsedExtensions, this.#options);
+        const webSocketOptions = this[kController]?.dispatcher?.webSocketOptions;
+        const maxFragments = webSocketOptions?.maxFragments;
+        const maxPayloadSize = webSocketOptions?.maxPayloadSize;
+        const parser = new ByteParser(this, parsedExtensions, {
+          maxFragments,
+          maxPayloadSize
+        });
         parser.on("drain", onParserDrain);
         parser.on("error", onParserError.bind(this));
         response.socket.ws = this;
@@ -17870,19 +18015,6 @@ var require_websocket = __commonJS({
       {
         key: "headers",
         converter: webidl.nullableConverter(webidl.converters.HeadersInit)
-      },
-      {
-        key: "maxDecompressedMessageSize",
-        converter: webidl.nullableConverter((V) => {
-          V = webidl.converters["unsigned long long"](V);
-          if (V <= 0) {
-            throw webidl.errors.exception({
-              header: "WebSocket constructor",
-              message: "maxDecompressedMessageSize must be greater than 0"
-            });
-          }
-          return V;
-        })
       }
     ]);
     webidl.converters["DOMString or sequence<DOMString> or WebSocketInit"] = function(V) {
@@ -18625,8 +18757,8 @@ var require_BigSegmentStatusProviderImpl = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var BigSegmentStoreStatusProviderImpl = class {
-      constructor(onRequestStatus) {
-        this.onRequestStatus = onRequestStatus;
+      constructor(_onRequestStatus) {
+        this._onRequestStatus = _onRequestStatus;
       }
       /**
        * Gets the current status of the store, if known.
@@ -18635,7 +18767,7 @@ var require_BigSegmentStatusProviderImpl = __commonJS({
        *   Big Segment store status
        */
       getStatus() {
-        return this.lastStatus;
+        return this._lastStatus;
       }
       /**
        * Gets the current status of the store, querying it if the status has not already been queried.
@@ -18643,33 +18775,32 @@ var require_BigSegmentStatusProviderImpl = __commonJS({
        * @returns a Promise for the status of the store
        */
       async requireStatus() {
-        if (!this.lastStatus) {
-          await this.onRequestStatus();
+        if (!this._lastStatus) {
+          await this._onRequestStatus();
         }
-        return this.lastStatus;
+        return this._lastStatus;
       }
       notify() {
         var _a;
-        if (this.lastStatus) {
-          (_a = this.listener) === null || _a === void 0 ? void 0 : _a.call(this, this.lastStatus);
+        if (this._lastStatus) {
+          (_a = this._listener) === null || _a === void 0 ? void 0 : _a.call(this, this._lastStatus);
         }
       }
       setListener(listener) {
-        this.listener = listener;
+        this._listener = listener;
       }
       setStatus(status) {
-        this.lastStatus = status;
+        this._lastStatus = status;
       }
     };
     exports.default = BigSegmentStoreStatusProviderImpl;
   }
 });
 
-// node_modules/@launchdarkly/js-sdk-common/dist/AttributeReference.js
-var require_AttributeReference = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/AttributeReference.js"(exports) {
+// node_modules/@launchdarkly/js-sdk-common/dist/cjs/index.cjs
+var require_cjs = __commonJS({
+  "node_modules/@launchdarkly/js-sdk-common/dist/cjs/index.cjs"(exports) {
     "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
     function toRefString(value) {
       return `/${value.replace(/~/g, "~0").replace(/\//g, "~1")}`;
     }
@@ -18706,36 +18837,36 @@ var require_AttributeReference = __commonJS({
           this.redactionName = refOrLiteral;
           if (refOrLiteral === "" || refOrLiteral === "/" || !validate2(refOrLiteral)) {
             this.isValid = false;
-            this.components = [];
+            this._components = [];
             return;
           }
           if (isLiteral(refOrLiteral)) {
-            this.components = [refOrLiteral];
+            this._components = [refOrLiteral];
           } else if (refOrLiteral.indexOf("/", 1) < 0) {
-            this.components = [unescape(refOrLiteral.slice(1))];
+            this._components = [unescape(refOrLiteral.slice(1))];
           } else {
-            this.components = getComponents(refOrLiteral);
+            this._components = getComponents(refOrLiteral);
           }
-          if (this.components[0] === "_meta") {
+          if (this._components[0] === "_meta") {
             this.isValid = false;
           } else {
             this.isValid = true;
           }
         } else {
           const literalVal = refOrLiteral;
-          this.components = [literalVal];
+          this._components = [literalVal];
           this.isValid = literalVal !== "";
           this.redactionName = literalVal.startsWith("/") ? toRefString(literalVal) : literalVal;
         }
       }
       get(target) {
-        const { components, isValid } = this;
+        const { _components: components, isValid } = this;
         if (!isValid) {
           return void 0;
         }
         let current = target;
-        for (let index = 0; index < components.length; index += 1) {
-          const component = components[index];
+        for (let index2 = 0; index2 < components.length; index2 += 1) {
+          const component = components[index2];
           if (current !== null && current !== void 0 && // See https://eslint.org/docs/rules/no-prototype-builtins
           Object.prototype.hasOwnProperty.call(current, component) && typeof current === "object" && // We do not want to allow indexing into an array.
           !Array.isArray(current)) {
@@ -18747,29 +18878,22 @@ var require_AttributeReference = __commonJS({
         return current;
       }
       getComponent(depth) {
-        return this.components[depth];
+        return this._components[depth];
       }
       get depth() {
-        return this.components.length;
+        return this._components.length;
       }
       get isKind() {
-        return this.components.length === 1 && this.components[0] === "kind";
+        return this._components.length === 1 && this._components[0] === "kind";
       }
       compare(other) {
-        return this.depth === other.depth && this.components.every((value, index) => value === other.getComponent(index));
+        return this.depth === other.depth && this._components.every((value, index2) => value === other.getComponent(index2));
+      }
+      get components() {
+        return [...this._components];
       }
     };
-    AttributeReference.invalidReference = new AttributeReference("");
-    exports.default = AttributeReference;
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/validators.js
-var require_validators = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/validators.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.TypeValidators = exports.KindValidator = exports.DateValidator = exports.NullableBoolean = exports.Function = exports.StringMatchingRegex = exports.NumberWithMinimum = exports.TypeArray = exports.Type = exports.FactoryOrInstance = void 0;
+    AttributeReference.InvalidReference = new AttributeReference("");
     var FactoryOrInstance = class {
       is(factoryOrInstance) {
         if (Array.isArray(factoryOrInstance)) {
@@ -18783,10 +18907,9 @@ var require_validators = __commonJS({
         return "factory method or object";
       }
     };
-    exports.FactoryOrInstance = FactoryOrInstance;
     var Type = class {
       constructor(typeName, example) {
-        this.typeName = typeName;
+        this._typeName = typeName;
         this.typeOf = typeof example;
       }
       is(u) {
@@ -18796,13 +18919,12 @@ var require_validators = __commonJS({
         return typeof u === this.typeOf;
       }
       getType() {
-        return this.typeName;
+        return this._typeName;
       }
     };
-    exports.Type = Type;
     var TypeArray = class {
       constructor(typeName, example) {
-        this.typeName = typeName;
+        this._typeName = typeName;
         this.typeOf = typeof example;
       }
       is(u) {
@@ -18815,10 +18937,9 @@ var require_validators = __commonJS({
         return false;
       }
       getType() {
-        return this.typeName;
+        return this._typeName;
       }
     };
-    exports.TypeArray = TypeArray;
     var NumberWithMinimum = class extends Type {
       constructor(min) {
         super(`number with minimum value of ${min}`, 0);
@@ -18828,17 +18949,15 @@ var require_validators = __commonJS({
         return typeof u === this.typeOf && u >= this.min;
       }
     };
-    exports.NumberWithMinimum = NumberWithMinimum;
     var StringMatchingRegex = class extends Type {
       constructor(expression) {
         super(`string matching ${expression}`, "");
         this.expression = expression;
       }
       is(u) {
-        return !!u.match(this.expression);
+        return typeof u === "string" && !!u.match(this.expression);
       }
     };
-    exports.StringMatchingRegex = StringMatchingRegex;
     var Function = class {
       is(u) {
         return typeof u === "function";
@@ -18847,7 +18966,6 @@ var require_validators = __commonJS({
         return "function";
       }
     };
-    exports.Function = Function;
     var NullableBoolean = class {
       is(u) {
         return typeof u === "boolean" || typeof u === "undefined" || u === null;
@@ -18856,7 +18974,6 @@ var require_validators = __commonJS({
         return "boolean | undefined | null";
       }
     };
-    exports.NullableBoolean = NullableBoolean;
     var DATE_REGEX = /^\d\d\d\d-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d\d*)?(Z|[-+]\d\d(:\d\d)?)/;
     var DateValidator = class {
       is(u) {
@@ -18866,7 +18983,6 @@ var require_validators = __commonJS({
         return "date";
       }
     };
-    exports.DateValidator = DateValidator;
     var KindValidator = class extends StringMatchingRegex {
       constructor() {
         super(/^(\w|\.|-)+$/);
@@ -18875,7 +18991,20 @@ var require_validators = __commonJS({
         return super.is(u) && u !== "kind";
       }
     };
-    exports.KindValidator = KindValidator;
+    var OneOf = class {
+      constructor(values) {
+        this._values = values;
+      }
+      is(u) {
+        return typeof u === "string" && this._values.includes(u);
+      }
+      getType() {
+        return this._values.join(" | ");
+      }
+    };
+    function isNullish(value) {
+      return value === null || value === void 0;
+    }
     var TypeValidators = class {
       static createTypeArray(typeName, example) {
         return new TypeArray(typeName, example);
@@ -18886,8 +19015,10 @@ var require_validators = __commonJS({
       static stringMatchingRegex(expression) {
         return new StringMatchingRegex(expression);
       }
+      static oneOf(...values) {
+        return new OneOf(values);
+      }
     };
-    exports.TypeValidators = TypeValidators;
     TypeValidators.String = new Type("string", "");
     TypeValidators.Number = new Type("number", 0);
     TypeValidators.ObjectOrFactory = new FactoryOrInstance();
@@ -18898,16 +19029,41 @@ var require_validators = __commonJS({
     TypeValidators.Date = new DateValidator();
     TypeValidators.Kind = new KindValidator();
     TypeValidators.NullableBoolean = new NullableBoolean();
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/Context.js
-var require_Context = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/Context.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var AttributeReference_1 = require_AttributeReference();
-    var validators_1 = require_validators();
+    function isSingleKind(context) {
+      if ("kind" in context) {
+        return TypeValidators.String.is(context.kind) && context.kind !== "multi";
+      }
+      return false;
+    }
+    function isMultiKind(context) {
+      if ("kind" in context) {
+        return TypeValidators.String.is(context.kind) && context.kind === "multi";
+      }
+      return false;
+    }
+    function isLegacyUser(context) {
+      return !("kind" in context) || context.kind === null || context.kind === void 0;
+    }
+    function canonicalize(object, visited = []) {
+      if (object === null || typeof object !== "object") {
+        return JSON.stringify(object);
+      }
+      if (visited.includes(object)) {
+        throw new Error("Cycle detected");
+      }
+      if (Array.isArray(object)) {
+        const values2 = object.map((item) => canonicalize(item, [...visited, object])).map((item) => item === void 0 ? "null" : item);
+        return `[${values2.join(",")}]`;
+      }
+      const values = Object.keys(object).sort().map((key) => {
+        const value = canonicalize(object[key], [...visited, object]);
+        if (value !== void 0) {
+          return `${JSON.stringify(key)}:${value}`;
+        }
+        return void 0;
+      }).filter((item) => item !== void 0);
+      return `{${values.join(",")}}`;
+    }
     var DEFAULT_KIND = "user";
     function encodeKey(key) {
       if (key.includes("%") || key.includes(":")) {
@@ -18915,33 +19071,18 @@ var require_Context = __commonJS({
       }
       return key;
     }
-    function isSingleKind(context) {
-      if ("kind" in context) {
-        return validators_1.TypeValidators.String.is(context.kind) && context.kind !== "multi";
-      }
-      return false;
-    }
-    function isMultiKind(context) {
-      if ("kind" in context) {
-        return validators_1.TypeValidators.String.is(context.kind) && context.kind === "multi";
-      }
-      return false;
-    }
-    function isLegacyUser(context) {
-      return !("kind" in context) || context.kind === null || context.kind === void 0;
-    }
     function isContextCommon(kindOrContext) {
-      return kindOrContext && validators_1.TypeValidators.Object.is(kindOrContext);
+      return kindOrContext && TypeValidators.Object.is(kindOrContext);
     }
     function validKind(kind) {
-      return validators_1.TypeValidators.Kind.is(kind);
+      return TypeValidators.Kind.is(kind);
     }
     function validKey(key) {
-      return validators_1.TypeValidators.String.is(key) && key !== "";
+      return TypeValidators.String.is(key) && key !== "";
     }
     function processPrivateAttributes(privateAttributes, literals = false) {
       if (privateAttributes) {
-        return privateAttributes.map((privateAttribute) => new AttributeReference_1.default(privateAttribute, literals));
+        return privateAttributes.map((privateAttribute) => new AttributeReference(privateAttribute, literals));
       }
       return [];
     }
@@ -18949,7 +19090,12 @@ var require_Context = __commonJS({
       return value !== null && value !== void 0;
     }
     function legacyToSingleKind(user) {
-      const singleKindContext = Object.assign(Object.assign({}, user.custom || []), { kind: "user", key: String(user.key) });
+      const singleKindContext = {
+        // Key was coerced to a string for eval and events, so we can do that up-front.
+        ...user.custom || [],
+        kind: "user",
+        key: String(user.key)
+      };
       if (defined(user.anonymous)) {
         const anonymous = !!user.anonymous;
         delete singleKindContext.anonymous;
@@ -18976,6 +19122,11 @@ var require_Context = __commonJS({
       if (user.country !== null && user.country !== void 0) {
         singleKindContext.country = user.country;
       }
+      if (user.privateAttributeNames !== null && user.privateAttributeNames !== void 0) {
+        singleKindContext._meta = {
+          privateAttributes: user.privateAttributeNames
+        };
+      }
       return singleKindContext;
     }
     var Context = class _Context {
@@ -18987,107 +19138,105 @@ var require_Context = __commonJS({
        * implementation details, so they cannot be free functions.
        */
       constructor(valid, kind, message) {
-        this.isMulti = false;
-        this.isUser = false;
-        this.wasLegacy = false;
-        this.contexts = {};
+        this._isMulti = false;
+        this._isUser = false;
+        this._wasLegacy = false;
+        this._contexts = {};
         this.kind = kind;
         this.valid = valid;
         this.message = message;
       }
-      static contextForError(kind, message) {
+      static _contextForError(kind, message) {
         return new _Context(false, kind, message);
       }
-      static getValueFromContext(reference, context) {
+      static _getValueFromContext(reference, context) {
         if (!context || !reference.isValid) {
           return void 0;
         }
         if (reference.depth === 1 && reference.getComponent(0) === "anonymous") {
-          return !!(context === null || context === void 0 ? void 0 : context.anonymous);
+          return !!context?.anonymous;
         }
         return reference.get(context);
       }
-      contextForKind(kind) {
-        if (this.isMulti) {
-          return this.contexts[kind];
+      _contextForKind(kind) {
+        if (this._isMulti) {
+          return this._contexts[kind];
         }
         if (this.kind === kind) {
-          return this.context;
+          return this._context;
         }
         return void 0;
       }
-      static fromMultiKindContext(context) {
+      static _fromMultiKindContext(context) {
         const kinds = Object.keys(context).filter((key) => key !== "kind");
         const kindsValid = kinds.every(validKind);
         if (!kinds.length) {
-          return _Context.contextForError("multi", "A multi-kind context must contain at least one kind");
+          return _Context._contextForError("multi", "A multi-kind context must contain at least one kind");
         }
         if (!kindsValid) {
-          return _Context.contextForError("multi", "Context contains invalid kinds");
+          return _Context._contextForError("multi", "Context contains invalid kinds");
         }
         const privateAttributes = {};
         let contextsAreObjects = true;
         const contexts = kinds.reduce((acc, kind) => {
-          var _a;
           const singleContext = context[kind];
           if (isContextCommon(singleContext)) {
             acc[kind] = singleContext;
-            privateAttributes[kind] = processPrivateAttributes((_a = singleContext._meta) === null || _a === void 0 ? void 0 : _a.privateAttributes);
+            privateAttributes[kind] = processPrivateAttributes(singleContext._meta?.privateAttributes);
           } else {
             contextsAreObjects = false;
           }
           return acc;
         }, {});
         if (!contextsAreObjects) {
-          return _Context.contextForError("multi", "Context contained contexts that were not objects");
+          return _Context._contextForError("multi", "Context contained contexts that were not objects");
         }
         if (!Object.values(contexts).every((part) => validKey(part.key))) {
-          return _Context.contextForError("multi", "Context contained invalid keys");
+          return _Context._contextForError("multi", "Context contained invalid keys");
         }
         if (kinds.length === 1) {
           const kind = kinds[0];
           const created2 = new _Context(true, kind);
-          created2.context = contexts[kind];
-          created2.privateAttributeReferences = privateAttributes;
-          created2.isUser = kind === "user";
+          created2._context = { ...contexts[kind], kind };
+          created2._privateAttributeReferences = privateAttributes;
+          created2._isUser = kind === "user";
           return created2;
         }
         const created = new _Context(true, context.kind);
-        created.contexts = contexts;
-        created.privateAttributeReferences = privateAttributes;
-        created.isMulti = true;
+        created._contexts = contexts;
+        created._privateAttributeReferences = privateAttributes;
+        created._isMulti = true;
         return created;
       }
-      static fromSingleKindContext(context) {
-        var _a;
+      static _fromSingleKindContext(context) {
         const { key, kind } = context;
         const kindValid = validKind(kind);
         const keyValid = validKey(key);
         if (!kindValid) {
-          return _Context.contextForError(kind !== null && kind !== void 0 ? kind : "unknown", "The kind was not valid for the context");
+          return _Context._contextForError(kind ?? "unknown", "The kind was not valid for the context");
         }
         if (!keyValid) {
-          return _Context.contextForError(kind, "The key for the context was not valid");
+          return _Context._contextForError(kind, "The key for the context was not valid");
         }
-        const privateAttributeReferences = processPrivateAttributes((_a = context._meta) === null || _a === void 0 ? void 0 : _a.privateAttributes);
+        const privateAttributeReferences = processPrivateAttributes(context._meta?.privateAttributes);
         const created = new _Context(true, kind);
-        created.isUser = kind === "user";
-        created.context = context;
-        created.privateAttributeReferences = {
+        created._isUser = kind === "user";
+        created._context = context;
+        created._privateAttributeReferences = {
           [kind]: privateAttributeReferences
         };
         return created;
       }
-      static fromLegacyUser(context) {
+      static _fromLegacyUser(context) {
         const keyValid = context.key !== void 0 && context.key !== null;
         if (!keyValid) {
-          return _Context.contextForError("user", "The key for the context was not valid");
+          return _Context._contextForError("user", "The key for the context was not valid");
         }
         const created = new _Context(true, "user");
-        created.isUser = true;
-        created.wasLegacy = true;
-        created.context = legacyToSingleKind(context);
-        created.privateAttributeReferences = {
+        created._isUser = true;
+        created._wasLegacy = true;
+        created._context = legacyToSingleKind(context);
+        created._privateAttributeReferences = {
           user: processPrivateAttributes(context.privateAttributeNames, true)
         };
         return created;
@@ -19100,18 +19249,41 @@ var require_Context = __commonJS({
        */
       static fromLDContext(context) {
         if (!context) {
-          return _Context.contextForError("unknown", "No context specified. Returning default value");
+          return _Context._contextForError("unknown", "No context specified. Returning default value");
         }
         if (isSingleKind(context)) {
-          return _Context.fromSingleKindContext(context);
+          return _Context._fromSingleKindContext(context);
         }
         if (isMultiKind(context)) {
-          return _Context.fromMultiKindContext(context);
+          return _Context._fromMultiKindContext(context);
         }
         if (isLegacyUser(context)) {
-          return _Context.fromLegacyUser(context);
+          return _Context._fromLegacyUser(context);
         }
-        return _Context.contextForError("unknown", "Context was not of a valid kind");
+        return _Context._contextForError("unknown", "Context was not of a valid kind");
+      }
+      /**
+       * Creates a {@link LDContext} from a {@link Context}.
+       * @param context to be converted
+       * @returns an {@link LDContext} if input was valid, otherwise undefined
+       */
+      static toLDContext(context) {
+        if (!context.valid) {
+          return void 0;
+        }
+        const contexts = context.getContexts();
+        if (!context._isMulti) {
+          return contexts[0][1];
+        }
+        const result = {
+          kind: "multi"
+        };
+        contexts.forEach((kindAndContext) => {
+          const kind = kindAndContext[0];
+          const nestedContext = kindAndContext[1];
+          result[kind] = nestedContext;
+        });
+        return result;
       }
       /**
        * Attempt to get a value for the given context kind using the given reference.
@@ -19123,7 +19295,7 @@ var require_Context = __commonJS({
         if (reference.isKind) {
           return this.kinds;
         }
-        return _Context.getValueFromContext(reference, this.contextForKind(kind));
+        return _Context._getValueFromContext(reference, this._contextForKind(kind));
       }
       /**
        * Attempt to get a key for the specified kind.
@@ -19131,33 +19303,32 @@ var require_Context = __commonJS({
        * @returns The key for the specified kind, or undefined.
        */
       key(kind = DEFAULT_KIND) {
-        var _a;
-        return (_a = this.contextForKind(kind)) === null || _a === void 0 ? void 0 : _a.key;
+        return this._contextForKind(kind)?.key;
       }
       /**
        * True if this is a multi-kind context.
        */
       get isMultiKind() {
-        return this.isMulti;
+        return this._isMulti;
       }
       /**
        * Get the canonical key for this context.
        */
       get canonicalKey() {
-        if (this.isUser) {
-          return this.context.key;
+        if (this._isUser) {
+          return this._context.key;
         }
-        if (this.isMulti) {
-          return Object.keys(this.contexts).sort().map((key) => `${key}:${encodeKey(this.contexts[key].key)}`).join(":");
+        if (this._isMulti) {
+          return Object.keys(this._contexts).sort().map((key) => `${key}:${encodeKey(this._contexts[key].key)}`).join(":");
         }
-        return `${this.kind}:${encodeKey(this.context.key)}`;
+        return `${this.kind}:${encodeKey(this._context.key)}`;
       }
       /**
        * Get the kinds of this context.
        */
       get kinds() {
-        if (this.isMulti) {
-          return Object.keys(this.contexts);
+        if (this._isMulti) {
+          return Object.keys(this._contexts);
         }
         return [this.kind];
       }
@@ -19165,13 +19336,13 @@ var require_Context = __commonJS({
        * Get the kinds, and their keys, for this context.
        */
       get kindsAndKeys() {
-        if (this.isMulti) {
-          return Object.entries(this.contexts).reduce((acc, [kind, context]) => {
+        if (this._isMulti) {
+          return Object.entries(this._contexts).reduce((acc, [kind, context]) => {
             acc[kind] = context.key;
             return acc;
           }, {});
         }
-        return { [this.kind]: this.context.key };
+        return { [this.kind]: this._context.key };
       }
       /**
        * Get the attribute references.
@@ -19179,8 +19350,7 @@ var require_Context = __commonJS({
        * @param kind
        */
       privateAttributes(kind) {
-        var _a;
-        return ((_a = this.privateAttributeReferences) === null || _a === void 0 ? void 0 : _a[kind]) || [];
+        return this._privateAttributeReferences?.[kind] || [];
       }
       /**
        * Get the underlying context objects from this context.
@@ -19190,27 +19360,37 @@ var require_Context = __commonJS({
        * The returned objects should not be modified.
        */
       getContexts() {
-        if (this.isMulti) {
-          return Object.entries(this.contexts);
+        if (this._isMulti) {
+          return Object.entries(this._contexts);
         }
-        return [[this.kind, this.context]];
+        return [[this.kind, this._context]];
       }
       get legacy() {
-        return this.wasLegacy;
+        return this._wasLegacy;
+      }
+      /**
+       * Get the serialized canonical JSON for this context. This is not filtered for use in events.
+       *
+       * This method will cache the result.
+       *
+       * @returns The serialized canonical JSON or undefined if it cannot be serialized.
+       */
+      canonicalUnfilteredJson() {
+        if (!this.valid) {
+          return void 0;
+        }
+        if (this._cachedCanonicalJson) {
+          return this._cachedCanonicalJson;
+        }
+        try {
+          this._cachedCanonicalJson = canonicalize(_Context.toLDContext(this));
+        } catch {
+        }
+        return this._cachedCanonicalJson;
       }
     };
-    Context.userKind = DEFAULT_KIND;
-    exports.default = Context;
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/ContextFilter.js
-var require_ContextFilter = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/ContextFilter.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var AttributeReference_1 = require_AttributeReference();
-    var protectedAttributes = ["key", "kind", "_meta", "anonymous"].map((str) => new AttributeReference_1.default(str, true));
+    Context.UserKind = DEFAULT_KIND;
+    var protectedAttributes = ["key", "kind", "_meta", "anonymous"].map((str) => new AttributeReference(str, true));
     var legacyTopLevelCopyAttributes = [
       "name",
       "ip",
@@ -19221,7 +19401,7 @@ var require_ContextFilter = __commonJS({
       "country"
     ];
     function compare(a, b) {
-      return a.depth === b.length && b.every((value, index) => value === a.getComponent(index));
+      return a.depth === b.length && b.every((value, index2) => value === a.getComponent(index2));
     }
     function cloneWithRedactions(target, references) {
       const stack = [];
@@ -19264,28 +19444,29 @@ var require_ContextFilter = __commonJS({
       return { cloned, excluded: excluded.sort() };
     }
     var ContextFilter = class {
-      constructor(allAttributesPrivate, privateAttributes) {
-        this.allAttributesPrivate = allAttributesPrivate;
-        this.privateAttributes = privateAttributes;
+      constructor(_allAttributesPrivate, _privateAttributes) {
+        this._allAttributesPrivate = _allAttributesPrivate;
+        this._privateAttributes = _privateAttributes;
       }
-      filter(context) {
+      filter(context, redactAnonymousAttributes = false) {
         const contexts = context.getContexts();
         if (contexts.length === 1) {
-          return this.filterSingleKind(context, contexts[0][1], contexts[0][0]);
+          return this._filterSingleKind(context, contexts[0][1], contexts[0][0], redactAnonymousAttributes);
         }
         const filteredMulti = {
           kind: "multi"
         };
         contexts.forEach(([kind, single]) => {
-          filteredMulti[kind] = this.filterSingleKind(context, single, kind);
+          filteredMulti[kind] = this._filterSingleKind(context, single, kind, redactAnonymousAttributes);
         });
         return filteredMulti;
       }
-      getAttributesToFilter(context, single, kind) {
-        return (this.allAttributesPrivate ? Object.keys(single).map((k) => new AttributeReference_1.default(k, true)) : [...this.privateAttributes, ...context.privateAttributes(kind)]).filter((attr) => !protectedAttributes.some((protectedAttr) => protectedAttr.compare(attr)));
+      _getAttributesToFilter(context, single, kind, redactAllAttributes) {
+        return (redactAllAttributes ? Object.keys(single).map((k) => new AttributeReference(k, true)) : [...this._privateAttributes, ...context.privateAttributes(kind)]).filter((attr) => !protectedAttributes.some((protectedAttr) => protectedAttr.compare(attr)));
       }
-      filterSingleKind(context, single, kind) {
-        const { cloned, excluded } = cloneWithRedactions(single, this.getAttributesToFilter(context, single, kind));
+      _filterSingleKind(context, single, kind, redactAnonymousAttributes) {
+        const redactAllAttributes = this._allAttributesPrivate || redactAnonymousAttributes && single.anonymous === true;
+        const { cloned, excluded } = cloneWithRedactions(single, this._getAttributesToFilter(context, single, kind, redactAllAttributes));
         if (context.legacy) {
           legacyTopLevelCopyAttributes.forEach((name) => {
             if (name in cloned) {
@@ -19308,367 +19489,516 @@ var require_ContextFilter = __commonJS({
         return cloned;
       }
     };
-    exports.default = ContextFilter;
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/api/context/LDContextCommon.js
-var require_LDContextCommon = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/api/context/LDContextCommon.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/api/context/LDContextMeta.js
-var require_LDContextMeta = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/api/context/LDContextMeta.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/api/context/LDMultiKindContext.js
-var require_LDMultiKindContext = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/api/context/LDMultiKindContext.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/api/context/LDSingleKindContext.js
-var require_LDSingleKindContext = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/api/context/LDSingleKindContext.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/api/context/LDUser.js
-var require_LDUser = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/api/context/LDUser.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/api/context/LDContext.js
-var require_LDContext = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/api/context/LDContext.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/api/context/index.js
-var require_context = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/api/context/index.js"(exports) {
-    "use strict";
-    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      var desc = Object.getOwnPropertyDescriptor(m, k);
-      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-        desc = { enumerable: true, get: function() {
-          return m[k];
-        } };
+    var MAX_RETRY_DELAY = 30 * 1e3;
+    var JITTER_RATIO = 0.5;
+    var DefaultBackoff = class {
+      constructor(initialRetryDelayMillis, _retryResetIntervalMillis, _random = Math.random) {
+        this._retryResetIntervalMillis = _retryResetIntervalMillis;
+        this._random = _random;
+        this._retryCount = 0;
+        this._initialRetryDelayMillis = Math.max(1, initialRetryDelayMillis);
+        this._maxExponent = Math.ceil(Math.log2(MAX_RETRY_DELAY / this._initialRetryDelayMillis));
       }
-      Object.defineProperty(o, k2, desc);
-    }) : (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      o[k2] = m[k];
-    }));
-    var __exportStar = exports && exports.__exportStar || function(m, exports2) {
-      for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports2, p)) __createBinding(exports2, m, p);
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    __exportStar(require_LDContextCommon(), exports);
-    __exportStar(require_LDContextMeta(), exports);
-    __exportStar(require_LDMultiKindContext(), exports);
-    __exportStar(require_LDSingleKindContext(), exports);
-    __exportStar(require_LDUser(), exports);
-    __exportStar(require_LDContext(), exports);
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/api/logging/BasicLoggerOptions.js
-var require_BasicLoggerOptions = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/api/logging/BasicLoggerOptions.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/api/logging/LDLogger.js
-var require_LDLogger = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/api/logging/LDLogger.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/api/logging/LDLogLevel.js
-var require_LDLogLevel = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/api/logging/LDLogLevel.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/api/logging/index.js
-var require_logging = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/api/logging/index.js"(exports) {
-    "use strict";
-    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      var desc = Object.getOwnPropertyDescriptor(m, k);
-      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-        desc = { enumerable: true, get: function() {
-          return m[k];
-        } };
+      _backoff() {
+        const exponent = Math.min(this._retryCount, this._maxExponent);
+        const delay = this._initialRetryDelayMillis * 2 ** exponent;
+        return Math.min(delay, MAX_RETRY_DELAY);
       }
-      Object.defineProperty(o, k2, desc);
-    }) : (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      o[k2] = m[k];
-    }));
-    var __exportStar = exports && exports.__exportStar || function(m, exports2) {
-      for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports2, p)) __createBinding(exports2, m, p);
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    __exportStar(require_BasicLoggerOptions(), exports);
-    __exportStar(require_LDLogger(), exports);
-    __exportStar(require_LDLogLevel(), exports);
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/api/data/LDEvaluationDetail.js
-var require_LDEvaluationDetail = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/api/data/LDEvaluationDetail.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/api/data/LDEvaluationReason.js
-var require_LDEvaluationReason = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/api/data/LDEvaluationReason.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/api/data/LDFlagSet.js
-var require_LDFlagSet = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/api/data/LDFlagSet.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/api/data/LDFlagValue.js
-var require_LDFlagValue = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/api/data/LDFlagValue.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/api/data/index.js
-var require_data = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/api/data/index.js"(exports) {
-    "use strict";
-    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      var desc = Object.getOwnPropertyDescriptor(m, k);
-      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-        desc = { enumerable: true, get: function() {
-          return m[k];
-        } };
+      _jitter(computedDelayMillis) {
+        return computedDelayMillis - Math.trunc(this._random() * JITTER_RATIO * computedDelayMillis);
       }
-      Object.defineProperty(o, k2, desc);
-    }) : (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      o[k2] = m[k];
-    }));
-    var __exportStar = exports && exports.__exportStar || function(m, exports2) {
-      for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports2, p)) __createBinding(exports2, m, p);
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    __exportStar(require_LDEvaluationDetail(), exports);
-    __exportStar(require_LDEvaluationReason(), exports);
-    __exportStar(require_LDFlagSet(), exports);
-    __exportStar(require_LDFlagValue(), exports);
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/api/options/index.js
-var require_options = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/api/options/index.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/api/platform/Encoding.js
-var require_Encoding = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/api/platform/Encoding.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/api/platform/Crypto.js
-var require_Crypto = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/api/platform/Crypto.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/api/platform/Filesystem.js
-var require_Filesystem = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/api/platform/Filesystem.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/api/platform/Info.js
-var require_Info = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/api/platform/Info.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/api/platform/Platform.js
-var require_Platform = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/api/platform/Platform.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/api/platform/Requests.js
-var require_Requests = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/api/platform/Requests.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/api/platform/EventSource.js
-var require_EventSource = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/api/platform/EventSource.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/api/platform/index.js
-var require_platform = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/api/platform/index.js"(exports) {
-    "use strict";
-    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      var desc = Object.getOwnPropertyDescriptor(m, k);
-      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-        desc = { enumerable: true, get: function() {
-          return m[k];
-        } };
+      /**
+       * This function should be called when a connection attempt is successful.
+       *
+       * @param timeStampMs The time of the success. Used primarily for testing, when not provided
+       * the current time is used.
+       */
+      success(timeStampMs = Date.now()) {
+        this._activeSince = timeStampMs;
       }
-      Object.defineProperty(o, k2, desc);
-    }) : (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      o[k2] = m[k];
-    }));
-    var __exportStar = exports && exports.__exportStar || function(m, exports2) {
-      for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports2, p)) __createBinding(exports2, m, p);
+      /**
+       * This function should be called when a connection fails. It returns the a delay, in
+       * milliseconds, after which a reconnection attempt should be made.
+       *
+       * @param timeStampMs The time of the success. Used primarily for testing, when not provided
+       * the current time is used.
+       * @returns The delay before the next connection attempt.
+       */
+      fail(timeStampMs = Date.now()) {
+        if (this._activeSince !== void 0 && timeStampMs - this._activeSince > this._retryResetIntervalMillis) {
+          this._retryCount = 0;
+        }
+        this._activeSince = void 0;
+        const delay = this._jitter(this._backoff());
+        this._retryCount += 1;
+        return delay;
+      }
     };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    __exportStar(require_Encoding(), exports);
-    __exportStar(require_Crypto(), exports);
-    __exportStar(require_Filesystem(), exports);
-    __exportStar(require_Info(), exports);
-    __exportStar(require_Platform(), exports);
-    __exportStar(require_Requests(), exports);
-    __exportStar(require_EventSource(), exports);
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/api/subsystem/LDEventSender.js
-var require_LDEventSender = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/api/subsystem/LDEventSender.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.LDDeliveryStatus = exports.LDEventType = void 0;
+    var CallbackHandler = class {
+      constructor(_dataCallback, _statusCallback) {
+        this._dataCallback = _dataCallback;
+        this._statusCallback = _statusCallback;
+        this._disabled = false;
+      }
+      disable() {
+        this._disabled = true;
+      }
+      async dataHandler(basis, data) {
+        if (this._disabled) {
+          return;
+        }
+        this._dataCallback(basis, data);
+      }
+      async statusHandler(status, err) {
+        if (this._disabled) {
+          return;
+        }
+        this._statusCallback(status, err);
+      }
+    };
+    var DataSourceState;
+    (function(DataSourceState2) {
+      DataSourceState2[DataSourceState2["Valid"] = 0] = "Valid";
+      DataSourceState2[DataSourceState2["Initializing"] = 1] = "Initializing";
+      DataSourceState2[DataSourceState2["Interrupted"] = 2] = "Interrupted";
+      DataSourceState2[DataSourceState2["Closed"] = 3] = "Closed";
+    })(DataSourceState || (DataSourceState = {}));
+    var DataSourceList = class {
+      /**
+       * @param circular whether to loop off the end of the list back to the start
+       * @param initialList of content
+       */
+      constructor(circular, initialList) {
+        this._list = initialList ? [...initialList] : [];
+        this._circular = circular;
+        this._pos = 0;
+      }
+      /**
+       * Returns the current head and then iterates.
+       */
+      next() {
+        if (this._list.length <= 0 || this._pos >= this._list.length) {
+          return void 0;
+        }
+        const result = this._list[this._pos];
+        if (this._circular) {
+          this._pos = (this._pos + 1) % this._list.length;
+        } else {
+          this._pos += 1;
+        }
+        return result;
+      }
+      /**
+       * Replaces all elements with the provided list and resets the position of head to the start.
+       *
+       * @param input that will replace existing list
+       */
+      replace(input) {
+        this._list = [...input];
+        this._pos = 0;
+      }
+      /**
+       * Removes the provided element from the list. If the removed element was the head, head moves to next. Consider head may be undefined if list is empty after removal.
+       *
+       * @param element to remove
+       * @returns true if element was removed
+       */
+      remove(element) {
+        const index2 = this._list.indexOf(element);
+        if (index2 < 0) {
+          return false;
+        }
+        this._list.splice(index2, 1);
+        if (this._list.length > 0) {
+          if (index2 < this._pos) {
+            this._pos -= 1;
+          }
+          if (this._circular && this._pos > this._list.length - 1) {
+            this._pos = 0;
+          }
+        }
+        return true;
+      }
+      /**
+       * Reset the head position to the start of the list.
+       */
+      reset() {
+        this._pos = 0;
+      }
+      /**
+       * @returns the current head position in the list, 0 indexed.
+       */
+      pos() {
+        return this._pos;
+      }
+      /**
+       * @returns the current length of the list
+       */
+      length() {
+        return this._list.length;
+      }
+      /**
+       * Clears the list and resets head.
+       */
+      clear() {
+        this._list = [];
+        this._pos = 0;
+      }
+    };
+    var LDFileDataSourceError = class extends Error {
+      constructor(message) {
+        super(message);
+        this.name = "LaunchDarklyFileDataSourceError";
+      }
+    };
+    var LDPollingError = class extends Error {
+      constructor(kind, message, status, recoverable = true) {
+        super(message);
+        this.kind = kind;
+        this.status = status;
+        this.name = "LaunchDarklyPollingError";
+        this.recoverable = recoverable;
+      }
+    };
+    var LDStreamingError = class extends Error {
+      constructor(kind, message, code, recoverable = true) {
+        super(message);
+        this.kind = kind;
+        this.code = code;
+        this.name = "LaunchDarklyStreamingError";
+        this.recoverable = recoverable;
+      }
+    };
+    var LDFlagDeliveryFallbackError = class extends Error {
+      constructor(kind, message, code) {
+        super(message);
+        this.kind = kind;
+        this.code = code;
+        this.name = "LDFlagDeliveryFallbackError";
+        this.recoverable = false;
+      }
+    };
+    var DEFAULT_FALLBACK_TIME_MS = 2 * 60 * 1e3;
+    var DEFAULT_RECOVERY_TIME_MS = 5 * 60 * 1e3;
+    var CompositeDataSource = class {
+      /**
+       * @param initializers factories to create {@link DataSystemInitializer}s, in priority order.
+       * @param synchronizers factories to create  {@link DataSystemSynchronizer}s, in priority order.
+       * @param fdv1Synchronizers factories to fallback to if we need to fallback to FDv1.
+       * @param _logger for logging
+       * @param _transitionConditions to control automated transition between datasources. Typically only used for testing.
+       * @param _backoff to control delay between transitions. Typically only used for testing.
+       */
+      constructor(initializers, synchronizers, fdv1Synchronizers, _logger, _transitionConditions = {
+        [DataSourceState.Valid]: {
+          durationMS: DEFAULT_RECOVERY_TIME_MS,
+          transition: "recover"
+        },
+        [DataSourceState.Interrupted]: {
+          durationMS: DEFAULT_FALLBACK_TIME_MS,
+          transition: "fallback"
+        }
+      }, _backoff = new DefaultBackoff(1e3, 3e4)) {
+        this._logger = _logger;
+        this._transitionConditions = _transitionConditions;
+        this._backoff = _backoff;
+        this._fdv1FallbackEngaged = false;
+        this._stopped = true;
+        this._cancelTokens = [];
+        this._cancellableDelay = (delayMS) => {
+          let timeout;
+          const promise = new Promise((res, _) => {
+            timeout = setTimeout(res, delayMS);
+          });
+          return {
+            promise,
+            cancel() {
+              if (timeout) {
+                clearTimeout(timeout);
+                timeout = void 0;
+              }
+            }
+          };
+        };
+        this._externalTransitionPromise = new Promise((resolveTransition) => {
+          this._externalTransitionResolve = resolveTransition;
+        });
+        this._initPhaseActive = initializers.length > 0;
+        this._initFactories = new DataSourceList(false, initializers);
+        this._syncFactories = new DataSourceList(true, synchronizers);
+        this._fdv1Synchronizers = new DataSourceList(true, fdv1Synchronizers);
+      }
+      async start(dataCallback, statusCallback, selectorGetter) {
+        if (!this._stopped) {
+          this._logger?.info("CompositeDataSource already running. Ignoring call to start.");
+          return;
+        }
+        this._stopped = false;
+        this._logger?.debug(`CompositeDataSource starting with (${this._initFactories.length()} initializers, ${this._syncFactories.length()} synchronizers).`);
+        const sanitizedStatusCallback = this._wrapStatusCallbackWithSanitizer(statusCallback);
+        sanitizedStatusCallback(DataSourceState.Initializing);
+        let lastTransition;
+        while (true) {
+          const { dataSource: currentDS, isPrimary, cullDSFactory } = this._pickDataSource(lastTransition);
+          const internalTransitionPromise = new Promise((transitionResolve) => {
+            if (currentDS) {
+              let lastState;
+              let cancelScheduledTransition = () => {
+              };
+              const engageFDv1Fallback = (statusToReport, err) => {
+                if (this._fdv1Synchronizers.length() > 0) {
+                  this._logger?.warn(`Falling back to FDv1`);
+                } else {
+                  this._logger?.warn(`FDv1 fallback was requested but no FDv1 fallback synchronizer is configured; data source will terminate`);
+                }
+                this._fdv1FallbackEngaged = true;
+                this._syncFactories = this._fdv1Synchronizers;
+                sanitizedStatusCallback(statusToReport, err);
+                this._consumeCancelToken(cancelScheduledTransition);
+                transitionResolve({ transition: "switchToSync", err });
+              };
+              const callbackHandler = new CallbackHandler((basis, data) => {
+                this._backoff.success();
+                dataCallback(basis, data);
+                if (data?.fallbackToFDv1 && !this._fdv1FallbackEngaged) {
+                  callbackHandler.disable();
+                  engageFDv1Fallback(DataSourceState.Interrupted, void 0);
+                  return;
+                }
+                if (basis && this._initPhaseActive) {
+                  callbackHandler.disable();
+                  this._consumeCancelToken(cancelScheduledTransition);
+                  sanitizedStatusCallback(DataSourceState.Interrupted);
+                  transitionResolve({ transition: "switchToSync" });
+                }
+              }, (state, err) => {
+                this._logger?.debug(`CompositeDataSource received state ${state} from underlying data source.  Err is ${err}`);
+                if (err || state === DataSourceState.Closed) {
+                  callbackHandler.disable();
+                  if (err?.recoverable === false) {
+                    this._logger?.debug(`Culling data source due to err ${err}`);
+                    cullDSFactory?.();
+                  }
+                  if (err instanceof LDFlagDeliveryFallbackError && !this._fdv1FallbackEngaged) {
+                    engageFDv1Fallback(state, err);
+                    return;
+                  }
+                  sanitizedStatusCallback(state, err);
+                  this._consumeCancelToken(cancelScheduledTransition);
+                  transitionResolve({ transition: "fallback", err });
+                } else {
+                  sanitizedStatusCallback(state);
+                  if (state !== lastState) {
+                    lastState = state;
+                    this._consumeCancelToken(cancelScheduledTransition);
+                    const condition = this._lookupTransitionCondition(state, isPrimary);
+                    if (condition) {
+                      const { promise, cancel } = this._cancellableDelay(condition.durationMS);
+                      cancelScheduledTransition = cancel;
+                      this._cancelTokens.push(cancelScheduledTransition);
+                      promise.then(() => {
+                        this._consumeCancelToken(cancel);
+                        callbackHandler.disable();
+                        sanitizedStatusCallback(DataSourceState.Interrupted);
+                        transitionResolve({ transition: condition.transition });
+                      });
+                    }
+                  }
+                }
+              });
+              currentDS.start((basis, data) => callbackHandler.dataHandler(basis, data), (status, err) => callbackHandler.statusHandler(status, err), selectorGetter);
+            } else {
+              transitionResolve({
+                transition: "stop",
+                err: {
+                  name: "ExhaustedDataSources",
+                  message: `CompositeDataSource has exhausted all configured initializers and synchronizers.`
+                }
+              });
+            }
+          });
+          let transitionRequest = await Promise.race([
+            internalTransitionPromise,
+            this._externalTransitionPromise
+          ]);
+          currentDS?.stop();
+          const isInitialFDv1Engagement = transitionRequest.transition === "switchToSync" && transitionRequest.err instanceof LDFlagDeliveryFallbackError;
+          if (transitionRequest.err && transitionRequest.transition !== "stop" && !isInitialFDv1Engagement) {
+            const delay = this._initPhaseActive ? 0 : this._backoff.fail();
+            const { promise, cancel: cancelDelay } = this._cancellableDelay(delay);
+            this._cancelTokens.push(cancelDelay);
+            const delayedTransition = promise.then(() => {
+              this._consumeCancelToken(cancelDelay);
+              return transitionRequest;
+            });
+            transitionRequest = await Promise.race([
+              delayedTransition,
+              this._externalTransitionPromise
+            ]);
+            this._consumeCancelToken(cancelDelay);
+          }
+          lastTransition = transitionRequest.transition;
+          if (transitionRequest.transition === "stop") {
+            statusCallback(DataSourceState.Closed, transitionRequest.err);
+            break;
+          }
+        }
+        this._reset();
+      }
+      async stop() {
+        this._cancelTokens.forEach((cancel) => cancel());
+        this._cancelTokens = [];
+        this._externalTransitionResolve?.({ transition: "stop" });
+      }
+      _reset() {
+        this._stopped = true;
+        this._initPhaseActive = this._initFactories.length() > 0;
+        this._initFactories.reset();
+        this._syncFactories.reset();
+        this._fdv1Synchronizers.reset();
+        this._fdv1FallbackEngaged = false;
+        this._externalTransitionPromise = new Promise((tr) => {
+          this._externalTransitionResolve = tr;
+        });
+      }
+      /**
+       * Determines the next datasource and returns that datasource as well as a closure to cull the
+       * datasource from the datasource lists. One example where the cull closure is invoked is if the
+       * datasource has an unrecoverable error.
+       */
+      _pickDataSource(transition) {
+        let factory;
+        let isPrimary;
+        switch (transition) {
+          case "switchToSync":
+            this._initPhaseActive = false;
+            this._syncFactories.reset();
+            isPrimary = this._syncFactories.pos() === 0;
+            factory = this._syncFactories.next();
+            break;
+          case "recover":
+            if (this._initPhaseActive) {
+              this._initFactories.reset();
+              isPrimary = this._initFactories.pos() === 0;
+              factory = this._initFactories.next();
+            } else {
+              this._syncFactories.reset();
+              isPrimary = this._syncFactories.pos() === 0;
+              factory = this._syncFactories.next();
+            }
+            break;
+          case "fallback":
+          default:
+            if (this._initPhaseActive && this._initFactories.pos() >= this._initFactories.length()) {
+              this._initPhaseActive = false;
+              this._syncFactories.reset();
+            }
+            if (this._initPhaseActive) {
+              isPrimary = this._initFactories.pos() === 0;
+              factory = this._initFactories.next();
+            } else {
+              isPrimary = this._syncFactories.pos() === 0;
+              factory = this._syncFactories.next();
+            }
+            break;
+        }
+        if (!factory) {
+          return { dataSource: void 0, isPrimary, cullDSFactory: void 0 };
+        }
+        return {
+          dataSource: factory(),
+          isPrimary,
+          cullDSFactory: () => {
+            if (factory) {
+              this._syncFactories.remove(factory);
+            }
+          }
+        };
+      }
+      /**
+       * @returns the transition condition for the provided data source state or undefined
+       * if there is no transition condition
+       */
+      _lookupTransitionCondition(state, excludeRecover) {
+        const condition = this._transitionConditions[state];
+        if (excludeRecover && condition?.transition === "recover") {
+          return void 0;
+        }
+        return condition;
+      }
+      _consumeCancelToken(cancel) {
+        cancel();
+        const index2 = this._cancelTokens.indexOf(cancel, 0);
+        if (index2 > -1) {
+          this._cancelTokens.splice(index2, 1);
+        }
+      }
+      /**
+       * This wrapper will ensure the following:
+       *
+       * Don't report DataSourceState.Initializing except as first status callback.
+       * Map underlying DataSourceState.Closed to interrupted.
+       * Don't report the same status and error twice in a row.
+       */
+      _wrapStatusCallbackWithSanitizer(statusCallback) {
+        let alreadyReportedInitializing = false;
+        let lastStatus;
+        let lastErr;
+        return (status, err) => {
+          let sanitized = status;
+          if (status === DataSourceState.Closed) {
+            sanitized = DataSourceState.Interrupted;
+          }
+          if (sanitized === lastStatus && err === lastErr) {
+            return;
+          }
+          if (sanitized === DataSourceState.Initializing) {
+            if (alreadyReportedInitializing) {
+              return;
+            }
+            alreadyReportedInitializing = true;
+          }
+          lastStatus = sanitized;
+          lastErr = err;
+          statusCallback(sanitized, err);
+        };
+      }
+    };
+    exports.DataSourceErrorKind = void 0;
+    (function(DataSourceErrorKind) {
+      DataSourceErrorKind["Unknown"] = "UNKNOWN";
+      DataSourceErrorKind["NetworkError"] = "NETWORK_ERROR";
+      DataSourceErrorKind["ErrorResponse"] = "ERROR_RESPONSE";
+      DataSourceErrorKind["InvalidData"] = "INVALID_DATA";
+    })(exports.DataSourceErrorKind || (exports.DataSourceErrorKind = {}));
+    exports.AutoEnvAttributes = void 0;
+    (function(AutoEnvAttributes) {
+      AutoEnvAttributes[AutoEnvAttributes["Disabled"] = 0] = "Disabled";
+      AutoEnvAttributes[AutoEnvAttributes["Enabled"] = 1] = "Enabled";
+    })(exports.AutoEnvAttributes || (exports.AutoEnvAttributes = {}));
     var LDEventType;
     (function(LDEventType2) {
       LDEventType2[LDEventType2["AnalyticsEvents"] = 0] = "AnalyticsEvents";
       LDEventType2[LDEventType2["DiagnosticEvent"] = 1] = "DiagnosticEvent";
-    })(LDEventType || (exports.LDEventType = LDEventType = {}));
+    })(LDEventType || (LDEventType = {}));
     var LDDeliveryStatus;
     (function(LDDeliveryStatus2) {
       LDDeliveryStatus2[LDDeliveryStatus2["Succeeded"] = 0] = "Succeeded";
       LDDeliveryStatus2[LDDeliveryStatus2["Failed"] = 1] = "Failed";
       LDDeliveryStatus2[LDDeliveryStatus2["FailedAndMustShutDown"] = 2] = "FailedAndMustShutDown";
-    })(LDDeliveryStatus || (exports.LDDeliveryStatus = LDDeliveryStatus = {}));
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/api/subsystem/index.js
-var require_subsystem = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/api/subsystem/index.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.LDEventType = exports.LDDeliveryStatus = void 0;
-    var LDEventSender_1 = require_LDEventSender();
-    Object.defineProperty(exports, "LDDeliveryStatus", { enumerable: true, get: function() {
-      return LDEventSender_1.LDDeliveryStatus;
-    } });
-    Object.defineProperty(exports, "LDEventType", { enumerable: true, get: function() {
-      return LDEventSender_1.LDEventType;
-    } });
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/api/index.js
-var require_api2 = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/api/index.js"(exports) {
-    "use strict";
-    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      var desc = Object.getOwnPropertyDescriptor(m, k);
-      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-        desc = { enumerable: true, get: function() {
-          return m[k];
-        } };
+    })(LDDeliveryStatus || (LDDeliveryStatus = {}));
+    var index$1 = /* @__PURE__ */ Object.freeze({
+      __proto__: null,
+      get DataSourceState() {
+        return DataSourceState;
+      },
+      get LDDeliveryStatus() {
+        return LDDeliveryStatus;
+      },
+      get LDEventType() {
+        return LDEventType;
       }
-      Object.defineProperty(o, k2, desc);
-    }) : (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      o[k2] = m[k];
-    }));
-    var __exportStar = exports && exports.__exportStar || function(m, exports2) {
-      for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports2, p)) __createBinding(exports2, m, p);
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.subsystem = void 0;
-    __exportStar(require_context(), exports);
-    __exportStar(require_logging(), exports);
-    __exportStar(require_data(), exports);
-    __exportStar(require_options(), exports);
-    __exportStar(require_platform(), exports);
-    exports.subsystem = require_subsystem();
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/logging/format.js
-var require_format = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/logging/format.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var validators_1 = require_validators();
+    });
     function tryStringify(val) {
       if (typeof val === "string") {
         return val;
@@ -19682,7 +20012,7 @@ var require_format = __commonJS({
       if (Object.prototype.hasOwnProperty.call(val, "toString")) {
         try {
           return val.toString();
-        } catch (_a) {
+        } catch {
         }
       }
       if (typeof val === "bigint") {
@@ -19728,13 +20058,13 @@ var require_format = __commonJS({
       f: (val) => toFloat(val),
       j: (val) => tryStringify(val),
       o: (val) => tryStringify(val),
+      // eslint-disable-next-line @typescript-eslint/naming-convention
       O: (val) => tryStringify(val),
       c: () => ""
     };
     function format(...args) {
-      var _a;
       const formatString = args.shift();
-      if (validators_1.TypeValidators.String.is(formatString)) {
+      if (TypeValidators.String.is(formatString)) {
         let out = "";
         let i = 0;
         while (i < formatString.length) {
@@ -19745,7 +20075,7 @@ var require_format = __commonJS({
               const nextChar = formatString.charAt(i + 1);
               if (nextChar in escapes && args.length) {
                 const value = args.shift();
-                out += (_a = escapes[nextChar]) === null || _a === void 0 ? void 0 : _a.call(escapes, value);
+                out += escapes[nextChar]?.(value);
               } else if (nextChar === "%") {
                 out += "%";
               } else {
@@ -19768,24 +20098,15 @@ var require_format = __commonJS({
       }
       return args.map(tryStringify).join(" ");
     }
-    exports.default = format;
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/logging/BasicLogger.js
-var require_BasicLogger = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/logging/BasicLogger.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var format_1 = require_format();
-    var LogPriority = {
-      debug: 0,
-      info: 1,
-      warn: 2,
-      error: 3,
-      none: 4
-    };
-    var LevelNames = ["debug", "info", "warn", "error", "none"];
+    var LogPriority;
+    (function(LogPriority2) {
+      LogPriority2[LogPriority2["debug"] = 0] = "debug";
+      LogPriority2[LogPriority2["info"] = 1] = "info";
+      LogPriority2[LogPriority2["warn"] = 2] = "warn";
+      LogPriority2[LogPriority2["error"] = 3] = "error";
+      LogPriority2[LogPriority2["none"] = 4] = "none";
+    })(LogPriority || (LogPriority = {}));
+    var LEVEL_NAMES = ["debug", "info", "warn", "error", "none"];
     var BasicLogger = class _BasicLogger {
       /**
        * This should only be used as a default fallback and not as a convenient
@@ -19796,72 +20117,76 @@ var require_BasicLogger = __commonJS({
         return new _BasicLogger({});
       }
       constructor(options) {
-        var _a, _b, _c;
-        this.logLevel = (_b = LogPriority[(_a = options.level) !== null && _a !== void 0 ? _a : "info"]) !== null && _b !== void 0 ? _b : LogPriority.info;
-        this.name = (_c = options.name) !== null && _c !== void 0 ? _c : "LaunchDarkly";
-        this.destination = options.destination;
-        this.formatter = options.formatter;
-      }
-      tryFormat(...args) {
-        var _a;
-        try {
-          if (this.formatter) {
-            return (_a = this.formatter) === null || _a === void 0 ? void 0 : _a.call(this, ...args);
-          }
-          return (0, format_1.default)(...args);
-        } catch (_b) {
-          return (0, format_1.default)(...args);
+        this._logLevel = LogPriority[options.level ?? "info"] ?? LogPriority.info;
+        this._name = options.name ?? "LaunchDarkly";
+        this._formatter = options.formatter;
+        if (typeof options.destination === "object") {
+          this._destinations = {
+            [LogPriority.debug]: options.destination.debug,
+            [LogPriority.info]: options.destination.info,
+            [LogPriority.warn]: options.destination.warn,
+            [LogPriority.error]: options.destination.error
+          };
+        } else if (typeof options.destination === "function") {
+          const { destination } = options;
+          this._destinations = {
+            [LogPriority.debug]: destination,
+            [LogPriority.info]: destination,
+            [LogPriority.warn]: destination,
+            [LogPriority.error]: destination
+          };
         }
       }
-      tryWrite(msg) {
+      _tryFormat(...args) {
         try {
-          this.destination(msg);
-        } catch (_a) {
+          if (this._formatter) {
+            return this._formatter?.(...args);
+          }
+          return format(...args);
+        } catch {
+          return format(...args);
+        }
+      }
+      _tryWrite(destination, msg) {
+        try {
+          destination(msg);
+        } catch {
           console.error(msg);
         }
       }
-      log(level, args) {
-        if (level >= this.logLevel) {
-          const prefix = `${LevelNames[level]}: [${this.name}]`;
+      _log(level, args) {
+        if (level >= this._logLevel) {
+          const prefix = `${LEVEL_NAMES[level]}: [${this._name}]`;
           try {
-            if (this.destination) {
-              this.tryWrite(`${prefix} ${this.tryFormat(...args)}`);
+            const destination = this._destinations?.[level];
+            if (destination) {
+              this._tryWrite(destination, `${prefix} ${this._tryFormat(...args)}`);
             } else {
               console.error(...args);
             }
-          } catch (_a) {
+          } catch {
             console.error(...args);
           }
         }
       }
       error(...args) {
-        this.log(LogPriority.error, args);
+        this._log(LogPriority.error, args);
       }
       warn(...args) {
-        this.log(LogPriority.warn, args);
+        this._log(LogPriority.warn, args);
       }
       info(...args) {
-        this.log(LogPriority.info, args);
+        this._log(LogPriority.info, args);
       }
       debug(...args) {
-        this.log(LogPriority.debug, args);
+        this._log(LogPriority.debug, args);
       }
     };
-    exports.default = BasicLogger;
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/logging/SafeLogger.js
-var require_SafeLogger = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/logging/SafeLogger.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var validators_1 = require_validators();
     var loggerRequirements = {
-      error: validators_1.TypeValidators.Function,
-      warn: validators_1.TypeValidators.Function,
-      info: validators_1.TypeValidators.Function,
-      debug: validators_1.TypeValidators.Function
+      error: TypeValidators.Function,
+      warn: TypeValidators.Function,
+      info: TypeValidators.Function,
+      debug: TypeValidators.Function
     };
     var SafeLogger = class {
       /**
@@ -19876,74 +20201,38 @@ var require_SafeLogger = __commonJS({
             throw new Error(`Provided logger instance must support logger.${level}(...) method`);
           }
         });
-        this.logger = logger;
-        this.fallback = fallback;
+        this._logger = logger;
+        this._fallback = fallback;
       }
-      log(level, args) {
+      _log(level, args) {
         try {
-          this.logger[level](...args);
-        } catch (_a) {
-          this.fallback[level](...args);
+          this._logger[level](...args);
+        } catch {
+          this._fallback[level](...args);
         }
       }
       error(...args) {
-        this.log("error", args);
+        this._log("error", args);
       }
       warn(...args) {
-        this.log("warn", args);
+        this._log("warn", args);
       }
       info(...args) {
-        this.log("info", args);
+        this._log("info", args);
       }
       debug(...args) {
-        this.log("debug", args);
+        this._log("debug", args);
       }
     };
-    exports.default = SafeLogger;
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/logging/createSafeLogger.js
-var require_createSafeLogger = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/logging/createSafeLogger.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var BasicLogger_1 = require_BasicLogger();
-    var format_1 = require_format();
-    var SafeLogger_1 = require_SafeLogger();
     var createSafeLogger = (logger) => {
-      const basicLogger = new BasicLogger_1.default({
+      const basicLogger = new BasicLogger({
         level: "info",
         // eslint-disable-next-line no-console
         destination: console.error,
-        formatter: format_1.default
+        formatter: format
       });
-      return logger ? new SafeLogger_1.default(logger, basicLogger) : basicLogger;
+      return logger ? new SafeLogger(logger, basicLogger) : basicLogger;
     };
-    exports.default = createSafeLogger;
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/logging/index.js
-var require_logging2 = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/logging/index.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.createSafeLogger = exports.SafeLogger = exports.BasicLogger = void 0;
-    var BasicLogger_1 = require_BasicLogger();
-    exports.BasicLogger = BasicLogger_1.default;
-    var createSafeLogger_1 = require_createSafeLogger();
-    exports.createSafeLogger = createSafeLogger_1.default;
-    var SafeLogger_1 = require_SafeLogger();
-    exports.SafeLogger = SafeLogger_1.default;
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/options/OptionMessages.js
-var require_OptionMessages = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/options/OptionMessages.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
     var OptionMessages = class {
       static deprecated(oldName, newName) {
         return `"${oldName}" is deprecated, please use "${newName}"`;
@@ -19970,50 +20259,37 @@ var require_OptionMessages = __commonJS({
         return `You have set custom uris without specifying the ${name} URI; connections may not work properly`;
       }
     };
-    exports.default = OptionMessages;
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/options/ApplicationTags.js
-var require_ApplicationTags = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/options/ApplicationTags.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var validators_1 = require_validators();
-    var OptionMessages_1 = require_OptionMessages();
     var allowedTagCharacters = /^(\w|\.|-)+$/;
-    var regexValidator = validators_1.TypeValidators.stringMatchingRegex(allowedTagCharacters);
+    var regexValidator = TypeValidators.stringMatchingRegex(allowedTagCharacters);
     var tagValidator = {
       is: (u, name) => {
         if (regexValidator.is(u)) {
           if (u.length > 64) {
-            return { valid: false, message: OptionMessages_1.default.tagValueTooLong(name) };
+            return { valid: false, message: OptionMessages.tagValueTooLong(name) };
           }
           return { valid: true };
         }
-        return { valid: false, message: OptionMessages_1.default.invalidTagValue(name) };
+        return { valid: false, message: OptionMessages.invalidTagValue(name) };
       }
     };
     var ApplicationTags = class {
       constructor(options) {
-        var _a, _b;
         const tags = {};
-        const application = options === null || options === void 0 ? void 0 : options.application;
-        if ((application === null || application === void 0 ? void 0 : application.id) !== null && (application === null || application === void 0 ? void 0 : application.id) !== void 0) {
-          const { valid, message } = tagValidator.is(application.id, "application.id");
-          if (!valid) {
-            (_a = options.logger) === null || _a === void 0 ? void 0 : _a.warn(message);
-          } else {
-            tags["application-id"] = [application.id];
-          }
-        }
-        if ((application === null || application === void 0 ? void 0 : application.version) !== null && (application === null || application === void 0 ? void 0 : application.version) !== void 0) {
-          const { valid, message } = tagValidator.is(application.version, "application.version");
-          if (!valid) {
-            (_b = options.logger) === null || _b === void 0 ? void 0 : _b.warn(message);
-          } else {
-            tags["application-version"] = [application.version];
-          }
+        const application = options?.application;
+        const logger = options?.logger;
+        if (application) {
+          Object.entries(application).forEach(([key, value]) => {
+            if (value !== null && value !== void 0) {
+              const { valid, message } = tagValidator.is(value, `application.${key}`);
+              if (!valid) {
+                logger?.warn(message);
+              } else if (key === "versionName") {
+                tags[`application-version-name`] = [value];
+              } else {
+                tags[`application-${key}`] = [value];
+              }
+            }
+          });
         }
         const tagKeys = Object.keys(tags);
         if (tagKeys.length) {
@@ -20021,15 +20297,6 @@ var require_ApplicationTags = __commonJS({
         }
       }
     };
-    exports.default = ApplicationTags;
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/options/ClientContext.js
-var require_ClientContext = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/options/ClientContext.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
     var ClientContext = class {
       constructor(sdkKey, configuration, platform2) {
         this.platform = platform2;
@@ -20042,169 +20309,249 @@ var require_ClientContext = __commonJS({
         };
       }
     };
-    exports.default = ClientContext;
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/options/ServiceEndpoints.js
-var require_ServiceEndpoints = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/options/ServiceEndpoints.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
     function canonicalizeUri(uri) {
       return uri.replace(/\/+$/, "");
     }
+    function canonicalizePath(path) {
+      return path.replace(/^\/+/, "").replace(/\?$/, "");
+    }
     var ServiceEndpoints = class _ServiceEndpoints {
-      constructor(streaming, polling, events = _ServiceEndpoints.DEFAULT_EVENTS) {
+      constructor(streaming, polling, events = _ServiceEndpoints.DEFAULT_EVENTS, analyticsEventPath = "/bulk", diagnosticEventPath = "/diagnostic", includeAuthorizationHeader = true, payloadFilterKey) {
         this.streaming = canonicalizeUri(streaming);
         this.polling = canonicalizeUri(polling);
         this.events = canonicalizeUri(events);
+        this.analyticsEventPath = analyticsEventPath;
+        this.diagnosticEventPath = diagnosticEventPath;
+        this.includeAuthorizationHeader = includeAuthorizationHeader;
+        this.payloadFilterKey = payloadFilterKey;
       }
     };
     ServiceEndpoints.DEFAULT_EVENTS = "https://events.launchdarkly.com";
-    exports.default = ServiceEndpoints;
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/options/index.js
-var require_options2 = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/options/index.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.ClientContext = exports.ServiceEndpoints = exports.OptionMessages = exports.ApplicationTags = void 0;
-    var ApplicationTags_1 = require_ApplicationTags();
-    exports.ApplicationTags = ApplicationTags_1.default;
-    var ClientContext_1 = require_ClientContext();
-    exports.ClientContext = ClientContext_1.default;
-    var OptionMessages_1 = require_OptionMessages();
-    exports.OptionMessages = OptionMessages_1.default;
-    var ServiceEndpoints_1 = require_ServiceEndpoints();
-    exports.ServiceEndpoints = ServiceEndpoints_1.default;
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/utils/clone.js
-var require_clone = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/utils/clone.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
+    function getWithParams(uri, parameters = []) {
+      if (parameters.length === 0) {
+        return uri;
+      }
+      const parts = parameters.map(({ key, value }) => `${key}=${value}`);
+      return `${uri}?${parts.join("&")}`;
+    }
+    function getStreamingUri(endpoints, path, parameters) {
+      const canonicalizedPath = canonicalizePath(path);
+      const combinedParameters = [...parameters];
+      if (endpoints.payloadFilterKey) {
+        combinedParameters.push({ key: "filter", value: endpoints.payloadFilterKey });
+      }
+      return getWithParams(`${endpoints.streaming}/${canonicalizedPath}`, combinedParameters);
+    }
+    function getPollingUri(endpoints, path, parameters = []) {
+      const canonicalizedPath = canonicalizePath(path);
+      const combinedParameters = [...parameters];
+      if (endpoints.payloadFilterKey) {
+        combinedParameters.push({ key: "filter", value: endpoints.payloadFilterKey });
+      }
+      return getWithParams(`${endpoints.polling}/${canonicalizedPath}`, combinedParameters);
+    }
+    function getEventsUri(endpoints, path, parameters = []) {
+      const canonicalizedPath = canonicalizePath(path);
+      return getWithParams(`${endpoints.events}/${canonicalizedPath}`, parameters);
+    }
+    var LDUnexpectedResponseError = class extends Error {
+      constructor(message) {
+        super(message);
+        this.name = "LaunchDarklyUnexpectedResponseError";
+      }
+    };
+    var LDClientError = class extends Error {
+      constructor(message) {
+        super(message);
+        this.name = "LaunchDarklyClientError";
+      }
+    };
+    var LDTimeoutError = class extends Error {
+      constructor(message) {
+        super(message);
+        this.name = "LaunchDarklyTimeoutError";
+      }
+    };
+    function isHttpRecoverable(status) {
+      if (status >= 400 && status < 500) {
+        return status === 400 || status === 408 || status === 429;
+      }
+      return true;
+    }
+    function isHttpLocallyRecoverable(status) {
+      if (status === 413) {
+        return true;
+      }
+      return isHttpRecoverable(status);
+    }
+    function cancelableTimedPromise(t, taskName) {
+      let timeout;
+      let resolve;
+      const promise = new Promise((_res, reject) => {
+        resolve = _res;
+        timeout = setTimeout(() => {
+          const e = `${taskName} timed out after ${t} seconds.`;
+          reject(new LDTimeoutError(e));
+        }, t * 1e3);
+      });
+      return {
+        promise,
+        cancel: () => {
+          resolve();
+          clearTimeout(timeout);
+        }
+      };
+    }
     function clone(obj) {
+      if (obj === void 0 || obj === null) {
+        return obj;
+      }
       return JSON.parse(JSON.stringify(obj));
     }
-    exports.default = clone;
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/utils/date.js
-var require_date = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/utils/date.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.secondsToMillis = void 0;
     function secondsToMillis(sec) {
       return Math.trunc(sec * 1e3);
     }
-    exports.secondsToMillis = secondsToMillis;
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/utils/http.js
-var require_http = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/utils/http.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.httpErrorMessage = exports.defaultHeaders = void 0;
-    function defaultHeaders(sdkKey, info, tags) {
+    var debounce = (fn, delayMs = 5e3) => {
+      let timer;
+      return (...args) => {
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          fn(...args);
+        }, delayMs);
+      };
+    };
+    var isEmptyObject = (obj) => JSON.stringify(obj) === "{}";
+    var deepCompact = (obj, ignoreKeys) => {
+      if (!obj) {
+        return obj;
+      }
+      return Object.entries(obj).reduce((acc, [key, value]) => {
+        if (Boolean(value) && !isEmptyObject(value) && !ignoreKeys?.includes(key)) {
+          acc[key] = typeof value === "object" ? deepCompact(value, ignoreKeys) : value;
+        }
+        return acc;
+      }, {});
+    };
+    function fastDeepEqual(a, b) {
+      if (a === b)
+        return true;
+      if (a && b && typeof a == "object" && typeof b == "object") {
+        if (a.constructor !== b.constructor)
+          return false;
+        var length, i, keys;
+        if (Array.isArray(a)) {
+          length = a.length;
+          if (length != b.length)
+            return false;
+          for (i = length; i-- !== 0; )
+            if (!fastDeepEqual(a[i], b[i]))
+              return false;
+          return true;
+        }
+        if (a instanceof Map && b instanceof Map) {
+          if (a.size !== b.size)
+            return false;
+          for (i of a.entries())
+            if (!b.has(i[0]))
+              return false;
+          for (i of a.entries())
+            if (!fastDeepEqual(i[1], b.get(i[0])))
+              return false;
+          return true;
+        }
+        if (a instanceof Set && b instanceof Set) {
+          if (a.size !== b.size)
+            return false;
+          for (i of a.entries())
+            if (!b.has(i[0]))
+              return false;
+          return true;
+        }
+        if (ArrayBuffer.isView(a) && ArrayBuffer.isView(b)) {
+          length = a.length;
+          if (length != b.length)
+            return false;
+          for (i = length; i-- !== 0; ) {
+            if (a[i] !== b[i])
+              return false;
+          }
+          return true;
+        }
+        if (a.constructor === RegExp)
+          return a.source === b.source && a.flags === b.flags;
+        if (a.valueOf !== Object.prototype.valueOf)
+          return a.valueOf() === b.valueOf();
+        if (a.toString !== Object.prototype.toString)
+          return a.toString() === b.toString();
+        keys = Object.keys(a);
+        length = keys.length;
+        if (length !== Object.keys(b).length)
+          return false;
+        for (i = length; i-- !== 0; )
+          if (!Object.prototype.hasOwnProperty.call(b, keys[i]))
+            return false;
+        for (i = length; i-- !== 0; ) {
+          var key = keys[i];
+          if (!fastDeepEqual(a[key], b[key]))
+            return false;
+        }
+        return true;
+      }
+      return a !== a && b !== b;
+    }
+    function defaultHeaders(sdkKey, info, tags, includeAuthorizationHeader = true, userAgentHeaderName = "user-agent", instanceId) {
       const { userAgentBase, version, wrapperName, wrapperVersion } = info.sdkData();
       const headers = {
-        authorization: sdkKey,
-        "user-agent": `${userAgentBase !== null && userAgentBase !== void 0 ? userAgentBase : "NodeJSClient"}/${version}`
+        [userAgentHeaderName]: `${userAgentBase ?? "NodeJSClient"}/${version}`
       };
+      if (includeAuthorizationHeader) {
+        headers.authorization = sdkKey;
+      }
       if (wrapperName) {
         headers["x-launchdarkly-wrapper"] = wrapperVersion ? `${wrapperName}/${wrapperVersion}` : wrapperName;
       }
-      if (tags === null || tags === void 0 ? void 0 : tags.value) {
+      if (tags?.value) {
         headers["x-launchdarkly-tags"] = tags.value;
+      }
+      if (instanceId) {
+        headers["x-launchdarkly-instance-id"] = instanceId;
       }
       return headers;
     }
-    exports.defaultHeaders = defaultHeaders;
     function httpErrorMessage(err, context, retryMessage) {
       let desc;
       if (err.status) {
         desc = `error ${err.status}${err.status === 401 ? " (invalid SDK key)" : ""}`;
       } else {
-        desc = `I/O error (${err.message || err})`;
+        desc = `I/O error (${err.message || "unknown error"})`;
       }
-      const action = retryMessage !== null && retryMessage !== void 0 ? retryMessage : "giving up permanently";
+      const action = retryMessage ?? "giving up permanently";
       return `Received ${desc} for ${context} - ${action}`;
     }
-    exports.httpErrorMessage = httpErrorMessage;
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/utils/noop.js
-var require_noop = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/utils/noop.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.default = () => {
+    function shouldRetry({ status }) {
+      return status ? isHttpRecoverable(status) : true;
+    }
+    var base64UrlEncode = (s, encoding) => encoding.btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    var noop = () => {
     };
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/utils/sleep.js
-var require_sleep = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/utils/sleep.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
     var sleep = async (delayMillis = 1e3) => new Promise((resolve) => {
       setTimeout(resolve, delayMillis);
     });
-    exports.default = sleep;
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/utils/index.js
-var require_utils2 = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/utils/index.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.sleep = exports.secondsToMillis = exports.noop = exports.httpErrorMessage = exports.defaultHeaders = exports.clone = void 0;
-    var clone_1 = require_clone();
-    exports.clone = clone_1.default;
-    var date_1 = require_date();
-    Object.defineProperty(exports, "secondsToMillis", { enumerable: true, get: function() {
-      return date_1.secondsToMillis;
-    } });
-    var http_1 = require_http();
-    Object.defineProperty(exports, "defaultHeaders", { enumerable: true, get: function() {
-      return http_1.defaultHeaders;
-    } });
-    Object.defineProperty(exports, "httpErrorMessage", { enumerable: true, get: function() {
-      return http_1.httpErrorMessage;
-    } });
-    var noop_1 = require_noop();
-    exports.noop = noop_1.default;
-    var sleep_1 = require_sleep();
-    exports.sleep = sleep_1.default;
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/internal/diagnostics/DiagnosticsManager.js
-var require_DiagnosticsManager = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/internal/diagnostics/DiagnosticsManager.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
+    var timedPromise = (t, taskName) => new Promise((_res, reject) => {
+      setTimeout(() => {
+        const e = `${taskName} timed out after ${t} seconds.`;
+        reject(new LDTimeoutError(e));
+      }, t * 1e3);
+    });
     var DiagnosticsManager = class {
-      constructor(sdkKey, platform2, diagnosticInitConfig) {
-        this.platform = platform2;
-        this.diagnosticInitConfig = diagnosticInitConfig;
-        this.streamInits = [];
-        this.startTime = Date.now();
-        this.dataSinceDate = this.startTime;
-        this.id = {
-          diagnosticId: platform2.crypto.randomUUID(),
+      constructor(sdkKey, _platform, _diagnosticInitConfig) {
+        this._platform = _platform;
+        this._diagnosticInitConfig = _diagnosticInitConfig;
+        this._streamInits = [];
+        this._startTime = Date.now();
+        this._dataSinceDate = this._startTime;
+        this._id = {
+          diagnosticId: _platform.crypto.randomUUID(),
           sdkKeySuffix: sdkKey.length > 6 ? sdkKey.substring(sdkKey.length - 6) : sdkKey
         };
       }
@@ -20213,16 +20560,21 @@ var require_DiagnosticsManager = __commonJS({
        * not be repeated during the lifetime of the SDK client.
        */
       createInitEvent() {
-        var _a, _b, _c;
-        const sdkData = this.platform.info.sdkData();
-        const platformData = this.platform.info.platformData();
+        const sdkData = this._platform.info.sdkData();
+        const platformData = this._platform.info.platformData();
         return {
           kind: "diagnostic-init",
-          id: this.id,
-          creationDate: this.startTime,
+          id: this._id,
+          creationDate: this._startTime,
           sdk: sdkData,
-          configuration: this.diagnosticInitConfig,
-          platform: Object.assign({ name: platformData.name, osArch: (_a = platformData.os) === null || _a === void 0 ? void 0 : _a.arch, osName: (_b = platformData.os) === null || _b === void 0 ? void 0 : _b.name, osVersion: (_c = platformData.os) === null || _c === void 0 ? void 0 : _c.version }, platformData.additional || {})
+          configuration: this._diagnosticInitConfig,
+          platform: {
+            name: platformData.name,
+            osArch: platformData.os?.arch,
+            osName: platformData.os?.name,
+            osVersion: platformData.os?.version,
+            ...platformData.additional || {}
+          }
         };
       }
       /**
@@ -20235,7 +20587,7 @@ var require_DiagnosticsManager = __commonJS({
        */
       recordStreamInit(timestamp, failed, durationMillis) {
         const item = { timestamp, failed, durationMillis };
-        this.streamInits.push(item);
+        this._streamInits.push(item);
       }
       /**
        * Creates a periodic event containing time-dependent stats, and resets the state of the manager
@@ -20249,39 +20601,19 @@ var require_DiagnosticsManager = __commonJS({
         const currentTime = Date.now();
         const evt = {
           kind: "diagnostic",
-          id: this.id,
+          id: this._id,
           creationDate: currentTime,
-          dataSinceDate: this.dataSinceDate,
+          dataSinceDate: this._dataSinceDate,
           droppedEvents,
           deduplicatedUsers,
           eventsInLastBatch,
-          streamInits: this.streamInits
+          streamInits: this._streamInits
         };
-        this.streamInits = [];
-        this.dataSinceDate = currentTime;
+        this._streamInits = [];
+        this._dataSinceDate = currentTime;
         return evt;
       }
     };
-    exports.default = DiagnosticsManager;
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/internal/diagnostics/index.js
-var require_diagnostics2 = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/internal/diagnostics/index.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.DiagnosticsManager = void 0;
-    var DiagnosticsManager_1 = require_DiagnosticsManager();
-    exports.DiagnosticsManager = DiagnosticsManager_1.default;
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/internal/evaluation/ErrorKinds.js
-var require_ErrorKinds = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/internal/evaluation/ErrorKinds.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
     var ErrorKinds;
     (function(ErrorKinds2) {
       ErrorKinds2["MalformedFlag"] = "MALFORMED_FLAG";
@@ -20290,130 +20622,46 @@ var require_ErrorKinds = __commonJS({
       ErrorKinds2["ClientNotReady"] = "CLIENT_NOT_READY";
       ErrorKinds2["WrongType"] = "WRONG_TYPE";
     })(ErrorKinds || (ErrorKinds = {}));
-    exports.default = ErrorKinds;
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/internal/evaluation/evaluationDetail.js
-var require_evaluationDetail = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/internal/evaluation/evaluationDetail.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.createSuccessEvaluationDetail = exports.createErrorEvaluationDetail = void 0;
-    var createErrorEvaluationDetail = (errorKind, def) => ({
-      value: def !== null && def !== void 0 ? def : null,
-      variationIndex: null,
-      reason: { kind: "ERROR", errorKind }
-    });
-    exports.createErrorEvaluationDetail = createErrorEvaluationDetail;
-    var createSuccessEvaluationDetail = (value, variationIndex, reason) => ({
-      value,
-      variationIndex: variationIndex !== null && variationIndex !== void 0 ? variationIndex : null,
-      reason: reason !== null && reason !== void 0 ? reason : null
-    });
-    exports.createSuccessEvaluationDetail = createSuccessEvaluationDetail;
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/internal/events/ClientMessages.js
-var require_ClientMessages = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/internal/events/ClientMessages.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
+    var ErrorKinds$1 = ErrorKinds;
     var ClientMessages = class {
-    };
-    ClientMessages.missingContextKeyNoEvent = "Context was unspecified or had no key; event will not be sent";
-    exports.default = ClientMessages;
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/errors.js
-var require_errors2 = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/errors.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.isHttpRecoverable = exports.LDClientError = exports.LDUnexpectedResponseError = exports.LDStreamingError = exports.LDPollingError = exports.LDFileDataSourceError = void 0;
-    var LDFileDataSourceError = class extends Error {
-      constructor(message) {
-        super(message);
-        this.name = "LaunchDarklyFileDataSourceError";
+      static invalidMetricValue(badType) {
+        return `The track function was called with a non-numeric "metricValue" (${badType}), only numeric metric values are supported.`;
       }
     };
-    exports.LDFileDataSourceError = LDFileDataSourceError;
-    var LDPollingError = class extends Error {
-      constructor(message, status) {
-        super(message);
-        this.status = status;
-        this.name = "LaunchDarklyPollingError";
-      }
-    };
-    exports.LDPollingError = LDPollingError;
-    var LDStreamingError = class extends Error {
-      constructor(message, code) {
-        super(message);
-        this.code = code;
-        this.name = "LaunchDarklyStreamingError";
-      }
-    };
-    exports.LDStreamingError = LDStreamingError;
-    var LDUnexpectedResponseError = class extends Error {
-      constructor(message) {
-        super(message);
-        this.name = "LaunchDarklyUnexpectedResponseError";
-      }
-    };
-    exports.LDUnexpectedResponseError = LDUnexpectedResponseError;
-    var LDClientError = class extends Error {
-      constructor(message) {
-        super(message);
-        this.name = "LaunchDarklyClientError";
-      }
-    };
-    exports.LDClientError = LDClientError;
-    function isHttpRecoverable(status) {
-      if (status >= 400 && status < 500) {
-        return status === 400 || status === 408 || status === 429;
-      }
-      return true;
-    }
-    exports.isHttpRecoverable = isHttpRecoverable;
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/internal/events/EventSender.js
-var require_EventSender = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/internal/events/EventSender.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var subsystem_1 = require_subsystem();
-    var errors_1 = require_errors2();
-    var utils_1 = require_utils2();
+    ClientMessages.MissingContextKeyNoEvent = "Context was unspecified or had no key; event will not be sent";
     var EventSender = class {
-      constructor(clientContext) {
+      constructor(clientContext, baseHeaders) {
         const { basicConfiguration, platform: platform2 } = clientContext;
-        const { sdkKey, serviceEndpoints, tags } = basicConfiguration;
-        const { crypto: crypto2, info, requests } = platform2;
-        this.defaultHeaders = (0, utils_1.defaultHeaders)(sdkKey, info, tags);
-        this.eventsUri = `${serviceEndpoints.events}/bulk`;
-        this.diagnosticEventsUri = `${serviceEndpoints.events}/diagnostic`;
-        this.requests = requests;
-        this.crypto = crypto2;
+        const { serviceEndpoints: { analyticsEventPath, diagnosticEventPath } } = basicConfiguration;
+        const { crypto: crypto2, requests } = platform2;
+        this._defaultHeaders = { ...baseHeaders };
+        this._eventsUri = getEventsUri(basicConfiguration.serviceEndpoints, analyticsEventPath, []);
+        this._diagnosticEventsUri = getEventsUri(basicConfiguration.serviceEndpoints, diagnosticEventPath, []);
+        this._requests = requests;
+        this._crypto = crypto2;
       }
-      async tryPostingEvents(events, uri, payloadId, canRetry) {
+      async _tryPostingEvents(events, uri, payloadId, canRetry) {
         const tryRes = {
-          status: subsystem_1.LDDeliveryStatus.Succeeded
+          status: LDDeliveryStatus.Succeeded
         };
-        const headers = Object.assign(Object.assign({}, this.defaultHeaders), { "content-type": "application/json" });
+        const headers = {
+          ...this._defaultHeaders,
+          "content-type": "application/json"
+        };
         if (payloadId) {
           headers["x-launchdarkly-payload-id"] = payloadId;
           headers["x-launchDarkly-event-schema"] = "4";
         }
         let error2;
         try {
-          const { status, headers: resHeaders } = await this.requests.fetch(uri, {
+          const { status, headers: resHeaders } = await this._requests.fetch(uri, {
             headers,
             body: JSON.stringify(events),
-            method: "POST"
+            compressBodyIfPossible: true,
+            method: "POST",
+            // When sending events from browser environments the request should be completed even
+            // if the user is navigating away from the page.
+            keepalive: true
           });
           const serverDate = Date.parse(resHeaders.get("date") || "");
           if (serverDate) {
@@ -20422,9 +20670,13 @@ var require_EventSender = __commonJS({
           if (status <= 204) {
             return tryRes;
           }
-          error2 = new errors_1.LDUnexpectedResponseError((0, utils_1.httpErrorMessage)({ status, message: "some events were dropped" }, "event posting"));
-          if (!(0, errors_1.isHttpRecoverable)(status)) {
-            tryRes.status = subsystem_1.LDDeliveryStatus.FailedAndMustShutDown;
+          error2 = new LDUnexpectedResponseError(httpErrorMessage({ status, message: "some events were dropped" }, "event posting"));
+          if (!isHttpRecoverable(status)) {
+            if (!isHttpLocallyRecoverable(status)) {
+              tryRes.status = LDDeliveryStatus.FailedAndMustShutDown;
+            } else {
+              tryRes.status = LDDeliveryStatus.Failed;
+            }
             tryRes.error = error2;
             return tryRes;
           }
@@ -20432,53 +20684,28 @@ var require_EventSender = __commonJS({
           error2 = err;
         }
         if (error2 && !canRetry) {
-          tryRes.status = subsystem_1.LDDeliveryStatus.Failed;
+          tryRes.status = LDDeliveryStatus.Failed;
           tryRes.error = error2;
           return tryRes;
         }
-        await (0, utils_1.sleep)();
-        return this.tryPostingEvents(events, this.eventsUri, payloadId, false);
+        await sleep();
+        return this._tryPostingEvents(events, this._eventsUri, payloadId, false);
       }
       async sendEventData(type, data) {
-        const payloadId = type === subsystem_1.LDEventType.AnalyticsEvents ? this.crypto.randomUUID() : void 0;
-        const uri = type === subsystem_1.LDEventType.AnalyticsEvents ? this.eventsUri : this.diagnosticEventsUri;
-        return this.tryPostingEvents(data, uri, payloadId, true);
+        const payloadId = type === LDEventType.AnalyticsEvents ? this._crypto.randomUUID() : void 0;
+        const uri = type === LDEventType.AnalyticsEvents ? this._eventsUri : this._diagnosticEventsUri;
+        return this._tryPostingEvents(data, uri, payloadId, true);
       }
     };
-    exports.default = EventSender;
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/internal/events/guards.js
-var require_guards = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/internal/events/guards.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.isMigration = exports.isIdentify = exports.isCustom = exports.isFeature = void 0;
     function isFeature(u) {
       return u.kind === "feature";
     }
-    exports.isFeature = isFeature;
-    function isCustom(u) {
-      return u.kind === "custom";
-    }
-    exports.isCustom = isCustom;
     function isIdentify(u) {
       return u.kind === "identify";
     }
-    exports.isIdentify = isIdentify;
     function isMigration(u) {
       return u.kind === "migration_op";
     }
-    exports.isMigration = isMigration;
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/internal/events/SummaryCounter.js
-var require_SummaryCounter = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/internal/events/SummaryCounter.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
     var SummaryCounter = class {
       constructor(count, key, value, defValue, version, variation) {
         this.count = count;
@@ -20492,58 +20719,52 @@ var require_SummaryCounter = __commonJS({
         this.count += 1;
       }
     };
-    exports.default = SummaryCounter;
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/internal/events/EventSummarizer.js
-var require_EventSummarizer = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/internal/events/EventSummarizer.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var guards_1 = require_guards();
-    var SummaryCounter_1 = require_SummaryCounter();
     function counterKey(event) {
       return `${event.key}:${event.variation !== null && event.variation !== void 0 ? event.variation : ""}:${event.version !== null && event.version !== void 0 ? event.version : ""}`;
     }
     var EventSummarizer = class {
-      constructor() {
-        this.startDate = 0;
-        this.endDate = 0;
-        this.counters = {};
-        this.contextKinds = {};
+      constructor(_singleContext = false, _contextFilter) {
+        this._singleContext = _singleContext;
+        this._contextFilter = _contextFilter;
+        this._startDate = 0;
+        this._endDate = 0;
+        this._counters = {};
+        this._contextKinds = {};
       }
       summarizeEvent(event) {
-        if ((0, guards_1.isFeature)(event) && !event.excludeFromSummaries) {
+        if (isFeature(event) && !event.excludeFromSummaries) {
+          if (!this._context) {
+            this._context = event.context;
+          }
           const countKey = counterKey(event);
-          const counter = this.counters[countKey];
-          let kinds = this.contextKinds[event.key];
+          const counter = this._counters[countKey];
+          let kinds = this._contextKinds[event.key];
           if (!kinds) {
             kinds = /* @__PURE__ */ new Set();
-            this.contextKinds[event.key] = kinds;
+            this._contextKinds[event.key] = kinds;
           }
           event.context.kinds.forEach((kind) => kinds.add(kind));
           if (counter) {
             counter.increment();
           } else {
-            this.counters[countKey] = new SummaryCounter_1.default(1, event.key, event.value, event.default, event.version, event.variation);
+            this._counters[countKey] = new SummaryCounter(1, event.key, event.value, event.default, event.version, event.variation);
           }
-          if (this.startDate === 0 || event.creationDate < this.startDate) {
-            this.startDate = event.creationDate;
+          if (this._startDate === 0 || event.creationDate < this._startDate) {
+            this._startDate = event.creationDate;
           }
-          if (event.creationDate > this.endDate) {
-            this.endDate = event.creationDate;
+          if (event.creationDate > this._endDate) {
+            this._endDate = event.creationDate;
           }
         }
       }
       getSummary() {
-        const features = Object.values(this.counters).reduce((acc, counter) => {
+        const features = Object.values(this._counters).reduce((acc, counter) => {
           let flagSummary = acc[counter.key];
           if (!flagSummary) {
             flagSummary = {
               default: counter.default,
               counters: [],
-              contextKinds: [...this.contextKinds[counter.key]]
+              contextKinds: [...this._contextKinds[counter.key]]
             };
             acc[counter.key] = flagSummary;
           }
@@ -20562,44 +20783,58 @@ var require_EventSummarizer = __commonJS({
           flagSummary.counters.push(counterOut);
           return acc;
         }, {});
-        return {
-          startDate: this.startDate,
-          endDate: this.endDate,
+        const event = {
+          startDate: this._startDate,
+          endDate: this._endDate,
           features,
-          kind: "summary"
+          kind: "summary",
+          context: this._context !== void 0 && this._singleContext ? this._contextFilter?.filter(this._context) : void 0
         };
+        this._clearSummary();
+        return event;
       }
-      clearSummary() {
-        this.startDate = 0;
-        this.endDate = 0;
-        this.counters = {};
-        this.contextKinds = {};
+      _clearSummary() {
+        this._startDate = 0;
+        this._endDate = 0;
+        this._counters = {};
+        this._contextKinds = {};
       }
     };
-    exports.default = EventSummarizer;
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/internal/events/LDInvalidSDKKeyError.js
-var require_LDInvalidSDKKeyError = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/internal/events/LDInvalidSDKKeyError.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
     var LDInvalidSDKKeyError = class extends Error {
       constructor(message) {
         super(message);
         this.name = "LaunchDarklyInvalidSDKKeyError";
       }
     };
-    exports.default = LDInvalidSDKKeyError;
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/internal/events/sampling.js
-var require_sampling = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/internal/events/sampling.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
+    var MultiEventSummarizer = class {
+      constructor(_contextFilter, _logger) {
+        this._contextFilter = _contextFilter;
+        this._logger = _logger;
+        this._summarizers = {};
+      }
+      summarizeEvent(event) {
+        if (isFeature(event)) {
+          const key = event.context.canonicalUnfilteredJson();
+          if (!key) {
+            if (event.context.valid) {
+              this._logger?.error("Unable to serialize context, likely the context contains a cycle.");
+            }
+            return;
+          }
+          let summarizer = this._summarizers[key];
+          if (!summarizer) {
+            this._summarizers[key] = new EventSummarizer(true, this._contextFilter);
+            summarizer = this._summarizers[key];
+          }
+          summarizer.summarizeEvent(event);
+        }
+      }
+      getSummaries() {
+        const summarizersToFlush = this._summarizers;
+        this._summarizers = {};
+        return Object.values(summarizersToFlush).map((summarizer) => summarizer.getSummary());
+      }
+    };
     function shouldSample(ratio) {
       const truncated = Math.trunc(ratio);
       if (truncated === 1) {
@@ -20610,145 +20845,149 @@ var require_sampling = __commonJS({
       }
       return Math.floor(Math.random() * truncated) === 0;
     }
-    exports.default = shouldSample;
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/internal/events/EventProcessor.js
-var require_EventProcessor = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/internal/events/EventProcessor.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var subsystem_1 = require_subsystem();
-    var AttributeReference_1 = require_AttributeReference();
-    var ContextFilter_1 = require_ContextFilter();
-    var EventSender_1 = require_EventSender();
-    var EventSummarizer_1 = require_EventSummarizer();
-    var guards_1 = require_guards();
-    var LDInvalidSDKKeyError_1 = require_LDInvalidSDKKeyError();
-    var sampling_1 = require_sampling();
+    function isMultiEventSummarizer(summarizer) {
+      return summarizer.getSummaries !== void 0;
+    }
     var EventProcessor = class {
-      constructor(config, clientContext, contextDeduplicator, diagnosticsManager) {
-        var _a;
-        this.contextDeduplicator = contextDeduplicator;
-        this.diagnosticsManager = diagnosticsManager;
-        this.summarizer = new EventSummarizer_1.default();
-        this.queue = [];
-        this.lastKnownPastTime = 0;
-        this.droppedEvents = 0;
-        this.deduplicatedUsers = 0;
-        this.exceededCapacity = false;
-        this.eventsInLastBatch = 0;
-        this.shutdown = false;
-        this.flushUsersTimer = null;
-        this.capacity = config.eventsCapacity;
-        this.logger = clientContext.basicConfiguration.logger;
-        this.eventSender = new EventSender_1.default(clientContext);
-        this.contextFilter = new ContextFilter_1.default(config.allAttributesPrivate, config.privateAttributes.map((ref) => new AttributeReference_1.default(ref)));
-        if (((_a = this.contextDeduplicator) === null || _a === void 0 ? void 0 : _a.flushInterval) !== void 0) {
-          this.flushUsersTimer = setInterval(() => {
-            var _a2;
-            (_a2 = this.contextDeduplicator) === null || _a2 === void 0 ? void 0 : _a2.flush();
-          }, this.contextDeduplicator.flushInterval * 1e3);
+      constructor(_config, clientContext, baseHeaders, _contextDeduplicator, _diagnosticsManager, start = true, summariesPerContext = false) {
+        this._config = _config;
+        this._contextDeduplicator = _contextDeduplicator;
+        this._diagnosticsManager = _diagnosticsManager;
+        this._queue = [];
+        this._lastKnownPastTime = 0;
+        this._droppedEvents = 0;
+        this._deduplicatedUsers = 0;
+        this._exceededCapacity = false;
+        this._eventsInLastBatch = 0;
+        this._shutdown = false;
+        this._flushUsersTimer = null;
+        this._capacity = _config.eventsCapacity;
+        this._logger = clientContext.basicConfiguration.logger;
+        this._eventSender = new EventSender(clientContext, baseHeaders);
+        this._contextFilter = new ContextFilter(_config.allAttributesPrivate, _config.privateAttributes.map((ref) => new AttributeReference(ref)));
+        if (summariesPerContext) {
+          this._summarizer = new MultiEventSummarizer(this._contextFilter, this._logger);
+        } else {
+          this._summarizer = new EventSummarizer();
         }
-        this.flushTimer = setInterval(async () => {
-          var _a2;
+        if (start) {
+          this.start();
+        }
+      }
+      start() {
+        if (this._contextDeduplicator?.flushInterval !== void 0) {
+          this._flushUsersTimer = setInterval(() => {
+            this._contextDeduplicator?.flush();
+          }, this._contextDeduplicator.flushInterval * 1e3);
+        }
+        this._flushTimer = setInterval(async () => {
           try {
             await this.flush();
           } catch (e) {
-            (_a2 = this.logger) === null || _a2 === void 0 ? void 0 : _a2.debug(`Flush failed: ${e}`);
+            this._logger?.debug(`Flush failed: ${e}`);
           }
-        }, config.flushInterval * 1e3);
-        if (this.diagnosticsManager) {
-          const initEvent = diagnosticsManager.createInitEvent();
-          this.postDiagnosticEvent(initEvent);
-          this.diagnosticsTimer = setInterval(() => {
-            const statsEvent = this.diagnosticsManager.createStatsEventAndReset(this.droppedEvents, this.deduplicatedUsers, this.eventsInLastBatch);
-            this.droppedEvents = 0;
-            this.deduplicatedUsers = 0;
-            this.postDiagnosticEvent(statsEvent);
-          }, config.diagnosticRecordingInterval * 1e3);
+        }, this._config.flushInterval * 1e3);
+        if (this._diagnosticsManager) {
+          const initEvent = this._diagnosticsManager.createInitEvent();
+          this._postDiagnosticEvent(initEvent);
+          this._diagnosticsTimer = setInterval(() => {
+            const statsEvent = this._diagnosticsManager.createStatsEventAndReset(this._droppedEvents, this._deduplicatedUsers, this._eventsInLastBatch);
+            this._droppedEvents = 0;
+            this._deduplicatedUsers = 0;
+            this._postDiagnosticEvent(statsEvent);
+          }, this._config.diagnosticRecordingInterval * 1e3);
         }
+        this._logger?.debug("Started EventProcessor.");
       }
-      postDiagnosticEvent(event) {
-        this.eventSender.sendEventData(subsystem_1.LDEventType.DiagnosticEvent, event);
+      _postDiagnosticEvent(event) {
+        this._eventSender.sendEventData(LDEventType.DiagnosticEvent, event);
       }
       close() {
-        clearInterval(this.flushTimer);
-        if (this.flushUsersTimer) {
-          clearInterval(this.flushUsersTimer);
+        clearInterval(this._flushTimer);
+        if (this._flushUsersTimer) {
+          clearInterval(this._flushUsersTimer);
         }
-        if (this.diagnosticsTimer) {
-          clearInterval(this.diagnosticsTimer);
+        if (this._diagnosticsTimer) {
+          clearInterval(this._diagnosticsTimer);
         }
       }
       async flush() {
-        var _a;
-        if (this.shutdown) {
-          throw new LDInvalidSDKKeyError_1.default("Events cannot be posted because SDK key is invalid");
+        if (this._shutdown) {
+          throw new LDInvalidSDKKeyError("Events cannot be posted because a permanent error has been encountered. This is most likely an invalid SDK key. The specific error information is logged independently.");
         }
-        const eventsToFlush = this.queue;
-        this.queue = [];
-        const summary2 = this.summarizer.getSummary();
-        this.summarizer.clearSummary();
-        if (Object.keys(summary2.features).length) {
-          eventsToFlush.push(summary2);
+        const eventsToFlush = this._queue;
+        this._queue = [];
+        if (isMultiEventSummarizer(this._summarizer)) {
+          const summaries = this._summarizer.getSummaries();
+          summaries.forEach((summary2) => {
+            if (Object.keys(summary2.features).length) {
+              eventsToFlush.push(summary2);
+            }
+          });
+        } else {
+          const summary2 = this._summarizer.getSummary();
+          if (Object.keys(summary2.features).length) {
+            eventsToFlush.push(summary2);
+          }
         }
         if (!eventsToFlush.length) {
           return;
         }
-        this.eventsInLastBatch = eventsToFlush.length;
-        (_a = this.logger) === null || _a === void 0 ? void 0 : _a.debug("Flushing %d events", eventsToFlush.length);
-        await this.tryPostingEvents(eventsToFlush);
+        this._eventsInLastBatch = eventsToFlush.length;
+        this._logger?.debug("Flushing %d events", eventsToFlush.length);
+        await this._tryPostingEvents(eventsToFlush);
       }
       sendEvent(inputEvent) {
-        var _a;
-        if (this.shutdown) {
+        if (this._shutdown) {
           return;
         }
-        if ((0, guards_1.isMigration)(inputEvent)) {
-          if ((0, sampling_1.default)(inputEvent.samplingRatio)) {
-            const migrationEvent = Object.assign({}, inputEvent);
+        if (isMigration(inputEvent)) {
+          if (shouldSample(inputEvent.samplingRatio)) {
+            const migrationEvent = {
+              ...inputEvent,
+              context: inputEvent.context ? this._contextFilter.filter(inputEvent.context) : void 0
+            };
             if (migrationEvent.samplingRatio === 1) {
               delete migrationEvent.samplingRatio;
             }
-            this.enqueue(migrationEvent);
+            this._enqueue(migrationEvent);
           }
           return;
         }
-        this.summarizer.summarizeEvent(inputEvent);
-        const isFeatureEvent = (0, guards_1.isFeature)(inputEvent);
+        this._summarizer.summarizeEvent(inputEvent);
+        const isFeatureEvent = isFeature(inputEvent);
         const addFullEvent = isFeatureEvent && inputEvent.trackEvents || !isFeatureEvent;
-        const addDebugEvent = this.shouldDebugEvent(inputEvent);
-        const isIdentifyEvent = (0, guards_1.isIdentify)(inputEvent);
-        const shouldNotDeduplicate = (_a = this.contextDeduplicator) === null || _a === void 0 ? void 0 : _a.processContext(inputEvent.context);
+        const addDebugEvent = this._shouldDebugEvent(inputEvent);
+        const isIdentifyEvent = isIdentify(inputEvent);
+        const shouldNotDeduplicate = this._contextDeduplicator?.processContext(inputEvent.context);
         if (!shouldNotDeduplicate) {
           if (!isIdentifyEvent) {
-            this.deduplicatedUsers += 1;
+            this._deduplicatedUsers += 1;
           }
         }
         const addIndexEvent = shouldNotDeduplicate && !isIdentifyEvent;
         if (addIndexEvent) {
-          this.enqueue(this.makeOutputEvent({
+          this._enqueue(this._makeOutputEvent({
             kind: "index",
             creationDate: inputEvent.creationDate,
             context: inputEvent.context,
             samplingRatio: 1
           }, false));
         }
-        if (addFullEvent && (0, sampling_1.default)(inputEvent.samplingRatio)) {
-          this.enqueue(this.makeOutputEvent(inputEvent, false));
+        if (addFullEvent && shouldSample(inputEvent.samplingRatio)) {
+          this._enqueue(this._makeOutputEvent(inputEvent, false));
         }
-        if (addDebugEvent && (0, sampling_1.default)(inputEvent.samplingRatio)) {
-          this.enqueue(this.makeOutputEvent(inputEvent, true));
+        if (addDebugEvent && shouldSample(inputEvent.samplingRatio)) {
+          this._enqueue(this._makeOutputEvent(inputEvent, true));
         }
       }
-      makeOutputEvent(event, debug2) {
+      _makeOutputEvent(event, debug2) {
         switch (event.kind) {
           case "feature": {
             const out = {
               kind: debug2 ? "debug" : "feature",
               creationDate: event.creationDate,
+              context: this._contextFilter.filter(event.context, !debug2),
               key: event.key,
               value: event.value,
               default: event.default
@@ -20768,11 +21007,6 @@ var require_EventProcessor = __commonJS({
             if (event.reason) {
               out.reason = event.reason;
             }
-            if (debug2) {
-              out.context = this.contextFilter.filter(event.context);
-            } else {
-              out.contextKeys = event.context.kindsAndKeys;
-            }
             return out;
           }
           case "index":
@@ -20781,7 +21015,7 @@ var require_EventProcessor = __commonJS({
             const out = {
               kind: event.kind,
               creationDate: event.creationDate,
-              context: this.contextFilter.filter(event.context)
+              context: this._contextFilter.filter(event.context)
             };
             if (event.samplingRatio !== 1) {
               out.samplingRatio = event.samplingRatio;
@@ -20793,7 +21027,7 @@ var require_EventProcessor = __commonJS({
               kind: "custom",
               creationDate: event.creationDate,
               key: event.key,
-              contextKeys: event.context.kindsAndKeys
+              context: this._contextFilter.filter(event.context)
             };
             if (event.samplingRatio !== 1) {
               out.samplingRatio = event.samplingRatio;
@@ -20804,71 +21038,77 @@ var require_EventProcessor = __commonJS({
             if (event.metricValue !== void 0) {
               out.metricValue = event.metricValue;
             }
+            if (event.url !== void 0) {
+              out.url = event.url;
+            }
+            return out;
+          }
+          case "click": {
+            const out = {
+              kind: "click",
+              creationDate: event.creationDate,
+              contextKeys: event.context.kindsAndKeys,
+              key: event.key,
+              url: event.url,
+              selector: event.selector
+            };
+            return out;
+          }
+          case "pageview": {
+            const out = {
+              kind: "pageview",
+              creationDate: event.creationDate,
+              contextKeys: event.context.kindsAndKeys,
+              key: event.key,
+              url: event.url
+            };
             return out;
           }
           default:
             return event;
         }
       }
-      enqueue(event) {
-        var _a;
-        if (this.queue.length < this.capacity) {
-          this.queue.push(event);
-          this.exceededCapacity = false;
+      _enqueue(event) {
+        if (this._queue.length < this._capacity) {
+          this._queue.push(event);
+          this._exceededCapacity = false;
         } else {
-          if (!this.exceededCapacity) {
-            this.exceededCapacity = true;
-            (_a = this.logger) === null || _a === void 0 ? void 0 : _a.warn("Exceeded event queue capacity. Increase capacity to avoid dropping events.");
+          if (!this._exceededCapacity) {
+            this._exceededCapacity = true;
+            this._logger?.warn("Exceeded event queue capacity. Increase capacity to avoid dropping events.");
           }
-          this.droppedEvents += 1;
+          this._droppedEvents += 1;
         }
       }
-      shouldDebugEvent(event) {
-        return (0, guards_1.isFeature)(event) && event.debugEventsUntilDate && event.debugEventsUntilDate > this.lastKnownPastTime && event.debugEventsUntilDate > Date.now();
+      _shouldDebugEvent(event) {
+        return isFeature(event) && event.debugEventsUntilDate && event.debugEventsUntilDate > this._lastKnownPastTime && event.debugEventsUntilDate > Date.now();
       }
-      async tryPostingEvents(events) {
-        const res = await this.eventSender.sendEventData(subsystem_1.LDEventType.AnalyticsEvents, events);
-        if (res.status === subsystem_1.LDDeliveryStatus.FailedAndMustShutDown) {
-          this.shutdown = true;
+      async _tryPostingEvents(events) {
+        const res = await this._eventSender.sendEventData(LDEventType.AnalyticsEvents, events);
+        if (res.status === LDDeliveryStatus.FailedAndMustShutDown) {
+          this._shutdown = true;
         }
         if (res.serverTime) {
-          this.lastKnownPastTime = res.serverTime;
+          this._lastKnownPastTime = res.serverTime;
         }
         if (res.error) {
           throw res.error;
         }
       }
     };
-    exports.default = EventProcessor;
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/internal/events/InputCustomEvent.js
-var require_InputCustomEvent = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/internal/events/InputCustomEvent.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
     var InputCustomEvent = class {
-      constructor(context, key, data, metricValue, samplingRatio = 1) {
+      constructor(context, key, data, metricValue, samplingRatio = 1, url) {
         this.context = context;
         this.key = key;
         this.data = data;
         this.metricValue = metricValue;
         this.samplingRatio = samplingRatio;
+        this.url = url;
         this.kind = "custom";
         this.creationDate = Date.now();
         this.context = context;
       }
     };
-    exports.default = InputCustomEvent;
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/internal/events/InputEvalEvent.js
-var require_InputEvalEvent = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/internal/events/InputEvalEvent.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
     var InputEvalEvent = class {
       constructor(withReasons, context, key, value, defValue, version, variation, trackEvents, prereqOf, reason, debugEventsUntilDate, excludeFromSummaries, samplingRatio = 1) {
         this.withReasons = withReasons;
@@ -20902,15 +21142,6 @@ var require_InputEvalEvent = __commonJS({
         }
       }
     };
-    exports.default = InputEvalEvent;
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/internal/events/InputIdentifyEvent.js
-var require_InputIdentifyEvent = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/internal/events/InputIdentifyEvent.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
     var InputIdentifyEvent = class {
       constructor(context, samplingRatio = 1) {
         this.context = context;
@@ -20919,15 +21150,6 @@ var require_InputIdentifyEvent = __commonJS({
         this.creationDate = Date.now();
       }
     };
-    exports.default = InputIdentifyEvent;
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/internal/events/NullEventProcessor.js
-var require_NullEventProcessor = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/internal/events/NullEventProcessor.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
     var NullEventProcessor = class {
       close() {
       }
@@ -20936,65 +21158,31 @@ var require_NullEventProcessor = __commonJS({
       sendEvent() {
       }
     };
-    exports.default = NullEventProcessor;
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/internal/events/index.js
-var require_events2 = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/internal/events/index.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.NullEventProcessor = exports.shouldSample = exports.EventProcessor = exports.InputIdentifyEvent = exports.InputEvalEvent = exports.InputCustomEvent = exports.ClientMessages = void 0;
-    var ClientMessages_1 = require_ClientMessages();
-    exports.ClientMessages = ClientMessages_1.default;
-    var EventProcessor_1 = require_EventProcessor();
-    exports.EventProcessor = EventProcessor_1.default;
-    var InputCustomEvent_1 = require_InputCustomEvent();
-    exports.InputCustomEvent = InputCustomEvent_1.default;
-    var InputEvalEvent_1 = require_InputEvalEvent();
-    exports.InputEvalEvent = InputEvalEvent_1.default;
-    var InputIdentifyEvent_1 = require_InputIdentifyEvent();
-    exports.InputIdentifyEvent = InputIdentifyEvent_1.default;
-    var NullEventProcessor_1 = require_NullEventProcessor();
-    exports.NullEventProcessor = NullEventProcessor_1.default;
-    var sampling_1 = require_sampling();
-    exports.shouldSample = sampling_1.default;
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/internal/evaluation/EventFactoryBase.js
-var require_EventFactoryBase = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/internal/evaluation/EventFactoryBase.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var events_1 = require_events2();
     var EventFactoryBase = class {
-      constructor(withReasons) {
-        this.withReasons = withReasons;
+      constructor(_withReasons) {
+        this._withReasons = _withReasons;
       }
       evalEvent(e) {
-        var _a;
-        return new events_1.InputEvalEvent(
-          this.withReasons,
+        return new InputEvalEvent(
+          this._withReasons,
           e.context,
           e.flagKey,
           e.value,
           e.defaultVal,
           e.version,
           // Exclude null as a possibility.
-          (_a = e.variation) !== null && _a !== void 0 ? _a : void 0,
+          e.variation ?? void 0,
           e.trackEvents || e.addExperimentData,
           e.prereqOfFlagKey,
-          this.withReasons || e.addExperimentData ? e.reason : void 0,
+          this._withReasons || e.addExperimentData ? e.reason : void 0,
           e.debugEventsUntilDate,
           e.excludeFromSummaries,
           e.samplingRatio
         );
       }
       unknownFlagEvent(key, defVal, context) {
-        return new events_1.InputEvalEvent(
-          this.withReasons,
+        return new InputEvalEvent(
+          this._withReasons,
           context,
           key,
           defVal,
@@ -21018,219 +21206,447 @@ var require_EventFactoryBase = __commonJS({
           void 0
         );
       }
-      /* eslint-disable-next-line class-methods-use-this */
       identifyEvent(context) {
-        return new events_1.InputIdentifyEvent(context, 1);
+        return new InputIdentifyEvent(context, 1);
       }
-      /* eslint-disable-next-line class-methods-use-this */
       customEvent(key, context, data, metricValue, samplingRatio = 1) {
-        return new events_1.InputCustomEvent(context, key, data !== null && data !== void 0 ? data : void 0, metricValue !== null && metricValue !== void 0 ? metricValue : void 0, samplingRatio);
+        return new InputCustomEvent(context, key, data ?? void 0, metricValue ?? void 0, samplingRatio);
       }
     };
-    exports.default = EventFactoryBase;
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/internal/evaluation/index.js
-var require_evaluation = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/internal/evaluation/index.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.EventFactoryBase = exports.ErrorKinds = exports.createErrorEvaluationDetail = exports.createSuccessEvaluationDetail = void 0;
-    var ErrorKinds_1 = require_ErrorKinds();
-    exports.ErrorKinds = ErrorKinds_1.default;
-    var evaluationDetail_1 = require_evaluationDetail();
-    Object.defineProperty(exports, "createErrorEvaluationDetail", { enumerable: true, get: function() {
-      return evaluationDetail_1.createErrorEvaluationDetail;
-    } });
-    Object.defineProperty(exports, "createSuccessEvaluationDetail", { enumerable: true, get: function() {
-      return evaluationDetail_1.createSuccessEvaluationDetail;
-    } });
-    var EventFactoryBase_1 = require_EventFactoryBase();
-    exports.EventFactoryBase = EventFactoryBase_1.default;
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/internal/stream/StreamingProcessor.js
-var require_StreamingProcessor = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/internal/stream/StreamingProcessor.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var errors_1 = require_errors2();
-    var utils_1 = require_utils2();
-    var STREAM_READ_TIMEOUT_MS = 5 * 60 * 1e3;
-    var RETRY_RESET_INTERVAL_MS = 60 * 1e3;
-    var reportJsonError = (type, data, logger, errorHandler) => {
-      logger === null || logger === void 0 ? void 0 : logger.error(`Stream received invalid data in "${type}" message`);
-      logger === null || logger === void 0 ? void 0 : logger.debug(`Invalid JSON follows: ${data}`);
-      errorHandler === null || errorHandler === void 0 ? void 0 : errorHandler(new errors_1.LDStreamingError("Malformed JSON data in event stream"));
-    };
-    var StreamingProcessor = class {
-      constructor(sdkKey, clientContext, streamUriPath, listeners, diagnosticsManager, errorHandler, streamInitialReconnectDelay = 1) {
-        this.listeners = listeners;
-        this.diagnosticsManager = diagnosticsManager;
-        this.errorHandler = errorHandler;
-        this.streamInitialReconnectDelay = streamInitialReconnectDelay;
-        const { basicConfiguration, platform: platform2 } = clientContext;
-        const { logger, tags } = basicConfiguration;
-        const { info, requests } = platform2;
-        this.headers = (0, utils_1.defaultHeaders)(sdkKey, info, tags);
-        this.logger = logger;
-        this.requests = requests;
-        this.streamUri = `${basicConfiguration.serviceEndpoints.streaming}${streamUriPath}`;
-      }
-      logConnectionStarted() {
-        this.connectionAttemptStartTime = Date.now();
-      }
-      logConnectionResult(success) {
-        if (this.connectionAttemptStartTime && this.diagnosticsManager) {
-          this.diagnosticsManager.recordStreamInit(this.connectionAttemptStartTime, !success, Date.now() - this.connectionAttemptStartTime);
-        }
-        this.connectionAttemptStartTime = void 0;
-      }
-      start() {
-        this.logConnectionStarted();
-        const errorFilter = (err) => {
-          var _a, _b, _c;
-          if (err.status && !(0, errors_1.isHttpRecoverable)(err.status)) {
-            this.logConnectionResult(false);
-            (_a = this.errorHandler) === null || _a === void 0 ? void 0 : _a.call(this, new errors_1.LDStreamingError(err.message, err.status));
-            (_b = this.logger) === null || _b === void 0 ? void 0 : _b.error((0, utils_1.httpErrorMessage)(err, "streaming request"));
-            return false;
-          }
-          (_c = this.logger) === null || _c === void 0 ? void 0 : _c.warn((0, utils_1.httpErrorMessage)(err, "streaming request", "will retry"));
-          this.logConnectionResult(false);
-          this.logConnectionStarted();
-          return true;
-        };
-        const eventSource = this.requests.createEventSource(this.streamUri, {
-          headers: this.headers,
-          errorFilter,
-          initialRetryDelayMillis: 1e3 * this.streamInitialReconnectDelay,
-          readTimeoutMillis: STREAM_READ_TIMEOUT_MS,
-          retryResetIntervalMillis: RETRY_RESET_INTERVAL_MS
-        });
-        this.eventSource = eventSource;
-        eventSource.onclose = () => {
-          var _a;
-          (_a = this.logger) === null || _a === void 0 ? void 0 : _a.info("Closed LaunchDarkly stream connection");
-        };
-        eventSource.onerror = () => {
-        };
-        eventSource.onopen = () => {
-          var _a;
-          (_a = this.logger) === null || _a === void 0 ? void 0 : _a.info("Opened LaunchDarkly stream connection");
-        };
-        eventSource.onretrying = (e) => {
-          var _a;
-          (_a = this.logger) === null || _a === void 0 ? void 0 : _a.info(`Will retry stream connection in ${e.delayMillis} milliseconds`);
-        };
-        this.listeners.forEach(({ deserializeData, processJson }, eventName) => {
-          eventSource.addEventListener(eventName, (event) => {
-            var _a, _b;
-            (_a = this.logger) === null || _a === void 0 ? void 0 : _a.debug(`Received ${eventName} event`);
-            if (event === null || event === void 0 ? void 0 : event.data) {
-              this.logConnectionResult(true);
-              const { data } = event;
-              const dataJson = deserializeData(data);
-              if (!dataJson) {
-                reportJsonError(eventName, data, this.logger, this.errorHandler);
-                return;
+    var PAYLOAD_ID = "FDv1Fallback";
+    function fdv1PayloadAdaptor(processor) {
+      return {
+        _processor: processor,
+        _selector: "",
+        useSelector(selector) {
+          this._selector = selector;
+          return this;
+        },
+        processFullTransfer(data) {
+          const events = [
+            {
+              event: "server-intent",
+              data: {
+                payloads: [
+                  {
+                    id: PAYLOAD_ID,
+                    target: 1,
+                    intentCode: "xfer-full",
+                    reason: "payload-missing"
+                  }
+                ]
               }
-              processJson(dataJson);
-            } else {
-              (_b = this.errorHandler) === null || _b === void 0 ? void 0 : _b.call(this, new errors_1.LDStreamingError("Unexpected payload from event stream"));
+            }
+          ];
+          Object.entries(data?.flags || []).forEach(([key, flag]) => {
+            events.push({
+              event: "put-object",
+              data: {
+                kind: "flag",
+                key,
+                version: flag.version || 1,
+                object: flag
+              }
+            });
+          });
+          Object.entries(data?.segments || []).forEach(([key, segment]) => {
+            events.push({
+              event: "put-object",
+              data: {
+                kind: "segment",
+                key,
+                version: segment.version || 1,
+                object: segment
+              }
+            });
+          });
+          events.push({
+            event: "payload-transferred",
+            data: {
+              // IMPORTANT: the selector MUST be empty or "live" data synchronizers
+              // will not work as it would try to resume from a bogus state.
+              state: this._selector,
+              version: 1,
+              id: PAYLOAD_ID
             }
           });
+          this._processor.processEvents(events);
+        }
+      };
+    }
+    var ACTION_NONE = { type: "none" };
+    function createProtocolHandler(objProcessors, logger) {
+      let protocolState = "inactive";
+      let tempType = "partial";
+      let tempUpdates = [];
+      function processObj(kind, jsonObj) {
+        return objProcessors[kind]?.(jsonObj);
+      }
+      function resetAll() {
+        protocolState = "inactive";
+        tempType = "partial";
+        tempUpdates = [];
+      }
+      function resetAfterEmission() {
+        protocolState = "changes";
+        tempType = "partial";
+        tempUpdates = [];
+      }
+      function resetAfterError() {
+        tempUpdates = [];
+      }
+      function processIntentNone(intent) {
+        if (isNullish(intent.target)) {
+          logger?.warn(`Ignoring 'none' intent with missing fields: target=${intent.target}`);
+          return ACTION_NONE;
+        }
+        return {
+          type: "payload",
+          payload: {
+            version: intent.target,
+            type: "none",
+            updates: []
+          }
+        };
+      }
+      function processServerIntent(data) {
+        if (!data.payloads?.length) {
+          return {
+            type: "error",
+            kind: "MISSING_PAYLOAD",
+            message: "No payload present in server-intent"
+          };
+        }
+        const payload = data.payloads[0];
+        switch (payload?.intentCode) {
+          case "xfer-full":
+            protocolState = "full";
+            tempUpdates = [];
+            tempType = "full";
+            return ACTION_NONE;
+          case "xfer-changes":
+            protocolState = "changes";
+            tempUpdates = [];
+            tempType = "partial";
+            return ACTION_NONE;
+          case "none":
+            protocolState = "changes";
+            tempUpdates = [];
+            tempType = "partial";
+            return processIntentNone(payload);
+          default:
+            logger?.warn(`Unable to process intent code '${payload?.intentCode}'.`);
+            return ACTION_NONE;
+        }
+      }
+      function processPutObject(data) {
+        if (protocolState === "inactive") {
+          logger?.warn("Received put-object before server-intent was established. Ignoring.");
+          return ACTION_NONE;
+        }
+        if (!data.kind || !data.key || isNullish(data.version) || !data.object) {
+          logger?.warn(`Ignoring put-object with missing fields: kind=${data.kind}, key=${data.key}, version=${data.version}`);
+          return ACTION_NONE;
+        }
+        const obj = processObj(data.kind, data.object);
+        if (!obj) {
+          logger?.warn(`Unable to process object for kind: '${data.kind}'`);
+          return ACTION_NONE;
+        }
+        tempUpdates.push({
+          kind: data.kind,
+          key: data.key,
+          version: data.version,
+          object: obj
+        });
+        return ACTION_NONE;
+      }
+      function processDeleteObject(data) {
+        if (protocolState === "inactive") {
+          logger?.warn("Received delete-object before server-intent was established. Ignoring.");
+          return ACTION_NONE;
+        }
+        if (!data.kind || !data.key || isNullish(data.version)) {
+          logger?.warn(`Ignoring delete-object with missing fields: kind=${data.kind}, key=${data.key}, version=${data.version}`);
+          return ACTION_NONE;
+        }
+        tempUpdates.push({
+          kind: data.kind,
+          key: data.key,
+          version: data.version,
+          deleted: true
+        });
+        return ACTION_NONE;
+      }
+      function processPayloadTransferred(data) {
+        if (protocolState === "inactive") {
+          return {
+            type: "error",
+            kind: "PROTOCOL_ERROR",
+            message: "A payload transferred has been received without an intent having been established."
+          };
+        }
+        if (isNullish(data.state) || isNullish(data.version)) {
+          logger?.warn(`Ignoring payload-transferred with missing fields: state=${data.state}, version=${data.version}`);
+          resetAll();
+          return ACTION_NONE;
+        }
+        const result = {
+          type: "payload",
+          payload: {
+            version: data.version,
+            state: data.state,
+            type: tempType,
+            updates: tempUpdates
+          }
+        };
+        resetAfterEmission();
+        return result;
+      }
+      function processGoodbye(data) {
+        logger?.info(`Goodbye was received from the LaunchDarkly connection with reason: ${data.reason}.`);
+        resetAll();
+        return { type: "goodbye", reason: data.reason };
+      }
+      function processError(data) {
+        logger?.info(`An issue was encountered receiving updates with reason: ${data.reason}.`);
+        resetAfterError();
+        return { type: "serverError", id: data.payload_id, reason: data.reason };
+      }
+      return {
+        get state() {
+          return protocolState;
+        },
+        processEvent(event) {
+          switch (event.event) {
+            case "server-intent":
+              return processServerIntent(event.data);
+            case "put-object":
+              return processPutObject(event.data);
+            case "delete-object":
+              return processDeleteObject(event.data);
+            case "payload-transferred":
+              return processPayloadTransferred(event.data);
+            case "goodbye":
+              return processGoodbye(event.data);
+            case "error":
+              return processError(event.data);
+            case "heart-beat":
+              return ACTION_NONE;
+            default:
+              return {
+                type: "error",
+                kind: "UNKNOWN_EVENT",
+                message: `Received an unknown event of type '${event.event}'`
+              };
+          }
+        },
+        reset() {
+          resetAll();
+        }
+      };
+    }
+    function isActionableError(kind) {
+      return kind === "MISSING_PAYLOAD" || kind === "PROTOCOL_ERROR";
+    }
+    var PayloadProcessor = class {
+      constructor(objProcessors, _errorHandler, _logger) {
+        this._errorHandler = _errorHandler;
+        this._logger = _logger;
+        this._listeners = [];
+        this._handler = createProtocolHandler(objProcessors, _logger);
+      }
+      addPayloadListener(listener) {
+        this._listeners.push(listener);
+      }
+      removePayloadListener(listener) {
+        const index2 = this._listeners.indexOf(listener, 0);
+        if (index2 > -1) {
+          this._listeners.splice(index2, 1);
+        }
+      }
+      processEvents(events) {
+        events.forEach((event) => {
+          const action = this._handler.processEvent(event);
+          switch (action.type) {
+            case "payload":
+              this._listeners.forEach((it) => it(action.payload));
+              break;
+            case "error":
+              if (isActionableError(action.kind)) {
+                this._errorHandler?.(exports.DataSourceErrorKind.InvalidData, action.message);
+              } else {
+                this._logger?.warn(action.message);
+              }
+              break;
+          }
         });
       }
-      stop() {
-        var _a;
-        (_a = this.eventSource) === null || _a === void 0 ? void 0 : _a.close();
-        this.eventSource = void 0;
+    };
+    var PayloadStreamReader = class {
+      /**
+       * Creates a PayloadStreamReader
+       *
+       * @param eventStream event stream of FDv2 events
+       * @param _objProcessors defines object processors for each object kind.
+       * @param _errorHandler that will be called with parsing errors as they are encountered
+       * @param _logger for logging
+       */
+      constructor(eventStream, _objProcessors, _errorHandler, _logger) {
+        this._errorHandler = _errorHandler;
+        this._logger = _logger;
+        this._attachHandler(eventStream, "server-intent");
+        this._attachHandler(eventStream, "put-object");
+        this._attachHandler(eventStream, "delete-object");
+        this._attachHandler(eventStream, "payload-transferred");
+        this._attachHandler(eventStream, "goodbye");
+        this._attachHandler(eventStream, "error");
+        this._payloadProcessor = new PayloadProcessor(_objProcessors, _errorHandler, _logger);
       }
-      close() {
-        this.stop();
+      addPayloadListener(listener) {
+        this._payloadProcessor.addPayloadListener(listener);
+      }
+      removePayloadListener(listener) {
+        this._payloadProcessor.removePayloadListener(listener);
+      }
+      _attachHandler(stream, eventName) {
+        stream.addEventListener(eventName, async (event) => {
+          if (event?.data) {
+            this._logger?.debug(`Received ${eventName} event.  Data is ${event.data}`);
+            try {
+              this._payloadProcessor.processEvents([
+                { event: eventName, data: JSON.parse(event.data) }
+              ]);
+            } catch {
+              this._logger?.error(`Stream received data that was unable to be processed in "${eventName}" message`);
+              this._logger?.debug(`Data follows: ${event.data}`);
+              this._errorHandler?.(exports.DataSourceErrorKind.InvalidData, "Malformed data in EventStream.");
+            }
+          } else {
+            this._errorHandler?.(exports.DataSourceErrorKind.Unknown, "Event from EventStream missing data.");
+          }
+        });
       }
     };
-    exports.default = StreamingProcessor;
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/internal/stream/index.js
-var require_stream = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/internal/stream/index.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.StreamingProcessor = void 0;
-    var StreamingProcessor_1 = require_StreamingProcessor();
-    exports.StreamingProcessor = StreamingProcessor_1.default;
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/internal/index.js
-var require_internal = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/internal/index.js"(exports) {
-    "use strict";
-    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      var desc = Object.getOwnPropertyDescriptor(m, k);
-      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-        desc = { enumerable: true, get: function() {
-          return m[k];
-        } };
+    function initMetadataFromHeaders(initHeaders) {
+      if (initHeaders) {
+        const envIdKey = Object.keys(initHeaders).find((key) => key.toLowerCase() === "x-ld-envid");
+        if (envIdKey) {
+          return { environmentId: initHeaders[envIdKey] };
+        }
       }
-      Object.defineProperty(o, k2, desc);
-    }) : (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      o[k2] = m[k];
-    }));
-    var __exportStar = exports && exports.__exportStar || function(m, exports2) {
-      for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports2, p)) __createBinding(exports2, m, p);
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    __exportStar(require_diagnostics2(), exports);
-    __exportStar(require_evaluation(), exports);
-    __exportStar(require_events2(), exports);
-    __exportStar(require_stream(), exports);
-  }
-});
-
-// node_modules/@launchdarkly/js-sdk-common/dist/index.js
-var require_dist = __commonJS({
-  "node_modules/@launchdarkly/js-sdk-common/dist/index.js"(exports) {
-    "use strict";
-    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      var desc = Object.getOwnPropertyDescriptor(m, k);
-      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-        desc = { enumerable: true, get: function() {
-          return m[k];
-        } };
+      return void 0;
+    }
+    var UNKNOWN_PLUGIN_NAME = "unknown plugin";
+    function safeGetName(logger, plugin) {
+      try {
+        return plugin.getMetadata().name || UNKNOWN_PLUGIN_NAME;
+      } catch {
+        logger.error(`Exception thrown getting metadata for plugin. Unable to get plugin name.`);
+        return UNKNOWN_PLUGIN_NAME;
       }
-      Object.defineProperty(o, k2, desc);
-    }) : (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      o[k2] = m[k];
-    }));
-    var __exportStar = exports && exports.__exportStar || function(m, exports2) {
-      for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports2, p)) __createBinding(exports2, m, p);
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.ContextFilter = exports.Context = exports.AttributeReference = exports.internal = void 0;
-    var AttributeReference_1 = require_AttributeReference();
-    exports.AttributeReference = AttributeReference_1.default;
-    var Context_1 = require_Context();
-    exports.Context = Context_1.default;
-    var ContextFilter_1 = require_ContextFilter();
-    exports.ContextFilter = ContextFilter_1.default;
-    __exportStar(require_api2(), exports);
-    __exportStar(require_validators(), exports);
-    __exportStar(require_logging2(), exports);
-    __exportStar(require_options2(), exports);
-    __exportStar(require_utils2(), exports);
-    exports.internal = require_internal();
-    __exportStar(require_errors2(), exports);
+    }
+    function safeGetHooks(logger, environmentMetadata, plugins) {
+      const hooks = [];
+      plugins.forEach((plugin) => {
+        try {
+          const pluginHooks = plugin.getHooks?.(environmentMetadata);
+          if (pluginHooks === void 0) {
+            logger.error(`Plugin ${safeGetName(logger, plugin)} returned undefined from getHooks.`);
+          } else if (pluginHooks && pluginHooks.length > 0) {
+            hooks.push(...pluginHooks);
+          }
+        } catch (error2) {
+          logger.error(`Exception thrown getting hooks for plugin ${safeGetName(logger, plugin)}. Unable to get hooks.`);
+        }
+      });
+      return hooks;
+    }
+    function safeRegisterPlugins(logger, environmentMetadata, client, plugins) {
+      plugins.forEach((plugin) => {
+        try {
+          plugin.register(client, environmentMetadata);
+        } catch (error2) {
+          logger.error(`Exception thrown registering plugin ${safeGetName(logger, plugin)}.`);
+        }
+      });
+    }
+    var index = /* @__PURE__ */ Object.freeze({
+      __proto__: null,
+      ClientMessages,
+      DiagnosticsManager,
+      ErrorKinds: ErrorKinds$1,
+      EventFactoryBase,
+      EventProcessor,
+      FDv1PayloadAdaptor: fdv1PayloadAdaptor,
+      InputCustomEvent,
+      InputEvalEvent,
+      InputIdentifyEvent,
+      NullEventProcessor,
+      PayloadProcessor,
+      PayloadStreamReader,
+      canonicalize,
+      createProtocolHandler,
+      initMetadataFromHeaders,
+      isLegacyUser,
+      isMultiKind,
+      isSingleKind,
+      safeGetHooks,
+      safeGetName,
+      safeRegisterPlugins,
+      shouldSample
+    });
+    exports.ApplicationTags = ApplicationTags;
+    exports.AttributeReference = AttributeReference;
+    exports.BasicLogger = BasicLogger;
+    exports.ClientContext = ClientContext;
+    exports.CompositeDataSource = CompositeDataSource;
+    exports.Context = Context;
+    exports.ContextFilter = ContextFilter;
+    exports.DateValidator = DateValidator;
+    exports.DefaultBackoff = DefaultBackoff;
+    exports.FactoryOrInstance = FactoryOrInstance;
+    exports.Function = Function;
+    exports.KindValidator = KindValidator;
+    exports.LDClientError = LDClientError;
+    exports.LDFileDataSourceError = LDFileDataSourceError;
+    exports.LDFlagDeliveryFallbackError = LDFlagDeliveryFallbackError;
+    exports.LDPollingError = LDPollingError;
+    exports.LDStreamingError = LDStreamingError;
+    exports.LDTimeoutError = LDTimeoutError;
+    exports.LDUnexpectedResponseError = LDUnexpectedResponseError;
+    exports.NullableBoolean = NullableBoolean;
+    exports.NumberWithMinimum = NumberWithMinimum;
+    exports.OneOf = OneOf;
+    exports.OptionMessages = OptionMessages;
+    exports.SafeLogger = SafeLogger;
+    exports.ServiceEndpoints = ServiceEndpoints;
+    exports.StringMatchingRegex = StringMatchingRegex;
+    exports.Type = Type;
+    exports.TypeArray = TypeArray;
+    exports.TypeValidators = TypeValidators;
+    exports.base64UrlEncode = base64UrlEncode;
+    exports.cancelableTimedPromise = cancelableTimedPromise;
+    exports.clone = clone;
+    exports.createSafeLogger = createSafeLogger;
+    exports.debounce = debounce;
+    exports.deepCompact = deepCompact;
+    exports.defaultHeaders = defaultHeaders;
+    exports.fastDeepEqual = fastDeepEqual;
+    exports.getEventsUri = getEventsUri;
+    exports.getPollingUri = getPollingUri;
+    exports.getStreamingUri = getStreamingUri;
+    exports.httpErrorMessage = httpErrorMessage;
+    exports.internal = index;
+    exports.isHttpLocallyRecoverable = isHttpLocallyRecoverable;
+    exports.isHttpRecoverable = isHttpRecoverable;
+    exports.isNullish = isNullish;
+    exports.noop = noop;
+    exports.secondsToMillis = secondsToMillis;
+    exports.shouldRetry = shouldRetry;
+    exports.sleep = sleep;
+    exports.subsystem = index$1;
+    exports.timedPromise = timedPromise;
   }
 });
 
@@ -21296,7 +21712,7 @@ var require_LDMigrationVariation = __commonJS({
 });
 
 // node_modules/@launchdarkly/js-server-sdk-common/dist/api/data/index.js
-var require_data2 = __commonJS({
+var require_data = __commonJS({
   "node_modules/@launchdarkly/js-server-sdk-common/dist/api/data/index.js"(exports) {
     "use strict";
     var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
@@ -21388,8 +21804,33 @@ var require_LDMigrationOptions = __commonJS({
   }
 });
 
+// node_modules/@launchdarkly/js-server-sdk-common/dist/api/options/LDDataSystemOptions.js
+var require_LDDataSystemOptions = __commonJS({
+  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/options/LDDataSystemOptions.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.isCustomOptions = exports.isPollingOnlyOptions = exports.isStreamingOnlyOptions = exports.isStandardOptions = void 0;
+    function isStandardOptions(u) {
+      return u.dataSourceOptionsType === "standard";
+    }
+    exports.isStandardOptions = isStandardOptions;
+    function isStreamingOnlyOptions(u) {
+      return u.dataSourceOptionsType === "streamingOnly";
+    }
+    exports.isStreamingOnlyOptions = isStreamingOnlyOptions;
+    function isPollingOnlyOptions(u) {
+      return u.dataSourceOptionsType === "pollingOnly";
+    }
+    exports.isPollingOnlyOptions = isPollingOnlyOptions;
+    function isCustomOptions(u) {
+      return u.dataSourceOptionsType === "custom";
+    }
+    exports.isCustomOptions = isCustomOptions;
+  }
+});
+
 // node_modules/@launchdarkly/js-server-sdk-common/dist/api/options/index.js
-var require_options3 = __commonJS({
+var require_options = __commonJS({
   "node_modules/@launchdarkly/js-server-sdk-common/dist/api/options/index.js"(exports) {
     "use strict";
     var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
@@ -21414,6 +21855,7 @@ var require_options3 = __commonJS({
     __exportStar(require_LDProxyOptions(), exports);
     __exportStar(require_LDTLSOptions(), exports);
     __exportStar(require_LDMigrationOptions(), exports);
+    __exportStar(require_LDDataSystemOptions(), exports);
   }
 });
 
@@ -21449,9 +21891,33 @@ var require_LDFeatureStore = __commonJS({
   }
 });
 
+// node_modules/@launchdarkly/js-server-sdk-common/dist/api/subsystems/LDTransactionalFeatureStore.js
+var require_LDTransactionalFeatureStore = __commonJS({
+  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/subsystems/LDTransactionalFeatureStore.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+  }
+});
+
+// node_modules/@launchdarkly/js-server-sdk-common/dist/api/LDWaitForInitializationOptions.js
+var require_LDWaitForInitializationOptions = __commonJS({
+  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/LDWaitForInitializationOptions.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+  }
+});
+
 // node_modules/@launchdarkly/js-server-sdk-common/dist/api/integrations/FileDataSourceOptions.js
 var require_FileDataSourceOptions = __commonJS({
   "node_modules/@launchdarkly/js-server-sdk-common/dist/api/integrations/FileDataSourceOptions.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+  }
+});
+
+// node_modules/@launchdarkly/js-server-sdk-common/dist/api/integrations/Hook.js
+var require_Hook = __commonJS({
+  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/integrations/Hook.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
   }
@@ -21479,6 +21945,7 @@ var require_integrations = __commonJS({
     };
     Object.defineProperty(exports, "__esModule", { value: true });
     __exportStar(require_FileDataSourceOptions(), exports);
+    __exportStar(require_Hook(), exports);
   }
 });
 
@@ -21597,6 +22064,14 @@ var require_interfaces = __commonJS({
   }
 });
 
+// node_modules/@launchdarkly/js-server-sdk-common/dist/api/subsystems/LDDataSourceUpdates.js
+var require_LDDataSourceUpdates = __commonJS({
+  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/subsystems/LDDataSourceUpdates.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+  }
+});
+
 // node_modules/@launchdarkly/js-server-sdk-common/dist/api/subsystems/LDFeatureRequestor.js
 var require_LDFeatureRequestor = __commonJS({
   "node_modules/@launchdarkly/js-server-sdk-common/dist/api/subsystems/LDFeatureRequestor.js"(exports) {
@@ -21605,9 +22080,9 @@ var require_LDFeatureRequestor = __commonJS({
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/dist/api/subsystems/LDDataSourceUpdates.js
-var require_LDDataSourceUpdates = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/subsystems/LDDataSourceUpdates.js"(exports) {
+// node_modules/@launchdarkly/js-server-sdk-common/dist/api/subsystems/LDTransactionalDataSourceUpdates.js
+var require_LDTransactionalDataSourceUpdates = __commonJS({
+  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/subsystems/LDTransactionalDataSourceUpdates.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
   }
@@ -21634,14 +22109,16 @@ var require_subsystems = __commonJS({
       for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports2, p)) __createBinding(exports2, m, p);
     };
     Object.defineProperty(exports, "__esModule", { value: true });
+    __exportStar(require_LDDataSourceUpdates(), exports);
     __exportStar(require_LDFeatureRequestor(), exports);
     __exportStar(require_LDFeatureStore(), exports);
-    __exportStar(require_LDDataSourceUpdates(), exports);
+    __exportStar(require_LDTransactionalDataSourceUpdates(), exports);
+    __exportStar(require_LDTransactionalFeatureStore(), exports);
   }
 });
 
 // node_modules/@launchdarkly/js-server-sdk-common/dist/api/index.js
-var require_api3 = __commonJS({
+var require_api2 = __commonJS({
   "node_modules/@launchdarkly/js-server-sdk-common/dist/api/index.js"(exports) {
     "use strict";
     var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
@@ -21662,12 +22139,14 @@ var require_api3 = __commonJS({
     };
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.subsystems = exports.interfaces = exports.integrations = void 0;
-    __exportStar(require_data2(), exports);
-    __exportStar(require_options3(), exports);
+    __exportStar(require_data(), exports);
+    __exportStar(require_options(), exports);
     __exportStar(require_LDClient(), exports);
     __exportStar(require_LDMigration(), exports);
     __exportStar(require_DataKind(), exports);
     __exportStar(require_LDFeatureStore(), exports);
+    __exportStar(require_LDTransactionalFeatureStore(), exports);
+    __exportStar(require_LDWaitForInitializationOptions(), exports);
     exports.integrations = require_integrations();
     exports.interfaces = require_interfaces();
     exports.subsystems = require_subsystems();
@@ -21681,98 +22160,99 @@ var require_LruCache = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     var LruCache = class {
       constructor(options) {
-        this.keyMap = /* @__PURE__ */ new Map();
-        this.head = 0;
-        this.tail = 0;
-        this.size = 0;
+        this._keyMap = /* @__PURE__ */ new Map();
+        this._head = 0;
+        this._tail = 0;
+        this._size = 0;
         const { max } = options;
-        this.max = max;
-        this.values = new Array(max);
-        this.keys = new Array(max);
-        this.next = new Uint32Array(max);
-        this.prev = new Uint32Array(max);
+        this._max = max;
+        this._values = new Array(max);
+        this._keys = new Array(max);
+        this._next = new Uint32Array(max);
+        this._prev = new Uint32Array(max);
         if (options.maxAge) {
-          this.lastUpdated = new Array(max).fill(0);
-          this.maxAge = options.maxAge;
+          this._lastUpdated = new Array(max).fill(0);
+          this._maxAge = options.maxAge;
         } else {
-          this.lastUpdated = [];
-          this.maxAge = 0;
+          this._lastUpdated = [];
+          this._maxAge = 0;
         }
       }
       set(key, val) {
-        let index = this.keyMap.get(key);
+        let index = this._keyMap.get(key);
         if (index === void 0) {
-          index = this.index();
-          this.keys[index] = key;
-          this.keyMap.set(key, index);
-          this.next[this.tail] = index;
-          this.prev[index] = this.tail;
-          this.tail = index;
-          this.size += 1;
+          index = this._index();
+          this._keys[index] = key;
+          this._keyMap.set(key, index);
+          this._next[this._tail] = index;
+          this._prev[index] = this._tail;
+          this._tail = index;
+          this._size += 1;
         } else {
-          this.setTail(index);
+          this._setTail(index);
         }
-        this.values[index] = val;
-        if (this.maxAge) {
-          this.lastUpdated[index] = Date.now();
+        this._values[index] = val;
+        if (this._maxAge) {
+          this._lastUpdated[index] = Date.now();
         }
       }
       get(key) {
-        const index = this.keyMap.get(key);
+        const index = this._keyMap.get(key);
         if (index !== void 0) {
-          if (this.maxAge) {
-            const lastUpdated = this.lastUpdated[index];
-            if (Date.now() - lastUpdated > this.maxAge) {
+          if (this._maxAge) {
+            const lastUpdated = this._lastUpdated[index];
+            if (Date.now() - lastUpdated > this._maxAge) {
               return void 0;
             }
           }
-          this.setTail(index);
-          if (this.maxAge) {
-            this.lastUpdated[index] = Date.now();
+          this._setTail(index);
+          if (this._maxAge) {
+            this._lastUpdated[index] = Date.now();
           }
-          return this.values[index];
+          return this._values[index];
         }
         return void 0;
       }
       clear() {
-        this.head = 0;
-        this.tail = 0;
-        this.size = 0;
-        this.values.fill(void 0);
-        this.keys.fill(void 0);
-        this.next.fill(0);
-        this.prev.fill(0);
+        this._head = 0;
+        this._tail = 0;
+        this._size = 0;
+        this._values.fill(void 0);
+        this._keys.fill(void 0);
+        this._next.fill(0);
+        this._prev.fill(0);
+        this._keyMap.clear();
       }
-      index() {
-        if (this.size === 0) {
-          return this.tail;
+      _index() {
+        if (this._size === 0) {
+          return this._tail;
         }
-        if (this.size === this.max) {
-          return this.evict();
+        if (this._size === this._max) {
+          return this._evict();
         }
-        return this.size;
+        return this._size;
       }
-      evict() {
-        const { head } = this;
-        const k = this.keys[head];
-        this.head = this.next[head];
-        this.keyMap.delete(k);
-        this.size -= 1;
+      _evict() {
+        const { _head: head } = this;
+        const k = this._keys[head];
+        this._head = this._next[head];
+        this._keyMap.delete(k);
+        this._size -= 1;
         return head;
       }
-      link(p, n) {
-        this.prev[n] = p;
-        this.next[p] = n;
+      _link(p, n) {
+        this._prev[n] = p;
+        this._next[p] = n;
       }
-      setTail(index) {
-        if (index !== this.tail) {
-          if (index === this.head) {
-            this.head = this.next[index];
+      _setTail(index) {
+        if (index !== this._tail) {
+          if (index === this._head) {
+            this._head = this._next[index];
           } else {
-            this.link(this.prev[index], this.next[index]);
+            this._link(this._prev[index], this._next[index]);
           }
-          this.link(this.tail, index);
-          this.tail = index;
+          this._link(this._tail, index);
+          this._tail = index;
         }
       }
     };
@@ -21785,7 +22265,7 @@ var require_BigSegmentsManager = __commonJS({
   "node_modules/@launchdarkly/js-server-sdk-common/dist/BigSegmentsManager.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    var js_sdk_common_1 = require_dist();
+    var js_sdk_common_1 = require_cjs();
     var BigSegmentStatusProviderImpl_1 = require_BigSegmentStatusProviderImpl();
     var LruCache_1 = require_LruCache();
     var DEFAULT_STALE_AFTER_SECONDS = 120;
@@ -21793,51 +22273,51 @@ var require_BigSegmentsManager = __commonJS({
     var DEFAULT_USER_CACHE_SIZE = 1e3;
     var DEFAULT_USER_CACHE_TIME_SECONDS = 5;
     var BigSegmentsManager = class {
-      constructor(store, config, logger, crypto2) {
-        this.store = store;
-        this.logger = logger;
-        this.crypto = crypto2;
-        this.statusProvider = new BigSegmentStatusProviderImpl_1.default(async () => this.pollStoreAndUpdateStatus());
-        this.staleTimeMs = (js_sdk_common_1.TypeValidators.Number.is(config.staleAfter) && config.staleAfter > 0 ? config.staleAfter : DEFAULT_STALE_AFTER_SECONDS) * 1e3;
+      constructor(_store, config, _logger, _crypto) {
+        this._store = _store;
+        this._logger = _logger;
+        this._crypto = _crypto;
+        this.statusProvider = new BigSegmentStatusProviderImpl_1.default(async () => this._pollStoreAndUpdateStatus());
+        this._staleTimeMs = (js_sdk_common_1.TypeValidators.Number.is(config.staleAfter) && config.staleAfter > 0 ? config.staleAfter : DEFAULT_STALE_AFTER_SECONDS) * 1e3;
         const pollIntervalMs = (js_sdk_common_1.TypeValidators.Number.is(config.statusPollInterval) && config.statusPollInterval > 0 ? config.statusPollInterval : DEFAULT_STATUS_POLL_INTERVAL_SECONDS) * 1e3;
-        this.pollHandle = store ? setInterval(() => this.pollStoreAndUpdateStatus(), pollIntervalMs) : null;
-        if (store) {
-          this.cache = new LruCache_1.default({
+        this._pollHandle = _store ? setInterval(() => this._pollStoreAndUpdateStatus(), pollIntervalMs) : null;
+        if (_store) {
+          this._cache = new LruCache_1.default({
             max: config.userCacheSize || DEFAULT_USER_CACHE_SIZE,
             maxAge: (config.userCacheTime || DEFAULT_USER_CACHE_TIME_SECONDS) * 1e3
           });
         }
       }
       close() {
-        if (this.pollHandle) {
-          clearInterval(this.pollHandle);
-          this.pollHandle = void 0;
+        if (this._pollHandle) {
+          clearInterval(this._pollHandle);
+          this._pollHandle = void 0;
         }
-        if (this.store) {
-          this.store.close();
+        if (this._store) {
+          this._store.close();
         }
       }
       async getUserMembership(userKey) {
         var _a, _b, _c;
-        if (!this.store) {
+        if (!this._store) {
           return void 0;
         }
-        const memberCache = (_a = this.cache) === null || _a === void 0 ? void 0 : _a.get(userKey);
+        const memberCache = (_a = this._cache) === null || _a === void 0 ? void 0 : _a.get(userKey);
         let membership;
         if (!memberCache) {
           try {
-            membership = await this.store.getUserMembership(this.hashForUserKey(userKey));
+            membership = await this._store.getUserMembership(this._hashForUserKey(userKey));
             const cacheItem = { membership };
-            (_b = this.cache) === null || _b === void 0 ? void 0 : _b.set(userKey, cacheItem);
+            (_b = this._cache) === null || _b === void 0 ? void 0 : _b.set(userKey, cacheItem);
           } catch (err) {
-            (_c = this.logger) === null || _c === void 0 ? void 0 : _c.error(`Big Segment store membership query returned error: ${err}`);
+            (_c = this._logger) === null || _c === void 0 ? void 0 : _c.error(`Big Segment store membership query returned error: ${err}`);
             return [null, "STORE_ERROR"];
           }
         } else {
           membership = memberCache.membership;
         }
         if (!this.statusProvider.getStatus()) {
-          await this.pollStoreAndUpdateStatus();
+          await this._pollStoreAndUpdateStatus();
         }
         const lastStatus = this.statusProvider.getStatus();
         if (!lastStatus.available) {
@@ -21845,41 +22325,126 @@ var require_BigSegmentsManager = __commonJS({
         }
         return [membership || null, lastStatus.stale ? "STALE" : "HEALTHY"];
       }
-      async pollStoreAndUpdateStatus() {
+      async _pollStoreAndUpdateStatus() {
         var _a, _b, _c;
-        if (!this.store) {
+        if (!this._store) {
           this.statusProvider.setStatus({ available: false, stale: false });
           return;
         }
-        (_a = this.logger) === null || _a === void 0 ? void 0 : _a.debug("Querying Big Segment store status");
+        (_a = this._logger) === null || _a === void 0 ? void 0 : _a.debug("Querying Big Segment store status");
         let newStatus;
         try {
-          const metadata = await this.store.getMetadata();
+          const metadata = await this._store.getMetadata();
           newStatus = {
             available: true,
-            stale: !metadata || !metadata.lastUpToDate || this.isStale(metadata.lastUpToDate)
+            stale: !metadata || !metadata.lastUpToDate || this._isStale(metadata.lastUpToDate)
           };
         } catch (err) {
-          (_b = this.logger) === null || _b === void 0 ? void 0 : _b.error(`Big Segment store status query returned error: ${err}`);
+          (_b = this._logger) === null || _b === void 0 ? void 0 : _b.error(`Big Segment store status query returned error: ${err}`);
           newStatus = { available: false, stale: false };
         }
         const lastStatus = this.statusProvider.getStatus();
         if (!lastStatus || lastStatus.available !== newStatus.available || lastStatus.stale !== newStatus.stale) {
-          (_c = this.logger) === null || _c === void 0 ? void 0 : _c.debug("Big Segment store status changed from %s to %s", JSON.stringify(lastStatus), JSON.stringify(newStatus));
+          (_c = this._logger) === null || _c === void 0 ? void 0 : _c.debug("Big Segment store status changed from %s to %s", JSON.stringify(lastStatus), JSON.stringify(newStatus));
           this.statusProvider.setStatus(newStatus);
           this.statusProvider.notify();
         }
       }
-      hashForUserKey(userKey) {
-        const hasher = this.crypto.createHash("sha256");
+      _hashForUserKey(userKey) {
+        const hasher = this._crypto.createHash("sha256");
         hasher.update(userKey);
+        if (!hasher.digest) {
+          throw new Error("Platform must implement digest or asyncDigest");
+        }
         return hasher.digest("base64");
       }
-      isStale(timestamp) {
-        return Date.now() - timestamp >= this.staleTimeMs;
+      _isStale(timestamp) {
+        return Date.now() - timestamp >= this._staleTimeMs;
       }
     };
     exports.default = BigSegmentsManager;
+  }
+});
+
+// node_modules/@launchdarkly/js-server-sdk-common/dist/createPluginEnvironmentMetadata.js
+var require_createPluginEnvironmentMetadata = __commonJS({
+  "node_modules/@launchdarkly/js-server-sdk-common/dist/createPluginEnvironmentMetadata.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.createPluginEnvironmentMetadata = void 0;
+    function createPluginEnvironmentMetadata(_platform, _sdkKey, config) {
+      const environmentMetadata = {
+        sdk: {
+          name: _platform.info.sdkData().userAgentBase,
+          version: _platform.info.sdkData().version
+        },
+        sdkKey: _sdkKey
+      };
+      if (_platform.info.sdkData().wrapperName) {
+        environmentMetadata.sdk.wrapperName = _platform.info.sdkData().wrapperName;
+      }
+      if (_platform.info.sdkData().wrapperVersion) {
+        environmentMetadata.sdk.wrapperVersion = _platform.info.sdkData().wrapperVersion;
+      }
+      if (config.applicationInfo) {
+        environmentMetadata.application = config.applicationInfo;
+      }
+      return environmentMetadata;
+    }
+    exports.createPluginEnvironmentMetadata = createPluginEnvironmentMetadata;
+  }
+});
+
+// node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/createPayloadListenerFDv2.js
+var require_createPayloadListenerFDv2 = __commonJS({
+  "node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/createPayloadListenerFDv2.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.createPayloadListener = void 0;
+    var namespaceForKind = (kind) => {
+      switch (kind) {
+        case "flag":
+          return "features";
+        case "segment":
+          return "segments";
+        default:
+          return kind;
+      }
+    };
+    var createPayloadListener = (dataSourceUpdates, logger, initializedCallback = () => {
+    }) => (dataContainer) => {
+      const { initMetadata, payload } = dataContainer;
+      if (payload.type === "full") {
+        logger === null || logger === void 0 ? void 0 : logger.debug("Initializing all data");
+      } else if (payload.updates.length > 0) {
+        logger === null || logger === void 0 ? void 0 : logger.debug("Applying updates");
+      } else {
+        logger === null || logger === void 0 ? void 0 : logger.debug("Payload had no updates, ignoring.");
+        return;
+      }
+      const converted = {};
+      payload.updates.forEach((it) => {
+        const namespace = namespaceForKind(it.kind);
+        if (converted[namespace]) {
+          converted[namespace][it.key] = Object.assign(Object.assign({ version: it.version }, it.deleted && { deleted: it.deleted }), it.object);
+        } else {
+          converted[namespace] = {
+            [it.key]: Object.assign(Object.assign({ version: it.version }, it.deleted && { deleted: it.deleted }), it.object)
+          };
+        }
+        if (it.deleted) {
+          logger === null || logger === void 0 ? void 0 : logger.debug(`Deleting ${it.key} in ${it.kind}`);
+        } else {
+          logger === null || logger === void 0 ? void 0 : logger.debug(`Updating ${it.key} in ${it.kind}`);
+        }
+      });
+      dataSourceUpdates.applyChanges(payload.type === "full", converted, () => {
+        if (payload.state !== "") {
+          initializedCallback();
+        }
+      }, initMetadata, payload.state);
+    };
+    exports.createPayloadListener = createPayloadListener;
   }
 });
 
@@ -21910,17 +22475,35 @@ var require_serialization = __commonJS({
   "node_modules/@launchdarkly/js-server-sdk-common/dist/store/serialization.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.deserializeSegment = exports.serializeSegment = exports.deserializeFlag = exports.serializeFlag = exports.deserializeDelete = exports.deserializePatch = exports.deserializePoll = exports.deserializeAll = exports.processSegment = exports.processFlag = exports.replacer = exports.reviver = void 0;
-    var js_sdk_common_1 = require_dist();
+    exports.deserializeSegment = exports.serializeSegment = exports.deserializeFlag = exports.serializeFlag = exports.deserializeDelete = exports.deserializePatch = exports.deserializePoll = exports.deserializeAll = exports.reviveFullPayload = exports.processSegment = exports.processFlag = exports.replacer = exports.nullReplacer = void 0;
+    var js_sdk_common_1 = require_cjs();
     var VersionedDataKinds_1 = require_VersionedDataKinds();
     var TARGET_LIST_ARRAY_CUTOFF = 100;
-    function reviver(key, value) {
-      if (value === null) {
-        return void 0;
+    function nullReplacer(target, excludeKeys) {
+      const stack = [];
+      if (target === null || target === void 0) {
+        return;
       }
-      return value;
+      const filteredEntries = Object.entries(target).filter(([key, _value]) => !(excludeKeys === null || excludeKeys === void 0 ? void 0 : excludeKeys.includes(key)));
+      stack.push(...filteredEntries.map(([key, value]) => ({
+        key,
+        value,
+        parent: target
+      })));
+      while (stack.length) {
+        const item = stack.pop();
+        if (item.value === null && !Array.isArray(item.parent)) {
+          delete item.parent[item.key];
+        } else if (typeof item.value === "object" && item.value !== null) {
+          stack.push(...Object.entries(item.value).map(([key, value]) => ({
+            key,
+            value,
+            parent: item.value
+          })));
+        }
+      }
     }
-    exports.reviver = reviver;
+    exports.nullReplacer = nullReplacer;
     function replacer(key, value) {
       if (value instanceof js_sdk_common_1.AttributeReference) {
         return void 0;
@@ -21929,6 +22512,9 @@ var require_serialization = __commonJS({
         if (value[0] && value[0] instanceof js_sdk_common_1.AttributeReference) {
           return void 0;
         }
+      }
+      if (value === null || value === void 0) {
+        return value;
       }
       if (value.generated_includedSet) {
         value.included = [...value.generated_includedSet];
@@ -21964,6 +22550,7 @@ var require_serialization = __commonJS({
     }
     function processFlag(flag) {
       var _a;
+      nullReplacer(flag, ["variations"]);
       if (flag.fallthrough && flag.fallthrough.rollout) {
         const rollout = flag.fallthrough.rollout;
         processRollout(rollout);
@@ -21975,7 +22562,7 @@ var require_serialization = __commonJS({
           if (clause && clause.attribute) {
             clause.attributeReference = new js_sdk_common_1.AttributeReference(clause.attribute, !clause.contextKind);
           } else if (clause) {
-            clause.attributeReference = js_sdk_common_1.AttributeReference.invalidReference;
+            clause.attributeReference = js_sdk_common_1.AttributeReference.InvalidReference;
           }
         });
       });
@@ -21983,6 +22570,7 @@ var require_serialization = __commonJS({
     exports.processFlag = processFlag;
     function processSegment(segment) {
       var _a, _b, _c, _d, _e;
+      nullReplacer(segment);
       if (((_a = segment === null || segment === void 0 ? void 0 : segment.included) === null || _a === void 0 ? void 0 : _a.length) && segment.included.length > TARGET_LIST_ARRAY_CUTOFF) {
         segment.generated_includedSet = new Set(segment.included);
         delete segment.included;
@@ -22018,7 +22606,7 @@ var require_serialization = __commonJS({
           if (clause && clause.attribute) {
             clause.attributeReference = new js_sdk_common_1.AttributeReference(clause.attribute, !clause.contextKind);
           } else if (clause) {
-            clause.attributeReference = js_sdk_common_1.AttributeReference.invalidReference;
+            clause.attributeReference = js_sdk_common_1.AttributeReference.InvalidReference;
           }
         });
       });
@@ -22026,23 +22614,28 @@ var require_serialization = __commonJS({
     exports.processSegment = processSegment;
     function tryParse(data) {
       try {
-        return JSON.parse(data, reviver);
+        return JSON.parse(data);
       } catch (_a) {
         return void 0;
       }
     }
+    function reviveFullPayload(payload) {
+      const flagsAndSegments = payload;
+      Object.values((flagsAndSegments === null || flagsAndSegments === void 0 ? void 0 : flagsAndSegments.flags) || []).forEach((flag) => {
+        processFlag(flag);
+      });
+      Object.values((flagsAndSegments === null || flagsAndSegments === void 0 ? void 0 : flagsAndSegments.segments) || []).forEach((segment) => {
+        processSegment(segment);
+      });
+      return flagsAndSegments;
+    }
+    exports.reviveFullPayload = reviveFullPayload;
     function deserializeAll(data) {
-      var _a, _b;
       const parsed = tryParse(data);
       if (!parsed) {
         return void 0;
       }
-      Object.values(((_a = parsed === null || parsed === void 0 ? void 0 : parsed.data) === null || _a === void 0 ? void 0 : _a.flags) || []).forEach((flag) => {
-        processFlag(flag);
-      });
-      Object.values(((_b = parsed === null || parsed === void 0 ? void 0 : parsed.data) === null || _b === void 0 ? void 0 : _b.segments) || []).forEach((segment) => {
-        processSegment(segment);
-      });
+      reviveFullPayload(parsed === null || parsed === void 0 ? void 0 : parsed.data);
       return parsed;
     }
     exports.deserializeAll = deserializeAll;
@@ -22051,12 +22644,7 @@ var require_serialization = __commonJS({
       if (!parsed) {
         return void 0;
       }
-      Object.values((parsed === null || parsed === void 0 ? void 0 : parsed.flags) || []).forEach((flag) => {
-        processFlag(flag);
-      });
-      Object.values((parsed === null || parsed === void 0 ? void 0 : parsed.segments) || []).forEach((segment) => {
-        processSegment(segment);
-      });
+      reviveFullPayload(parsed);
       return parsed;
     }
     exports.deserializePoll = deserializePoll;
@@ -22123,18 +22711,20 @@ var require_createStreamListeners = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.createStreamListeners = exports.createDeleteListener = exports.createPatchListener = exports.createPutListener = void 0;
+    var js_sdk_common_1 = require_cjs();
     var serialization_1 = require_serialization();
     var VersionedDataKinds_1 = require_VersionedDataKinds();
+    var { initMetadataFromHeaders } = js_sdk_common_1.internal;
     var createPutListener = (dataSourceUpdates, logger, onPutCompleteHandler = () => {
     }) => ({
       deserializeData: serialization_1.deserializeAll,
-      processJson: async ({ data: { flags, segments } }) => {
+      processJson: async ({ data: { flags, segments } }, initHeaders) => {
         const initData = {
           [VersionedDataKinds_1.default.Features.namespace]: flags,
           [VersionedDataKinds_1.default.Segments.namespace]: segments
         };
         logger === null || logger === void 0 ? void 0 : logger.debug("Initializing all data");
-        dataSourceUpdates.init(initData, onPutCompleteHandler);
+        dataSourceUpdates.init(initData, onPutCompleteHandler, initMetadataFromHeaders(initHeaders));
       }
     });
     exports.createPutListener = createPutListener;
@@ -22188,29 +22778,29 @@ var require_NamespacedDataSet = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     var NamespacedDataSet = class {
       constructor() {
-        this.itemsByNamespace = {};
+        this._itemsByNamespace = {};
       }
       get(namespace, key) {
         var _a;
-        return (_a = this.itemsByNamespace[namespace]) === null || _a === void 0 ? void 0 : _a[key];
+        return (_a = this._itemsByNamespace[namespace]) === null || _a === void 0 ? void 0 : _a[key];
       }
       set(namespace, key, value) {
-        if (!(namespace in this.itemsByNamespace)) {
-          this.itemsByNamespace[namespace] = {};
+        if (!(namespace in this._itemsByNamespace)) {
+          this._itemsByNamespace[namespace] = {};
         }
-        this.itemsByNamespace[namespace][key] = value;
+        this._itemsByNamespace[namespace][key] = value;
       }
       remove(namespace, key) {
-        const items = this.itemsByNamespace[namespace];
+        const items = this._itemsByNamespace[namespace];
         if (items) {
           delete items[key];
         }
       }
       removeAll() {
-        this.itemsByNamespace = {};
+        this._itemsByNamespace = {};
       }
       enumerate(callback) {
-        Object.entries(this.itemsByNamespace).forEach(([namespace, values]) => {
+        Object.entries(this._itemsByNamespace).forEach(([namespace, values]) => {
           Object.entries(values).forEach(([key, value]) => {
             callback(namespace, key, value);
           });
@@ -22232,21 +22822,21 @@ var require_DependencyTracker = __commonJS({
     var NamespacedDataSet_1 = require_NamespacedDataSet();
     var DependencyTracker = class {
       constructor() {
-        this.dependenciesFrom = new NamespacedDataSet_1.default();
-        this.dependenciesTo = new NamespacedDataSet_1.default();
+        this._dependenciesFrom = new NamespacedDataSet_1.default();
+        this._dependenciesTo = new NamespacedDataSet_1.default();
       }
       updateDependenciesFrom(namespace, key, newDependencySet) {
-        const oldDependencySet = this.dependenciesFrom.get(namespace, key);
+        const oldDependencySet = this._dependenciesFrom.get(namespace, key);
         oldDependencySet === null || oldDependencySet === void 0 ? void 0 : oldDependencySet.enumerate((depNs, depKey) => {
-          const depsToThisDep = this.dependenciesTo.get(depNs, depKey);
+          const depsToThisDep = this._dependenciesTo.get(depNs, depKey);
           depsToThisDep === null || depsToThisDep === void 0 ? void 0 : depsToThisDep.remove(namespace, key);
         });
-        this.dependenciesFrom.set(namespace, key, newDependencySet);
+        this._dependenciesFrom.set(namespace, key, newDependencySet);
         newDependencySet === null || newDependencySet === void 0 ? void 0 : newDependencySet.enumerate((depNs, depKey) => {
-          let depsToThisDep = this.dependenciesTo.get(depNs, depKey);
+          let depsToThisDep = this._dependenciesTo.get(depNs, depKey);
           if (!depsToThisDep) {
             depsToThisDep = new NamespacedDataSet_1.default();
-            this.dependenciesTo.set(depNs, depKey, depsToThisDep);
+            this._dependenciesTo.set(depNs, depKey, depsToThisDep);
           }
           depsToThisDep.set(namespace, key, true);
         });
@@ -22254,15 +22844,15 @@ var require_DependencyTracker = __commonJS({
       updateModifiedItems(inDependencySet, modifiedNamespace, modifiedKey) {
         if (!inDependencySet.get(modifiedNamespace, modifiedKey)) {
           inDependencySet.set(modifiedNamespace, modifiedKey, true);
-          const affectedItems = this.dependenciesTo.get(modifiedNamespace, modifiedKey);
+          const affectedItems = this._dependenciesTo.get(modifiedNamespace, modifiedKey);
           affectedItems === null || affectedItems === void 0 ? void 0 : affectedItems.enumerate((namespace, key) => {
             this.updateModifiedItems(inDependencySet, namespace, key);
           });
         }
       }
       reset() {
-        this.dependenciesFrom.removeAll();
-        this.dependenciesTo.removeAll();
+        this._dependenciesFrom.removeAll();
+        this._dependenciesTo.removeAll();
       }
     };
     exports.default = DependencyTracker;
@@ -22274,6 +22864,7 @@ var require_DataSourceUpdates = __commonJS({
   "node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/DataSourceUpdates.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
+    exports.computeDependencies = void 0;
     var VersionedDataKinds_1 = require_VersionedDataKinds();
     var DependencyTracker_1 = require_DependencyTracker();
     var NamespacedDataSet_1 = require_NamespacedDataSet();
@@ -22303,23 +22894,24 @@ var require_DataSourceUpdates = __commonJS({
       }
       return ret;
     }
+    exports.computeDependencies = computeDependencies;
     var DataSourceUpdates = class {
-      constructor(featureStore, hasEventListeners, onChange) {
-        this.featureStore = featureStore;
-        this.hasEventListeners = hasEventListeners;
-        this.onChange = onChange;
-        this.dependencyTracker = new DependencyTracker_1.default();
+      constructor(_featureStore, _hasEventListeners, _onChange) {
+        this._featureStore = _featureStore;
+        this._hasEventListeners = _hasEventListeners;
+        this._onChange = _onChange;
+        this._dependencyTracker = new DependencyTracker_1.default();
       }
-      init(allData, callback) {
-        const checkForChanges = this.hasEventListeners();
+      init(allData, callback, initMetadata) {
+        const checkForChanges = this._hasEventListeners();
         const doInit = (oldData) => {
-          this.featureStore.init(allData, () => {
+          this._featureStore.init(allData, () => {
             Promise.resolve().then(() => {
-              this.dependencyTracker.reset();
+              this._dependencyTracker.reset();
               Object.entries(allData).forEach(([namespace, items]) => {
                 Object.keys(items || {}).forEach((key) => {
                   const item = items[key];
-                  this.dependencyTracker.updateDependenciesFrom(namespace, key, computeDependencies(namespace, item));
+                  this._dependencyTracker.updateDependenciesFrom(namespace, key, computeDependencies(namespace, item));
                 });
               });
               if (checkForChanges) {
@@ -22336,11 +22928,11 @@ var require_DataSourceUpdates = __commonJS({
               }
             });
             callback === null || callback === void 0 ? void 0 : callback();
-          });
+          }, initMetadata);
         };
         if (checkForChanges) {
-          this.featureStore.all(VersionedDataKinds_1.default.Features, (oldFlags) => {
-            this.featureStore.all(VersionedDataKinds_1.default.Segments, (oldSegments) => {
+          this._featureStore.all(VersionedDataKinds_1.default.Features, (oldFlags) => {
+            this._featureStore.all(VersionedDataKinds_1.default.Segments, (oldSegments) => {
               const oldData = {
                 [VersionedDataKinds_1.default.Features.namespace]: oldFlags,
                 [VersionedDataKinds_1.default.Segments.namespace]: oldSegments
@@ -22354,11 +22946,11 @@ var require_DataSourceUpdates = __commonJS({
       }
       upsert(kind, data, callback) {
         const { key } = data;
-        const checkForChanges = this.hasEventListeners();
+        const checkForChanges = this._hasEventListeners();
         const doUpsert = (oldItem) => {
-          this.featureStore.upsert(kind, data, () => {
+          this._featureStore.upsert(kind, data, () => {
             Promise.resolve().then(() => {
-              this.dependencyTracker.updateDependenciesFrom(kind.namespace, key, computeDependencies(kind.namespace, data));
+              this._dependencyTracker.updateDependenciesFrom(kind.namespace, key, computeDependencies(kind.namespace, data));
               if (checkForChanges) {
                 const updatedItems = new NamespacedDataSet_1.default();
                 this.addIfModified(kind.namespace, key, oldItem, data, updatedItems);
@@ -22369,7 +22961,7 @@ var require_DataSourceUpdates = __commonJS({
           });
         };
         if (checkForChanges) {
-          this.featureStore.get(kind, key, doUpsert);
+          this._featureStore.get(kind, key, doUpsert);
         } else {
           doUpsert();
         }
@@ -22378,17 +22970,283 @@ var require_DataSourceUpdates = __commonJS({
         if (newValue && oldValue && newValue.version <= oldValue.version) {
           return;
         }
-        this.dependencyTracker.updateModifiedItems(toDataSet, namespace, key);
+        this._dependencyTracker.updateModifiedItems(toDataSet, namespace, key);
       }
       sendChangeEvents(dataSet) {
         dataSet.enumerate((namespace, key) => {
           if (namespace === VersionedDataKinds_1.default.Features.namespace) {
-            this.onChange(key);
+            this._onChange(key);
           }
         });
       }
     };
     exports.default = DataSourceUpdates;
+  }
+});
+
+// node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/FileLoader.js
+var require_FileLoader = __commonJS({
+  "node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/FileLoader.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var FileLoader = class {
+      constructor(_filesystem, _paths, _watch, _callback) {
+        this._filesystem = _filesystem;
+        this._paths = _paths;
+        this._watch = _watch;
+        this._callback = _callback;
+        this._watchers = [];
+        this._fileData = {};
+        this._fileTimestamps = {};
+      }
+      /**
+       * Load all the files and start watching them if watching is enabled.
+       */
+      async loadAndWatch() {
+        const promises3 = this._paths.map(async (path) => {
+          const data = await this._filesystem.readFile(path);
+          const timeStamp = await this._filesystem.getFileTimestamp(path);
+          return { data, path, timeStamp };
+        });
+        const results = await Promise.all(promises3);
+        results.forEach((res) => {
+          this._fileData[res.path] = res.data;
+          this._fileTimestamps[res.path] = res.timeStamp;
+        });
+        this._callback(results);
+        if (this._watch) {
+          this._paths.forEach((path) => {
+            const watcher = this._filesystem.watch(path, async (_, updatePath) => {
+              const timeStamp = await this._filesystem.getFileTimestamp(updatePath);
+              if (timeStamp === this._fileTimestamps[updatePath]) {
+                return;
+              }
+              this._fileTimestamps[updatePath] = timeStamp;
+              const data = await this._filesystem.readFile(updatePath);
+              this._fileData[updatePath] = data;
+              this._debounceCallback();
+            });
+            this._watchers.push(watcher);
+          });
+        }
+      }
+      close() {
+        this._watchers.forEach((watcher) => watcher.close());
+      }
+      _debounceCallback() {
+        if (!this._debounceHandle) {
+          this._debounceHandle = setTimeout(() => {
+            this._debounceHandle = void 0;
+            this._callback(Object.entries(this._fileData).reduce((acc, [path, data]) => {
+              acc.push({ path, data });
+              return acc;
+            }, []));
+          }, 10);
+        }
+      }
+    };
+    exports.default = FileLoader;
+  }
+});
+
+// node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/fileDataInitilizerFDv2.js
+var require_fileDataInitilizerFDv2 = __commonJS({
+  "node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/fileDataInitilizerFDv2.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var js_sdk_common_1 = require_cjs();
+    var serialization_1 = require_serialization();
+    var FileLoader_1 = require_FileLoader();
+    var FileDataInitializerFDv2 = class {
+      constructor(options, platform2, logger) {
+        this._validateInputs(options, platform2);
+        this._paths = options.paths;
+        this._logger = logger;
+        this._filesystem = platform2.fileSystem;
+        this._yamlParser = options.yamlParser;
+      }
+      _validateInputs(options, platform2) {
+        if (!options.paths || options.paths.length === 0) {
+          throw new Error("FileDataInitializerFDv2: paths are required");
+        }
+        if (!platform2.fileSystem) {
+          throw new Error("FileDataInitializerFDv2: file system is required");
+        }
+      }
+      start(dataCallback, statusCallback) {
+        statusCallback(js_sdk_common_1.subsystem.DataSourceState.Initializing);
+        const initMetadata = js_sdk_common_1.internal.initMetadataFromHeaders(void 0);
+        const payloadProcessor = new js_sdk_common_1.internal.PayloadProcessor({
+          flag: (flag) => {
+            (0, serialization_1.processFlag)(flag);
+            return flag;
+          },
+          segment: (segment) => {
+            (0, serialization_1.processSegment)(segment);
+            return segment;
+          }
+        }, (errorKind, message) => {
+          statusCallback(js_sdk_common_1.subsystem.DataSourceState.Interrupted, new js_sdk_common_1.LDPollingError(errorKind, message));
+        }, this._logger);
+        const adaptor = js_sdk_common_1.internal.FDv1PayloadAdaptor(payloadProcessor);
+        this._fileLoader = new FileLoader_1.default(
+          this._filesystem,
+          this._paths,
+          false,
+          // autoupdate is always false for initializer
+          (results) => {
+            var _a;
+            try {
+              const parsedData = this._processFileData(results);
+              payloadProcessor.addPayloadListener((payload) => {
+                dataCallback(false, { initMetadata, payload });
+              });
+              statusCallback(js_sdk_common_1.subsystem.DataSourceState.Valid);
+              adaptor.processFullTransfer(parsedData);
+              statusCallback(js_sdk_common_1.subsystem.DataSourceState.Closed);
+            } catch (err) {
+              (_a = this._logger) === null || _a === void 0 ? void 0 : _a.error("File contained invalid data", err);
+              statusCallback(js_sdk_common_1.subsystem.DataSourceState.Closed, new js_sdk_common_1.LDPollingError(js_sdk_common_1.DataSourceErrorKind.InvalidData, "Malformed data in file response"));
+            }
+          }
+        );
+        this._fileLoader.loadAndWatch().catch((err) => {
+          var _a;
+          (_a = this._logger) === null || _a === void 0 ? void 0 : _a.error("Error loading files", err);
+          statusCallback(js_sdk_common_1.subsystem.DataSourceState.Closed, new js_sdk_common_1.LDPollingError(js_sdk_common_1.DataSourceErrorKind.NetworkError, `Failed to load files: ${err instanceof Error ? err.message : String(err)}`));
+        });
+      }
+      _processFileData(results) {
+        const combined = results.reduce((acc, curr) => {
+          var _a, _b;
+          let parsed;
+          if (curr.path.endsWith(".yml") || curr.path.endsWith(".yaml")) {
+            if (this._yamlParser) {
+              parsed = this._yamlParser(curr.data);
+            } else {
+              throw new Error(`Attempted to parse yaml file (${curr.path}) without parser.`);
+            }
+          } else {
+            parsed = JSON.parse(curr.data);
+          }
+          return {
+            segments: Object.assign(Object.assign({}, acc.segments), (_a = parsed.segments) !== null && _a !== void 0 ? _a : {}),
+            flags: Object.assign(Object.assign({}, acc.flags), (_b = parsed.flags) !== null && _b !== void 0 ? _b : {})
+          };
+        }, {
+          segments: {},
+          flags: {}
+        });
+        return combined;
+      }
+      stop() {
+        if (this._fileLoader) {
+          this._fileLoader.close();
+        }
+      }
+    };
+    exports.default = FileDataInitializerFDv2;
+  }
+});
+
+// node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/OneShotInitializerFDv2.js
+var require_OneShotInitializerFDv2 = __commonJS({
+  "node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/OneShotInitializerFDv2.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var js_sdk_common_1 = require_cjs();
+    var serialization_1 = require_serialization();
+    var OneShotInitializerFDv2 = class {
+      constructor(_requestor, _logger) {
+        this._requestor = _requestor;
+        this._logger = _logger;
+        this._stopped = false;
+      }
+      start(dataCallback, statusCallback) {
+        var _a;
+        statusCallback(js_sdk_common_1.subsystem.DataSourceState.Initializing);
+        (_a = this._logger) === null || _a === void 0 ? void 0 : _a.debug("Performing initialization request to LaunchDarkly for feature flag data.");
+        this._requestor.requestAllData((err, body, headers, fallbackToFDv1) => {
+          var _a2, _b, _c;
+          if (this._stopped) {
+            return;
+          }
+          const emitFallback = () => {
+            var _a3;
+            const status = err === null || err === void 0 ? void 0 : err.status;
+            const message = err ? (0, js_sdk_common_1.httpErrorMessage)(err, "initializer", "falling back to FDv1") : `Response header indicates to fallback to FDv1`;
+            (_a3 = this._logger) === null || _a3 === void 0 ? void 0 : _a3.warn(message);
+            statusCallback(js_sdk_common_1.subsystem.DataSourceState.Closed, new js_sdk_common_1.LDFlagDeliveryFallbackError(js_sdk_common_1.DataSourceErrorKind.ErrorResponse, message, status));
+          };
+          if (err) {
+            if (fallbackToFDv1) {
+              emitFallback();
+              return;
+            }
+            const { status } = err;
+            const message = (0, js_sdk_common_1.httpErrorMessage)(err, "initializer", "initializer does not retry");
+            (_a2 = this._logger) === null || _a2 === void 0 ? void 0 : _a2.error(message);
+            statusCallback(js_sdk_common_1.subsystem.DataSourceState.Closed, new js_sdk_common_1.LDPollingError(js_sdk_common_1.DataSourceErrorKind.ErrorResponse, message, status));
+            return;
+          }
+          if (!body) {
+            if (fallbackToFDv1) {
+              emitFallback();
+              return;
+            }
+            statusCallback(js_sdk_common_1.subsystem.DataSourceState.Closed, new js_sdk_common_1.LDPollingError(js_sdk_common_1.DataSourceErrorKind.InvalidData, "One shot initializer response missing body."));
+            return;
+          }
+          const initMetadata = js_sdk_common_1.internal.initMetadataFromHeaders(headers);
+          try {
+            const parsed = JSON.parse(body);
+            const payloadProcessor = new js_sdk_common_1.internal.PayloadProcessor({
+              flag: (flag) => {
+                (0, serialization_1.processFlag)(flag);
+                return flag;
+              },
+              segment: (segment) => {
+                (0, serialization_1.processSegment)(segment);
+                return segment;
+              }
+            }, (errorKind, message) => {
+              if (fallbackToFDv1) {
+                emitFallback();
+                return;
+              }
+              statusCallback(js_sdk_common_1.subsystem.DataSourceState.Interrupted, new js_sdk_common_1.LDPollingError(errorKind, message));
+            }, this._logger);
+            statusCallback(js_sdk_common_1.subsystem.DataSourceState.Valid);
+            payloadProcessor.addPayloadListener((payload) => {
+              var _a3;
+              const data = {
+                initMetadata,
+                payload
+              };
+              if (fallbackToFDv1) {
+                data.fallbackToFDv1 = true;
+                (_a3 = this._logger) === null || _a3 === void 0 ? void 0 : _a3.warn(`Response header indicates to fallback to FDv1`);
+              }
+              dataCallback(payload.type === "full", data);
+            });
+            payloadProcessor.processEvents(parsed.events);
+            statusCallback(js_sdk_common_1.subsystem.DataSourceState.Closed);
+          } catch (parseError) {
+            (_b = this._logger) === null || _b === void 0 ? void 0 : _b.error("Response contained invalid data");
+            (_c = this._logger) === null || _c === void 0 ? void 0 : _c.debug(`${parseError} - Body follows: ${body}`);
+            if (fallbackToFDv1) {
+              emitFallback();
+              return;
+            }
+            statusCallback(js_sdk_common_1.subsystem.DataSourceState.Closed, new js_sdk_common_1.LDPollingError(js_sdk_common_1.DataSourceErrorKind.InvalidData, "Malformed data in polling response"));
+          }
+        });
+      }
+      stop() {
+        this._stopped = true;
+      }
+    };
+    exports.default = OneShotInitializerFDv2;
   }
 });
 
@@ -22416,43 +23274,104 @@ var require_AsyncStoreFacade = __commonJS({
     var promisify_1 = require_promisify();
     var AsyncStoreFacade = class {
       constructor(store) {
-        this.store = store;
+        this._store = store;
       }
       async get(kind, key) {
         return (0, promisify_1.default)((cb) => {
-          this.store.get(kind, key, cb);
+          this._store.get(kind, key, cb);
         });
       }
       async all(kind) {
         return (0, promisify_1.default)((cb) => {
-          this.store.all(kind, cb);
+          this._store.all(kind, cb);
         });
       }
-      async init(allData) {
+      async init(allData, initMetadata) {
         return (0, promisify_1.default)((cb) => {
-          this.store.init(allData, cb);
+          this._store.init(allData, cb, initMetadata);
         });
       }
       async delete(kind, key, version) {
         return (0, promisify_1.default)((cb) => {
-          this.store.delete(kind, key, version, cb);
+          this._store.delete(kind, key, version, cb);
         });
       }
       async upsert(kind, data) {
         return (0, promisify_1.default)((cb) => {
-          this.store.upsert(kind, data, cb);
+          this._store.upsert(kind, data, cb);
         });
       }
       async initialized() {
         return (0, promisify_1.default)((cb) => {
-          this.store.initialized(cb);
+          this._store.initialized(cb);
         });
       }
       close() {
-        this.store.close();
+        this._store.close();
+      }
+      getInitMetadata() {
+        var _a, _b;
+        return (_b = (_a = this._store).getInitMetaData) === null || _b === void 0 ? void 0 : _b.call(_a);
       }
     };
     exports.default = AsyncStoreFacade;
+  }
+});
+
+// node_modules/@launchdarkly/js-server-sdk-common/dist/store/AsyncTransactionalStoreFacade.js
+var require_AsyncTransactionalStoreFacade = __commonJS({
+  "node_modules/@launchdarkly/js-server-sdk-common/dist/store/AsyncTransactionalStoreFacade.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var promisify_1 = require_promisify();
+    var AsyncTransactionalStoreFacade = class {
+      constructor(store) {
+        this._store = store;
+      }
+      async get(kind, key) {
+        return (0, promisify_1.default)((cb) => {
+          this._store.get(kind, key, cb);
+        });
+      }
+      async all(kind) {
+        return (0, promisify_1.default)((cb) => {
+          this._store.all(kind, cb);
+        });
+      }
+      async init(allData, initMetadata) {
+        return (0, promisify_1.default)((cb) => {
+          this._store.init(allData, cb, initMetadata);
+        });
+      }
+      async delete(kind, key, version) {
+        return (0, promisify_1.default)((cb) => {
+          this._store.delete(kind, key, version, cb);
+        });
+      }
+      async upsert(kind, data) {
+        return (0, promisify_1.default)((cb) => {
+          this._store.upsert(kind, data, cb);
+        });
+      }
+      async initialized() {
+        return (0, promisify_1.default)((cb) => {
+          this._store.initialized(cb);
+        });
+      }
+      async applyChanges(basis, data, initMetadata, selector) {
+        return (0, promisify_1.default)((cb) => {
+          this._store.applyChanges(basis, data, cb, initMetadata, selector);
+        });
+      }
+      close() {
+        this._store.close();
+      }
+      getInitMetadata() {
+        var _a, _b;
+        return (_b = (_a = this._store).getInitMetaData) === null || _b === void 0 ? void 0 : _b.call(_a);
+      }
+    };
+    exports.default = AsyncTransactionalStoreFacade;
   }
 });
 
@@ -22465,12 +23384,12 @@ var require_TtlCache = __commonJS({
       return Date.now() > record.expiration;
     }
     var TtlCache = class {
-      constructor(options) {
-        this.options = options;
-        this.storage = /* @__PURE__ */ new Map();
-        this.checkIntervalHandle = setInterval(() => {
-          this.purgeStale();
-        }, options.checkInterval * 1e3);
+      constructor(_options) {
+        this._options = _options;
+        this._storage = /* @__PURE__ */ new Map();
+        this._checkIntervalHandle = setInterval(() => {
+          this._purgeStale();
+        }, _options.checkInterval * 1e3);
       }
       /**
        * Get a value from the cache.
@@ -22479,9 +23398,9 @@ var require_TtlCache = __commonJS({
        * if the value has expired.
        */
       get(key) {
-        const record = this.storage.get(key);
+        const record = this._storage.get(key);
         if (record && isStale(record)) {
-          this.storage.delete(key);
+          this._storage.delete(key);
           return void 0;
         }
         return record === null || record === void 0 ? void 0 : record.value;
@@ -22493,9 +23412,9 @@ var require_TtlCache = __commonJS({
        * @param value The value to set.
        */
       set(key, value) {
-        this.storage.set(key, {
+        this._storage.set(key, {
           value,
-          expiration: Date.now() + this.options.ttl * 1e3
+          expiration: Date.now() + this._options.ttl * 1e3
         });
       }
       /**
@@ -22504,13 +23423,13 @@ var require_TtlCache = __commonJS({
        * @param key The key of the value to delete.
        */
       delete(key) {
-        this.storage.delete(key);
+        this._storage.delete(key);
       }
       /**
        * Clear the items that are in the cache.
        */
       clear() {
-        this.storage.clear();
+        this._storage.clear();
       }
       /**
        * Indicate that you are no longer going to use the cache. The cache will be
@@ -22518,15 +23437,15 @@ var require_TtlCache = __commonJS({
        */
       close() {
         this.clear();
-        if (this.checkIntervalHandle) {
-          clearInterval(this.checkIntervalHandle);
-          this.checkIntervalHandle = null;
+        if (this._checkIntervalHandle) {
+          clearInterval(this._checkIntervalHandle);
+          this._checkIntervalHandle = null;
         }
       }
-      purgeStale() {
-        this.storage.forEach((record, key) => {
+      _purgeStale() {
+        this._storage.forEach((record, key) => {
           if (isStale(record)) {
-            this.storage.delete(key);
+            this._storage.delete(key);
           }
         });
       }
@@ -22535,7 +23454,7 @@ var require_TtlCache = __commonJS({
        * @internal
        */
       get size() {
-        return this.storage.size;
+        return this._storage.size;
       }
     };
     exports.default = TtlCache;
@@ -22656,20 +23575,20 @@ var require_UpdateQueue = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     var UpdateQueue = class {
       constructor() {
-        this.queue = [];
+        this._queue = [];
       }
       enqueue(updateFn, cb) {
-        this.queue.push([updateFn, cb]);
-        if (this.queue.length === 1) {
+        this._queue.push([updateFn, cb]);
+        if (this._queue.length === 1) {
           this.executePendingUpdates();
         }
       }
       executePendingUpdates() {
-        if (this.queue.length > 0) {
-          const [fn, cb] = this.queue[0];
+        if (this._queue.length > 0) {
+          const [fn, cb] = this._queue[0];
           const newCb = () => {
-            this.queue.shift();
-            if (this.queue.length > 0) {
+            this._queue.shift();
+            if (this._queue.length > 0) {
               setTimeout(() => this.executePendingUpdates(), 0);
             }
             cb === null || cb === void 0 ? void 0 : cb();
@@ -22725,61 +23644,61 @@ var require_PersistentDataStoreWrapper = __commonJS({
       };
     }
     var PersistentDataStoreWrapper = class {
-      constructor(core, ttl) {
-        this.core = core;
-        this.isInitialized = false;
-        this.queue = new UpdateQueue_1.default();
+      constructor(_core, ttl) {
+        this._core = _core;
+        this._isInitialized = false;
+        this._queue = new UpdateQueue_1.default();
         if (ttl) {
-          this.itemCache = new TtlCache_1.default({
+          this._itemCache = new TtlCache_1.default({
             ttl,
             checkInterval: defaultCheckInterval
           });
-          this.allItemsCache = new TtlCache_1.default({
+          this._allItemsCache = new TtlCache_1.default({
             ttl,
             checkInterval: defaultCheckInterval
           });
         }
       }
       init(allData, callback) {
-        this.queue.enqueue((cb) => {
+        this._queue.enqueue((cb) => {
           const afterStoreInit = () => {
-            this.isInitialized = true;
-            if (this.itemCache) {
-              this.itemCache.clear();
-              this.allItemsCache.clear();
+            this._isInitialized = true;
+            if (this._itemCache) {
+              this._itemCache.clear();
+              this._allItemsCache.clear();
               Object.keys(allData).forEach((kindNamespace) => {
                 const kind = persistentStoreKinds_1.persistentStoreKinds[kindNamespace];
                 const items = allData[kindNamespace];
-                this.allItemsCache.set(allForKindCacheKey(kind), items);
+                this._allItemsCache.set(allForKindCacheKey(kind), items);
                 Object.keys(items).forEach((key) => {
                   const itemForKey = items[key];
                   const itemDescriptor = {
                     version: itemForKey.version,
                     item: itemForKey
                   };
-                  this.itemCache.set(cacheKey(kind, key), itemDescriptor);
+                  this._itemCache.set(cacheKey(kind, key), itemDescriptor);
                 });
               });
             }
             cb();
           };
-          this.core.init((0, sortDataSet_1.default)(allData), afterStoreInit);
+          this._core.init((0, sortDataSet_1.default)(allData), afterStoreInit);
         }, callback);
       }
       get(kind, key, callback) {
-        if (this.itemCache) {
-          const item = this.itemCache.get(cacheKey(kind, key));
+        if (this._itemCache) {
+          const item = this._itemCache.get(cacheKey(kind, key));
           if (item) {
             callback(itemIfNotDeleted(item));
             return;
           }
         }
         const persistKind = persistentStoreKinds_1.persistentStoreKinds[kind.namespace];
-        this.core.get(persistKind, key, (descriptor) => {
+        this._core.get(persistKind, key, (descriptor) => {
           var _a;
           if (descriptor && descriptor.serializedItem) {
             const value = deserialize(persistKind, descriptor);
-            (_a = this.itemCache) === null || _a === void 0 ? void 0 : _a.set(cacheKey(kind, key), value);
+            (_a = this._itemCache) === null || _a === void 0 ? void 0 : _a.set(cacheKey(kind, key), value);
             callback(itemIfNotDeleted(value));
             return;
           }
@@ -22788,30 +23707,30 @@ var require_PersistentDataStoreWrapper = __commonJS({
       }
       initialized(callback) {
         var _a;
-        if (this.isInitialized) {
+        if (this._isInitialized) {
           callback(true);
-        } else if ((_a = this.itemCache) === null || _a === void 0 ? void 0 : _a.get(initializationCheckedKey)) {
+        } else if ((_a = this._itemCache) === null || _a === void 0 ? void 0 : _a.get(initializationCheckedKey)) {
           callback(false);
         } else {
-          this.core.initialized((storeInitialized) => {
+          this._core.initialized((storeInitialized) => {
             var _a2;
-            this.isInitialized = storeInitialized;
-            if (!this.isInitialized) {
-              (_a2 = this.itemCache) === null || _a2 === void 0 ? void 0 : _a2.set(initializationCheckedKey, true);
+            this._isInitialized = storeInitialized;
+            if (!this._isInitialized) {
+              (_a2 = this._itemCache) === null || _a2 === void 0 ? void 0 : _a2.set(initializationCheckedKey, true);
             }
-            callback(this.isInitialized);
+            callback(this._isInitialized);
           });
         }
       }
       all(kind, callback) {
         var _a;
-        const items = (_a = this.allItemsCache) === null || _a === void 0 ? void 0 : _a.get(allForKindCacheKey(kind));
+        const items = (_a = this._allItemsCache) === null || _a === void 0 ? void 0 : _a.get(allForKindCacheKey(kind));
         if (items) {
           callback(items);
           return;
         }
         const persistKind = persistentStoreKinds_1.persistentStoreKinds[kind.namespace];
-        this.core.getAll(persistKind, (storeItems) => {
+        this._core.getAll(persistKind, (storeItems) => {
           var _a2;
           if (!storeItems) {
             callback({});
@@ -22825,24 +23744,24 @@ var require_PersistentDataStoreWrapper = __commonJS({
               filteredItems[key] = filteredItem;
             }
           });
-          (_a2 = this.allItemsCache) === null || _a2 === void 0 ? void 0 : _a2.set(allForKindCacheKey(kind), filteredItems);
+          (_a2 = this._allItemsCache) === null || _a2 === void 0 ? void 0 : _a2.set(allForKindCacheKey(kind), filteredItems);
           callback(filteredItems);
         });
       }
       upsert(kind, data, callback) {
-        this.queue.enqueue((cb) => {
-          if (this.allItemsCache) {
-            this.allItemsCache.clear();
+        this._queue.enqueue((cb) => {
+          if (this._allItemsCache) {
+            this._allItemsCache.clear();
           }
           const persistKind = persistentStoreKinds_1.persistentStoreKinds[kind.namespace];
-          this.core.upsert(persistKind, data.key, persistKind.serialize(data), (err, updatedDescriptor) => {
+          this._core.upsert(persistKind, data.key, persistKind.serialize(data), (err, updatedDescriptor) => {
             var _a, _b;
             if (!err && updatedDescriptor) {
               if (updatedDescriptor.serializedItem) {
                 const value = deserialize(persistKind, updatedDescriptor);
-                (_a = this.itemCache) === null || _a === void 0 ? void 0 : _a.set(cacheKey(kind, data.key), value);
+                (_a = this._itemCache) === null || _a === void 0 ? void 0 : _a.set(cacheKey(kind, data.key), value);
               } else if (updatedDescriptor.deleted) {
-                (_b = this.itemCache) === null || _b === void 0 ? void 0 : _b.set(data.key, {
+                (_b = this._itemCache) === null || _b === void 0 ? void 0 : _b.set(data.key, {
                   key: data.key,
                   version: updatedDescriptor.version,
                   deleted: true
@@ -22858,172 +23777,15 @@ var require_PersistentDataStoreWrapper = __commonJS({
       }
       close() {
         var _a, _b;
-        (_a = this.itemCache) === null || _a === void 0 ? void 0 : _a.close();
-        (_b = this.allItemsCache) === null || _b === void 0 ? void 0 : _b.close();
-        this.core.close();
+        (_a = this._itemCache) === null || _a === void 0 ? void 0 : _a.close();
+        (_b = this._allItemsCache) === null || _b === void 0 ? void 0 : _b.close();
+        this._core.close();
       }
       getDescription() {
-        return this.core.getDescription();
+        return this._core.getDescription();
       }
     };
     exports.default = PersistentDataStoreWrapper;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/store/index.js
-var require_store = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/store/index.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.deserializePoll = exports.PersistentDataStoreWrapper = exports.AsyncStoreFacade = void 0;
-    var AsyncStoreFacade_1 = require_AsyncStoreFacade();
-    exports.AsyncStoreFacade = AsyncStoreFacade_1.default;
-    var PersistentDataStoreWrapper_1 = require_PersistentDataStoreWrapper();
-    exports.PersistentDataStoreWrapper = PersistentDataStoreWrapper_1.default;
-    var serialization_1 = require_serialization();
-    Object.defineProperty(exports, "deserializePoll", { enumerable: true, get: function() {
-      return serialization_1.deserializePoll;
-    } });
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/PollingProcessor.js
-var require_PollingProcessor = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/PollingProcessor.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var js_sdk_common_1 = require_dist();
-    var store_1 = require_store();
-    var VersionedDataKinds_1 = require_VersionedDataKinds();
-    var PollingProcessor = class {
-      constructor(config, requestor, featureStore, initSuccessHandler = () => {
-      }, errorHandler) {
-        this.requestor = requestor;
-        this.featureStore = featureStore;
-        this.initSuccessHandler = initSuccessHandler;
-        this.errorHandler = errorHandler;
-        this.stopped = false;
-        this.logger = config.logger;
-        this.pollInterval = config.pollInterval;
-      }
-      poll() {
-        var _a;
-        if (this.stopped) {
-          return;
-        }
-        const reportJsonError = (data) => {
-          var _a2, _b, _c;
-          (_a2 = this.logger) === null || _a2 === void 0 ? void 0 : _a2.error("Polling received invalid data");
-          (_b = this.logger) === null || _b === void 0 ? void 0 : _b.debug(`Invalid JSON follows: ${data}`);
-          (_c = this.errorHandler) === null || _c === void 0 ? void 0 : _c.call(this, new js_sdk_common_1.LDPollingError("Malformed JSON data in polling response"));
-        };
-        const startTime = Date.now();
-        (_a = this.logger) === null || _a === void 0 ? void 0 : _a.debug("Polling LaunchDarkly for feature flag updates");
-        this.requestor.requestAllData((err, body) => {
-          var _a2, _b, _c, _d;
-          const elapsed = Date.now() - startTime;
-          const sleepFor = Math.max(this.pollInterval * 1e3 - elapsed, 0);
-          (_a2 = this.logger) === null || _a2 === void 0 ? void 0 : _a2.debug("Elapsed: %d ms, sleeping for %d ms", elapsed, sleepFor);
-          if (err) {
-            const { status } = err;
-            if (status && !(0, js_sdk_common_1.isHttpRecoverable)(status)) {
-              const message = (0, js_sdk_common_1.httpErrorMessage)(err, "polling request");
-              (_b = this.logger) === null || _b === void 0 ? void 0 : _b.error(message);
-              (_c = this.errorHandler) === null || _c === void 0 ? void 0 : _c.call(this, new js_sdk_common_1.LDPollingError(message, status));
-              return;
-            }
-            (_d = this.logger) === null || _d === void 0 ? void 0 : _d.warn((0, js_sdk_common_1.httpErrorMessage)(err, "polling request", "will retry"));
-          } else if (body) {
-            const parsed = (0, store_1.deserializePoll)(body);
-            if (!parsed) {
-              reportJsonError(body);
-            } else {
-              const initData = {
-                [VersionedDataKinds_1.default.Features.namespace]: parsed.flags,
-                [VersionedDataKinds_1.default.Segments.namespace]: parsed.segments
-              };
-              this.featureStore.init(initData, () => {
-                this.initSuccessHandler();
-                this.timeoutHandle = setTimeout(() => {
-                  this.poll();
-                }, sleepFor);
-              });
-              return;
-            }
-          }
-          this.timeoutHandle = setTimeout(() => {
-            this.poll();
-          }, sleepFor);
-        });
-      }
-      start() {
-        this.poll();
-      }
-      stop() {
-        if (this.timeoutHandle) {
-          clearTimeout(this.timeoutHandle);
-          this.timeoutHandle = void 0;
-        }
-        this.stopped = true;
-      }
-      close() {
-        this.stop();
-      }
-    };
-    exports.default = PollingProcessor;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/Requestor.js
-var require_Requestor = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/Requestor.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var js_sdk_common_1 = require_dist();
-    var Requestor = class {
-      constructor(sdkKey, config, info, requests) {
-        this.requests = requests;
-        this.eTagCache = {};
-        this.headers = (0, js_sdk_common_1.defaultHeaders)(sdkKey, info, config.tags);
-        this.uri = `${config.serviceEndpoints.polling}/sdk/latest-all`;
-      }
-      /**
-       * Perform a request and utilize the ETag cache. The ETags are cached in the
-       * requestor instance.
-       */
-      async requestWithETagCache(requestUrl, options) {
-        const cacheEntry = this.eTagCache[requestUrl];
-        const cachedETag = cacheEntry === null || cacheEntry === void 0 ? void 0 : cacheEntry.etag;
-        const updatedOptions = cachedETag ? Object.assign(Object.assign({}, options), { headers: Object.assign(Object.assign({}, options.headers), { "if-none-match": cachedETag }) }) : options;
-        const res = await this.requests.fetch(requestUrl, updatedOptions);
-        if (res.status === 304 && cacheEntry) {
-          return { res, body: cacheEntry.body };
-        }
-        const etag = res.headers.get("etag");
-        const body = await res.text();
-        if (etag) {
-          this.eTagCache[requestUrl] = { etag, body };
-        }
-        return { res, body };
-      }
-      async requestAllData(cb) {
-        const options = {
-          method: "GET",
-          headers: this.headers
-        };
-        try {
-          const { res, body } = await this.requestWithETagCache(this.uri, options);
-          if (res.status !== 200 && res.status !== 304) {
-            const err = new js_sdk_common_1.LDStreamingError(`Unexpected status code: ${res.status}`, res.status);
-            return cb(err, void 0);
-          }
-          return cb(void 0, res.status === 304 ? null : body);
-        } catch (err) {
-          return cb(err, void 0);
-        }
-      }
-    };
-    exports.default = Requestor;
   }
 });
 
@@ -23034,26 +23796,11 @@ var require_InMemoryFeatureStore = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     var InMemoryFeatureStore = class {
       constructor() {
-        this.allData = {};
-        this.initCalled = false;
-      }
-      addItem(kind, key, item) {
-        let items = this.allData[kind.namespace];
-        if (!items) {
-          items = {};
-          this.allData[kind.namespace] = items;
-        }
-        if (Object.hasOwnProperty.call(items, key)) {
-          const old = items[key];
-          if (!old || old.version < item.version) {
-            items[key] = item;
-          }
-        } else {
-          items[key] = item;
-        }
+        this._allData = {};
+        this._initCalled = false;
       }
       get(kind, key, callback) {
-        const items = this.allData[kind.namespace];
+        const items = this._allData[kind.namespace];
         if (items) {
           if (Object.prototype.hasOwnProperty.call(items, key)) {
             const item = items[key];
@@ -23067,7 +23814,7 @@ var require_InMemoryFeatureStore = __commonJS({
       all(kind, callback) {
         var _a;
         const result = {};
-        const items = (_a = this.allData[kind.namespace]) !== null && _a !== void 0 ? _a : {};
+        const items = (_a = this._allData[kind.namespace]) !== null && _a !== void 0 ? _a : {};
         Object.entries(items).forEach(([key, item]) => {
           if (item && !item.deleted) {
             result[key] = item;
@@ -23075,31 +23822,831 @@ var require_InMemoryFeatureStore = __commonJS({
         });
         callback === null || callback === void 0 ? void 0 : callback(result);
       }
-      init(allData, callback) {
-        this.initCalled = true;
-        this.allData = allData;
-        callback === null || callback === void 0 ? void 0 : callback();
+      init(allData, callback, initMetadata) {
+        this.applyChanges(true, allData, callback, initMetadata);
       }
       delete(kind, key, version, callback) {
-        const deletedItem = { version, deleted: true };
-        this.addItem(kind, key, deletedItem);
-        callback === null || callback === void 0 ? void 0 : callback();
+        const item = { key, version, deleted: true };
+        this.applyChanges(false, {
+          [kind.namespace]: {
+            [key]: item
+          }
+        }, callback);
       }
       upsert(kind, data, callback) {
-        this.addItem(kind, data.key, data);
+        this.applyChanges(false, {
+          [kind.namespace]: {
+            [data.key]: data
+          }
+        }, callback);
+      }
+      applyChanges(basis, data, callback, initMetadata, selector) {
+        if (basis) {
+          this._initCalled = true;
+          this._allData = data;
+          this._initMetadata = initMetadata;
+        } else {
+          const tempData = {};
+          Object.entries(this._allData).forEach(([namespace, items]) => {
+            tempData[namespace] = Object.assign({}, items);
+          });
+          Object.entries(data).forEach(([namespace, items]) => {
+            Object.keys(items || {}).forEach((key) => {
+              let existingItems = tempData[namespace];
+              if (!existingItems) {
+                existingItems = {};
+                tempData[namespace] = existingItems;
+              }
+              const item = items[key];
+              if (Object.hasOwnProperty.call(existingItems, key)) {
+                const old = existingItems[key];
+                if (!old || old.version < item.version) {
+                  existingItems[key] = Object.assign({ key }, item);
+                }
+              } else {
+                existingItems[key] = Object.assign({ key }, item);
+              }
+            });
+          });
+          this._allData = tempData;
+        }
+        this._selector = selector;
         callback === null || callback === void 0 ? void 0 : callback();
       }
       initialized(callback) {
-        return callback === null || callback === void 0 ? void 0 : callback(this.initCalled);
+        return callback === null || callback === void 0 ? void 0 : callback(this._initCalled);
       }
-      /* eslint-disable class-methods-use-this */
       close() {
       }
       getDescription() {
         return "memory";
       }
+      getInitMetaData() {
+        return this._initMetadata;
+      }
+      getSelector() {
+        return this._selector;
+      }
     };
     exports.default = InMemoryFeatureStore;
+  }
+});
+
+// node_modules/@launchdarkly/js-server-sdk-common/dist/store/TransactionalFeatureStore.js
+var require_TransactionalFeatureStore = __commonJS({
+  "node_modules/@launchdarkly/js-server-sdk-common/dist/store/TransactionalFeatureStore.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var InMemoryFeatureStore_1 = require_InMemoryFeatureStore();
+    var TransactionalFeatureStore = class {
+      constructor(_nonTransPersistenceStore) {
+        this._nonTransPersistenceStore = _nonTransPersistenceStore;
+        this._activeStore = this._nonTransPersistenceStore;
+        this._memoryStore = new InMemoryFeatureStore_1.default();
+      }
+      get(kind, key, callback) {
+        this._activeStore.get(kind, key, callback);
+      }
+      all(kind, callback) {
+        this._activeStore.all(kind, callback);
+      }
+      init(allData, callback) {
+        this.applyChanges(true, allData, callback);
+      }
+      delete(kind, key, version, callback) {
+        const item = { key, version, deleted: true };
+        this.applyChanges(false, {
+          [kind.namespace]: {
+            [key]: item
+          }
+        }, callback);
+      }
+      upsert(kind, data, callback) {
+        this.applyChanges(false, {
+          [kind.namespace]: {
+            [data.key]: data
+          }
+        }, callback);
+      }
+      applyChanges(basis, data, callback, initMetadata, selector) {
+        this._memoryStore.applyChanges(basis, data, () => {
+          if (basis) {
+            this._activeStore = this._memoryStore;
+            this._nonTransPersistenceStore.init(data, callback);
+          } else {
+            const params = [];
+            Object.entries(data).forEach(([namespace, items]) => {
+              Object.keys(items || {}).forEach((key) => {
+                params.push({ dataKind: { namespace }, item: Object.assign({ key }, items[key]) });
+              });
+            });
+            params.reduce((previousPromise, nextParams) => previousPromise.then(() => new Promise((resolve) => {
+              this._nonTransPersistenceStore.upsert(nextParams.dataKind, nextParams.item, resolve);
+            })), Promise.resolve()).then(callback);
+          }
+        }, initMetadata, selector);
+      }
+      initialized(callback) {
+        this._activeStore.initialized(callback);
+      }
+      close() {
+        this._nonTransPersistenceStore.close();
+        this._memoryStore.close();
+      }
+      getDescription() {
+        return "transactional persistent store";
+      }
+    };
+    exports.default = TransactionalFeatureStore;
+  }
+});
+
+// node_modules/@launchdarkly/js-server-sdk-common/dist/store/index.js
+var require_store = __commonJS({
+  "node_modules/@launchdarkly/js-server-sdk-common/dist/store/index.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.reviveFullPayload = exports.deserializePoll = exports.TransactionalFeatureStore = exports.PersistentDataStoreWrapper = exports.AsyncTransactionalStoreFacade = exports.AsyncStoreFacade = void 0;
+    var AsyncStoreFacade_1 = require_AsyncStoreFacade();
+    exports.AsyncStoreFacade = AsyncStoreFacade_1.default;
+    var AsyncTransactionalStoreFacade_1 = require_AsyncTransactionalStoreFacade();
+    exports.AsyncTransactionalStoreFacade = AsyncTransactionalStoreFacade_1.default;
+    var PersistentDataStoreWrapper_1 = require_PersistentDataStoreWrapper();
+    exports.PersistentDataStoreWrapper = PersistentDataStoreWrapper_1.default;
+    var serialization_1 = require_serialization();
+    Object.defineProperty(exports, "deserializePoll", { enumerable: true, get: function() {
+      return serialization_1.deserializePoll;
+    } });
+    Object.defineProperty(exports, "reviveFullPayload", { enumerable: true, get: function() {
+      return serialization_1.reviveFullPayload;
+    } });
+    var TransactionalFeatureStore_1 = require_TransactionalFeatureStore();
+    exports.TransactionalFeatureStore = TransactionalFeatureStore_1.default;
+  }
+});
+
+// node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/PollingProcessor.js
+var require_PollingProcessor = __commonJS({
+  "node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/PollingProcessor.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var js_sdk_common_1 = require_cjs();
+    var store_1 = require_store();
+    var VersionedDataKinds_1 = require_VersionedDataKinds();
+    var { initMetadataFromHeaders } = js_sdk_common_1.internal;
+    var PollingProcessor = class {
+      constructor(_requestor, _pollInterval, _featureStore, _logger, _initSuccessHandler = () => {
+      }, _errorHandler) {
+        this._requestor = _requestor;
+        this._pollInterval = _pollInterval;
+        this._featureStore = _featureStore;
+        this._logger = _logger;
+        this._initSuccessHandler = _initSuccessHandler;
+        this._errorHandler = _errorHandler;
+        this._stopped = false;
+      }
+      _poll() {
+        var _a;
+        if (this._stopped) {
+          return;
+        }
+        const reportJsonError = (data) => {
+          var _a2, _b, _c;
+          (_a2 = this._logger) === null || _a2 === void 0 ? void 0 : _a2.error("Polling received invalid data");
+          (_b = this._logger) === null || _b === void 0 ? void 0 : _b.debug(`Invalid JSON follows: ${data}`);
+          (_c = this._errorHandler) === null || _c === void 0 ? void 0 : _c.call(this, new js_sdk_common_1.LDPollingError(js_sdk_common_1.DataSourceErrorKind.InvalidData, "Malformed JSON data in polling response"));
+        };
+        const startTime = Date.now();
+        (_a = this._logger) === null || _a === void 0 ? void 0 : _a.debug("Polling LaunchDarkly for feature flag updates");
+        this._requestor.requestAllData((err, body, headers) => {
+          var _a2, _b, _c, _d;
+          const elapsed = Date.now() - startTime;
+          const sleepFor = Math.max(this._pollInterval * 1e3 - elapsed, 0);
+          (_a2 = this._logger) === null || _a2 === void 0 ? void 0 : _a2.debug("Elapsed: %d ms, sleeping for %d ms", elapsed, sleepFor);
+          if (err) {
+            const { status } = err;
+            if (status && !(0, js_sdk_common_1.isHttpRecoverable)(status)) {
+              const message = (0, js_sdk_common_1.httpErrorMessage)(err, "polling request");
+              (_b = this._logger) === null || _b === void 0 ? void 0 : _b.error(message);
+              (_c = this._errorHandler) === null || _c === void 0 ? void 0 : _c.call(this, new js_sdk_common_1.LDPollingError(js_sdk_common_1.DataSourceErrorKind.ErrorResponse, message, status));
+              return;
+            }
+            (_d = this._logger) === null || _d === void 0 ? void 0 : _d.warn((0, js_sdk_common_1.httpErrorMessage)(err, "polling request", "will retry"));
+          } else if (body) {
+            const parsed = (0, store_1.deserializePoll)(body);
+            if (!parsed) {
+              reportJsonError(body);
+            } else {
+              const initData = {
+                [VersionedDataKinds_1.default.Features.namespace]: parsed.flags,
+                [VersionedDataKinds_1.default.Segments.namespace]: parsed.segments
+              };
+              this._featureStore.init(initData, () => {
+                this._initSuccessHandler();
+                this._timeoutHandle = setTimeout(() => {
+                  this._poll();
+                }, sleepFor);
+              }, initMetadataFromHeaders(headers));
+              return;
+            }
+          }
+          this._timeoutHandle = setTimeout(() => {
+            this._poll();
+          }, sleepFor);
+        });
+      }
+      start() {
+        this._poll();
+      }
+      stop() {
+        if (this._timeoutHandle) {
+          clearTimeout(this._timeoutHandle);
+          this._timeoutHandle = void 0;
+        }
+        this._stopped = true;
+      }
+      close() {
+        this.stop();
+      }
+    };
+    exports.default = PollingProcessor;
+  }
+});
+
+// node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/PollingProcessorFDv2.js
+var require_PollingProcessorFDv2 = __commonJS({
+  "node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/PollingProcessorFDv2.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var js_sdk_common_1 = require_cjs();
+    var serialization_1 = require_serialization();
+    function selectorAsQueryParams(selector) {
+      if (!selector) {
+        return [];
+      }
+      return [
+        {
+          key: "basis",
+          value: selector
+        }
+      ];
+    }
+    function processFDv1FlagsAndSegments(payloadProcessor, data) {
+      const adaptor = js_sdk_common_1.internal.FDv1PayloadAdaptor(payloadProcessor);
+      adaptor.useSelector("FDv1Fallback").processFullTransfer(data);
+    }
+    var PollingProcessorFDv2 = class {
+      /**
+       * @param _requestor to fetch flags
+       * @param _pollInterval in seconds controlling how frequently polling request is made
+       * @param _logger for logging
+       * @param _processResponseAsFDv1 defaults to false, but if set to true, this data source will process
+       * the response body as FDv1 and convert it into a FDv2 payload.
+       */
+      constructor(_requestor, _pollInterval = 30, _logger, _processResponseAsFDv1 = false) {
+        this._requestor = _requestor;
+        this._pollInterval = _pollInterval;
+        this._logger = _logger;
+        this._processResponseAsFDv1 = _processResponseAsFDv1;
+        this._stopped = false;
+      }
+      _poll(dataCallback, statusCallback, selectorGetter) {
+        var _a;
+        if (this._stopped) {
+          return;
+        }
+        const startTime = Date.now();
+        (_a = this._logger) === null || _a === void 0 ? void 0 : _a.debug("Polling LaunchDarkly for feature flag updates");
+        this._requestor.requestAllData((err, body, headers, fallbackToFDv1) => {
+          var _a2, _b, _c, _d, _e, _f;
+          if (this._stopped) {
+            return;
+          }
+          const elapsed = Date.now() - startTime;
+          const sleepFor = Math.max(this._pollInterval * 1e3 - elapsed, 0);
+          const emitFallback = () => {
+            var _a3;
+            const fallbackErr = err instanceof js_sdk_common_1.LDFlagDeliveryFallbackError ? err : new js_sdk_common_1.LDFlagDeliveryFallbackError(js_sdk_common_1.DataSourceErrorKind.ErrorResponse, err ? (0, js_sdk_common_1.httpErrorMessage)(err, "polling request", "falling back to FDv1") : `Response header indicates to fallback to FDv1`, err === null || err === void 0 ? void 0 : err.status);
+            (_a3 = this._logger) === null || _a3 === void 0 ? void 0 : _a3.warn(fallbackErr.message);
+            statusCallback(js_sdk_common_1.subsystem.DataSourceState.Closed, fallbackErr);
+          };
+          (_a2 = this._logger) === null || _a2 === void 0 ? void 0 : _a2.debug("Elapsed: %d ms, sleeping for %d ms", elapsed, sleepFor);
+          if (err) {
+            if (fallbackToFDv1 || err instanceof js_sdk_common_1.LDFlagDeliveryFallbackError) {
+              emitFallback();
+              return;
+            }
+            const { status } = err;
+            if (status && !(0, js_sdk_common_1.isHttpRecoverable)(status)) {
+              const message2 = (0, js_sdk_common_1.httpErrorMessage)(err, "polling request");
+              (_b = this._logger) === null || _b === void 0 ? void 0 : _b.error(message2);
+              statusCallback(js_sdk_common_1.subsystem.DataSourceState.Closed, new js_sdk_common_1.LDPollingError(js_sdk_common_1.DataSourceErrorKind.ErrorResponse, message2, status, false));
+              return;
+            }
+            const message = (0, js_sdk_common_1.httpErrorMessage)(err, "polling request", "will retry");
+            statusCallback(js_sdk_common_1.subsystem.DataSourceState.Interrupted, new js_sdk_common_1.LDPollingError(js_sdk_common_1.DataSourceErrorKind.ErrorResponse, message, status));
+            (_c = this._logger) === null || _c === void 0 ? void 0 : _c.warn(message);
+            this._timeoutHandle = setTimeout(() => {
+              this._poll(dataCallback, statusCallback, selectorGetter);
+            }, sleepFor);
+            return;
+          }
+          const initMetadata = js_sdk_common_1.internal.initMetadataFromHeaders(headers);
+          if (body) {
+            try {
+              const payloadProcessor = new js_sdk_common_1.internal.PayloadProcessor({
+                flag: (flag) => {
+                  (0, serialization_1.processFlag)(flag);
+                  return flag;
+                },
+                segment: (segment) => {
+                  (0, serialization_1.processSegment)(segment);
+                  return segment;
+                }
+              }, (errorKind, message) => {
+                if (fallbackToFDv1) {
+                  emitFallback();
+                  return;
+                }
+                statusCallback(js_sdk_common_1.subsystem.DataSourceState.Interrupted, new js_sdk_common_1.LDPollingError(errorKind, message));
+              }, this._logger);
+              payloadProcessor.addPayloadListener((payload) => {
+                var _a3;
+                const data = {
+                  initMetadata,
+                  payload
+                };
+                if (fallbackToFDv1) {
+                  data.fallbackToFDv1 = true;
+                  (_a3 = this._logger) === null || _a3 === void 0 ? void 0 : _a3.warn(`Response header indicates to fallback to FDv1`);
+                }
+                dataCallback(payload.type === "full", data);
+              });
+              (_d = this._logger) === null || _d === void 0 ? void 0 : _d.debug(`Got body: ${body}`);
+              if (!this._processResponseAsFDv1) {
+                const parsed = JSON.parse(body);
+                payloadProcessor.processEvents(parsed.events);
+              } else {
+                const parsed = JSON.parse(body);
+                processFDv1FlagsAndSegments(payloadProcessor, parsed);
+              }
+              if (fallbackToFDv1) {
+                return;
+              }
+              statusCallback(js_sdk_common_1.subsystem.DataSourceState.Valid);
+            } catch (_g) {
+              (_e = this._logger) === null || _e === void 0 ? void 0 : _e.error("Response contained invalid data");
+              (_f = this._logger) === null || _f === void 0 ? void 0 : _f.debug(`${err} - Body follows: ${body}`);
+              if (fallbackToFDv1) {
+                emitFallback();
+                return;
+              }
+              statusCallback(js_sdk_common_1.subsystem.DataSourceState.Interrupted, new js_sdk_common_1.LDPollingError(js_sdk_common_1.DataSourceErrorKind.InvalidData, "Malformed data in polling response"));
+            }
+          } else if (fallbackToFDv1) {
+            emitFallback();
+            return;
+          }
+          this._timeoutHandle = setTimeout(() => {
+            this._poll(dataCallback, statusCallback, selectorGetter);
+          }, sleepFor);
+        }, selectorAsQueryParams(selectorGetter === null || selectorGetter === void 0 ? void 0 : selectorGetter()));
+      }
+      start(dataCallback, statusCallback, selectorGetter) {
+        this._statusCallback = statusCallback;
+        statusCallback(js_sdk_common_1.subsystem.DataSourceState.Initializing);
+        this._poll(dataCallback, statusCallback, selectorGetter);
+      }
+      stop() {
+        var _a;
+        if (this._timeoutHandle) {
+          clearTimeout(this._timeoutHandle);
+          this._timeoutHandle = void 0;
+        }
+        (_a = this._statusCallback) === null || _a === void 0 ? void 0 : _a.call(this, js_sdk_common_1.subsystem.DataSourceState.Closed);
+        this._stopped = true;
+        this._statusCallback = void 0;
+      }
+    };
+    exports.default = PollingProcessorFDv2;
+  }
+});
+
+// node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/Requestor.js
+var require_Requestor = __commonJS({
+  "node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/Requestor.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var js_sdk_common_1 = require_cjs();
+    var Requestor = class {
+      constructor(config, _requests, baseHeaders, _path = "/sdk/latest-all", _logger, serviceEndpointsOverride) {
+        this._requests = _requests;
+        this._path = _path;
+        this._logger = _logger;
+        this._eTagCache = {};
+        this._headers = Object.assign({}, baseHeaders);
+        this._serviceEndpoints = serviceEndpointsOverride !== null && serviceEndpointsOverride !== void 0 ? serviceEndpointsOverride : config.serviceEndpoints;
+        this._timeoutMs = config.timeout * 1e3;
+      }
+      /**
+       * Perform a request and utilize the ETag cache. The ETags are cached in the
+       * requestor instance.
+       */
+      async _requestWithETagCache(requestUrl, options) {
+        const cacheEntry = this._eTagCache[requestUrl];
+        const cachedETag = cacheEntry === null || cacheEntry === void 0 ? void 0 : cacheEntry.etag;
+        const updatedOptions = cachedETag ? Object.assign(Object.assign({}, options), { headers: Object.assign(Object.assign({}, options.headers), { "if-none-match": cachedETag }) }) : options;
+        const res = await this._requests.fetch(requestUrl, updatedOptions);
+        if (res.status === 304 && cacheEntry) {
+          return { res, body: cacheEntry.body };
+        }
+        const etag = res.headers.get("etag");
+        const body = await res.text();
+        if (etag) {
+          this._eTagCache[requestUrl] = { etag, body };
+        }
+        return { res, body };
+      }
+      async requestAllData(cb, queryParams = []) {
+        var _a, _b;
+        const options = {
+          method: "GET",
+          headers: this._headers,
+          timeout: this._timeoutMs
+        };
+        const uri = (0, js_sdk_common_1.getPollingUri)(this._serviceEndpoints, this._path, queryParams);
+        (_a = this._logger) === null || _a === void 0 ? void 0 : _a.debug(`Requestor making request to uri: ${uri}`);
+        try {
+          const { res, body } = await this._requestWithETagCache(uri, options);
+          (_b = this._logger) === null || _b === void 0 ? void 0 : _b.debug(`Requestor got (possibly cached) body: ${JSON.stringify(body)}`);
+          const fallbackToFDv1 = res.headers.get(`x-ld-fd-fallback`) === `true`;
+          const responseHeaders = Object.fromEntries(res.headers.entries());
+          if (res.status !== 200 && res.status !== 304) {
+            const err = fallbackToFDv1 ? new js_sdk_common_1.LDFlagDeliveryFallbackError(js_sdk_common_1.DataSourceErrorKind.ErrorResponse, `Response header indicates to fallback to FDv1.`, res.status) : new js_sdk_common_1.LDPollingError(js_sdk_common_1.DataSourceErrorKind.ErrorResponse, `Unexpected status code: ${res.status}`, res.status);
+            return cb(err, void 0, responseHeaders, fallbackToFDv1);
+          }
+          return cb(void 0, res.status === 304 ? null : body, responseHeaders, fallbackToFDv1);
+        } catch (err) {
+          return cb(err, void 0, void 0, false);
+        }
+      }
+    };
+    exports.default = Requestor;
+  }
+});
+
+// node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/StreamingProcessor.js
+var require_StreamingProcessor = __commonJS({
+  "node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/StreamingProcessor.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var js_sdk_common_1 = require_cjs();
+    var reportJsonError = (type, data, logger, errorHandler) => {
+      logger === null || logger === void 0 ? void 0 : logger.error(`Stream received invalid data in "${type}" message`);
+      logger === null || logger === void 0 ? void 0 : logger.debug(`Invalid JSON follows: ${data}`);
+      errorHandler === null || errorHandler === void 0 ? void 0 : errorHandler(new js_sdk_common_1.LDStreamingError(js_sdk_common_1.DataSourceErrorKind.InvalidData, "Malformed JSON data in event stream"));
+    };
+    var StreamingProcessor = class {
+      constructor(clientContext, streamUriPath, parameters, _listeners, baseHeaders, _diagnosticsManager, _errorHandler, _streamInitialReconnectDelay = 1) {
+        this._listeners = _listeners;
+        this._diagnosticsManager = _diagnosticsManager;
+        this._errorHandler = _errorHandler;
+        this._streamInitialReconnectDelay = _streamInitialReconnectDelay;
+        const { basicConfiguration, platform: platform2 } = clientContext;
+        const { logger } = basicConfiguration;
+        const { requests } = platform2;
+        this._headers = Object.assign({}, baseHeaders);
+        this._logger = logger;
+        this._requests = requests;
+        this._streamUri = (0, js_sdk_common_1.getStreamingUri)(basicConfiguration.serviceEndpoints, streamUriPath, parameters);
+      }
+      _logConnectionStarted() {
+        this._connectionAttemptStartTime = Date.now();
+      }
+      _logConnectionResult(success) {
+        if (this._connectionAttemptStartTime && this._diagnosticsManager) {
+          this._diagnosticsManager.recordStreamInit(this._connectionAttemptStartTime, !success, Date.now() - this._connectionAttemptStartTime);
+        }
+        this._connectionAttemptStartTime = void 0;
+      }
+      /**
+       * This is a wrapper around the passed errorHandler which adds additional
+       * diagnostics and logging logic.
+       *
+       * @param err The error to be logged and handled.
+       * @return boolean whether to retry the connection.
+       *
+       * @private
+       */
+      _retryAndHandleError(err) {
+        var _a, _b, _c;
+        if (!(0, js_sdk_common_1.shouldRetry)(err)) {
+          this._logConnectionResult(false);
+          (_a = this._errorHandler) === null || _a === void 0 ? void 0 : _a.call(this, new js_sdk_common_1.LDStreamingError(js_sdk_common_1.DataSourceErrorKind.ErrorResponse, err.message, err.status));
+          (_b = this._logger) === null || _b === void 0 ? void 0 : _b.error((0, js_sdk_common_1.httpErrorMessage)(err, "streaming request"));
+          return false;
+        }
+        (_c = this._logger) === null || _c === void 0 ? void 0 : _c.warn((0, js_sdk_common_1.httpErrorMessage)(err, "streaming request", "will retry"));
+        this._logConnectionResult(false);
+        this._logConnectionStarted();
+        return true;
+      }
+      start() {
+        this._logConnectionStarted();
+        const eventSource = this._requests.createEventSource(this._streamUri, {
+          headers: this._headers,
+          errorFilter: (error2) => this._retryAndHandleError(error2),
+          initialRetryDelayMillis: 1e3 * this._streamInitialReconnectDelay,
+          readTimeoutMillis: 5 * 60 * 1e3,
+          retryResetIntervalMillis: 60 * 1e3
+        });
+        this._eventSource = eventSource;
+        eventSource.onclose = () => {
+          var _a;
+          (_a = this._logger) === null || _a === void 0 ? void 0 : _a.info("Closed LaunchDarkly stream connection");
+        };
+        eventSource.onerror = () => {
+        };
+        eventSource.onopen = (e) => {
+          var _a;
+          this._initHeaders = e.headers;
+          (_a = this._logger) === null || _a === void 0 ? void 0 : _a.info("Opened LaunchDarkly stream connection");
+        };
+        eventSource.onretrying = (e) => {
+          var _a;
+          (_a = this._logger) === null || _a === void 0 ? void 0 : _a.info(`Will retry stream connection in ${e.delayMillis} milliseconds`);
+        };
+        this._listeners.forEach(({ deserializeData, processJson }, eventName) => {
+          eventSource.addEventListener(eventName, (event) => {
+            var _a, _b;
+            (_a = this._logger) === null || _a === void 0 ? void 0 : _a.debug(`Received ${eventName} event`);
+            if (event === null || event === void 0 ? void 0 : event.data) {
+              this._logConnectionResult(true);
+              const { data } = event;
+              const dataJson = deserializeData(data);
+              if (!dataJson) {
+                reportJsonError(eventName, data, this._logger, this._errorHandler);
+                return;
+              }
+              processJson(dataJson, this._initHeaders);
+            } else {
+              (_b = this._errorHandler) === null || _b === void 0 ? void 0 : _b.call(this, new js_sdk_common_1.LDStreamingError(js_sdk_common_1.DataSourceErrorKind.Unknown, "Unexpected payload from event stream"));
+            }
+          });
+        });
+      }
+      stop() {
+        var _a;
+        (_a = this._eventSource) === null || _a === void 0 ? void 0 : _a.close();
+        this._eventSource = void 0;
+      }
+      close() {
+        this.stop();
+      }
+    };
+    exports.default = StreamingProcessor;
+  }
+});
+
+// node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/StreamingProcessorFDv2.js
+var require_StreamingProcessorFDv2 = __commonJS({
+  "node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/StreamingProcessorFDv2.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var js_sdk_common_1 = require_cjs();
+    var serialization_1 = require_serialization();
+    var StreamingProcessorFDv2 = class {
+      constructor(clientContext, _streamUriPath, _parameters, baseHeaders, _diagnosticsManager, _streamInitialReconnectDelay = 1) {
+        this._streamUriPath = _streamUriPath;
+        this._parameters = _parameters;
+        this._diagnosticsManager = _diagnosticsManager;
+        this._streamInitialReconnectDelay = _streamInitialReconnectDelay;
+        const { basicConfiguration, platform: platform2 } = clientContext;
+        const { logger, serviceEndpoints } = basicConfiguration;
+        const { requests } = platform2;
+        this._headers = Object.assign({}, baseHeaders);
+        this._serviceEndpoints = serviceEndpoints;
+        this._logger = logger;
+        this._requests = requests;
+      }
+      _logConnectionAttempt() {
+        this._connectionAttemptStartTime = Date.now();
+      }
+      _logConnectionResult(success) {
+        if (this._connectionAttemptStartTime && this._diagnosticsManager) {
+          this._diagnosticsManager.recordStreamInit(this._connectionAttemptStartTime, !success, Date.now() - this._connectionAttemptStartTime);
+        }
+        this._connectionAttemptStartTime = void 0;
+      }
+      /**
+       * This is a wrapper around the passed errorHandler which adds additional
+       * diagnostics and logging logic.
+       *
+       * @param err The error to be logged and handled.
+       * @return boolean whether to retry the connection.
+       *
+       * @private
+       */
+      _retryAndHandleError(err, statusCallback) {
+        var _a, _b, _c;
+        if (((_a = err.headers) === null || _a === void 0 ? void 0 : _a[`x-ld-fd-fallback`]) === `true`) {
+          const fallbackErr = new js_sdk_common_1.LDFlagDeliveryFallbackError(js_sdk_common_1.DataSourceErrorKind.ErrorResponse, `Response header indicates to fallback to FDv1`, err.status);
+          statusCallback(js_sdk_common_1.subsystem.DataSourceState.Closed, fallbackErr);
+          return false;
+        }
+        if (!(0, js_sdk_common_1.shouldRetry)(err)) {
+          (_b = this._logger) === null || _b === void 0 ? void 0 : _b.error((0, js_sdk_common_1.httpErrorMessage)(err, "streaming request"));
+          this._logConnectionResult(false);
+          statusCallback(js_sdk_common_1.subsystem.DataSourceState.Closed, new js_sdk_common_1.LDStreamingError(js_sdk_common_1.DataSourceErrorKind.ErrorResponse, err.message, err.status, false));
+          return false;
+        }
+        (_c = this._logger) === null || _c === void 0 ? void 0 : _c.warn((0, js_sdk_common_1.httpErrorMessage)(err, "streaming request", "will retry"));
+        this._logConnectionResult(false);
+        this._logConnectionAttempt();
+        statusCallback(js_sdk_common_1.subsystem.DataSourceState.Interrupted);
+        return true;
+      }
+      start(dataCallback, statusCallback, selectorGetter) {
+        var _a;
+        this._logConnectionAttempt();
+        statusCallback(js_sdk_common_1.subsystem.DataSourceState.Initializing);
+        const selector = selectorGetter === null || selectorGetter === void 0 ? void 0 : selectorGetter();
+        const params = selector ? [...this._parameters, { key: "basis", value: selector }] : this._parameters;
+        const uri = (0, js_sdk_common_1.getStreamingUri)(this._serviceEndpoints, this._streamUriPath, params);
+        (_a = this._logger) === null || _a === void 0 ? void 0 : _a.debug(`Streaming processor opening event source to uri: ${uri}`);
+        let fallbackRequested = false;
+        const eventSource = this._requests.createEventSource(uri, {
+          headers: this._headers,
+          errorFilter: (error2) => this._retryAndHandleError(error2, statusCallback),
+          initialRetryDelayMillis: 1e3 * this._streamInitialReconnectDelay,
+          readTimeoutMillis: 5 * 60 * 1e3,
+          retryResetIntervalMillis: 60 * 1e3
+        });
+        this._eventSource = eventSource;
+        const payloadReader = new js_sdk_common_1.internal.PayloadStreamReader(eventSource, {
+          flag: (flag) => {
+            (0, serialization_1.processFlag)(flag);
+            return flag;
+          },
+          segment: (segment) => {
+            (0, serialization_1.processSegment)(segment);
+            return segment;
+          }
+        }, (errorKind, message) => {
+          var _a2;
+          if (fallbackRequested) {
+            const fallbackErr = new js_sdk_common_1.LDFlagDeliveryFallbackError(js_sdk_common_1.DataSourceErrorKind.ErrorResponse, `Response header indicates to fallback to FDv1`);
+            (_a2 = this._logger) === null || _a2 === void 0 ? void 0 : _a2.warn(fallbackErr.message);
+            statusCallback(js_sdk_common_1.subsystem.DataSourceState.Closed, fallbackErr);
+          } else {
+            statusCallback(js_sdk_common_1.subsystem.DataSourceState.Interrupted, new js_sdk_common_1.LDStreamingError(errorKind, message));
+          }
+          this.stop();
+        }, this._logger);
+        payloadReader.addPayloadListener((payload) => {
+          var _a2;
+          this._logConnectionResult(true);
+          const data = {
+            initMetadata: this._initMetadata,
+            payload
+          };
+          if (fallbackRequested) {
+            data.fallbackToFDv1 = true;
+            (_a2 = this._logger) === null || _a2 === void 0 ? void 0 : _a2.warn(`Response header indicates to fallback to FDv1`);
+          }
+          dataCallback(payload.type === "full", data);
+          if (fallbackRequested) {
+            this.stop();
+          }
+        });
+        eventSource.onclose = () => {
+          var _a2;
+          (_a2 = this._logger) === null || _a2 === void 0 ? void 0 : _a2.info("Closed LaunchDarkly stream connection");
+          statusCallback(js_sdk_common_1.subsystem.DataSourceState.Closed);
+        };
+        eventSource.onerror = () => {
+        };
+        eventSource.onopen = (e) => {
+          var _a2, _b;
+          (_a2 = this._logger) === null || _a2 === void 0 ? void 0 : _a2.info("Opened LaunchDarkly stream connection");
+          this._initMetadata = js_sdk_common_1.internal.initMetadataFromHeaders(e.headers);
+          if (((_b = e.headers) === null || _b === void 0 ? void 0 : _b[`x-ld-fd-fallback`]) === `true`) {
+            fallbackRequested = true;
+          }
+          statusCallback(js_sdk_common_1.subsystem.DataSourceState.Valid);
+        };
+        eventSource.onretrying = (e) => {
+          var _a2;
+          (_a2 = this._logger) === null || _a2 === void 0 ? void 0 : _a2.info(`Will retry stream connection in ${e.delayMillis} milliseconds`);
+        };
+      }
+      stop() {
+        var _a;
+        (_a = this._eventSource) === null || _a === void 0 ? void 0 : _a.close();
+        this._eventSource = void 0;
+      }
+      close() {
+        this.stop();
+      }
+    };
+    exports.default = StreamingProcessorFDv2;
+  }
+});
+
+// node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/TransactionalDataSourceUpdates.js
+var require_TransactionalDataSourceUpdates = __commonJS({
+  "node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/TransactionalDataSourceUpdates.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var VersionedDataKinds_1 = require_VersionedDataKinds();
+    var DataSourceUpdates_1 = require_DataSourceUpdates();
+    var DependencyTracker_1 = require_DependencyTracker();
+    var NamespacedDataSet_1 = require_NamespacedDataSet();
+    var TransactionalDataSourceUpdates = class {
+      constructor(_featureStore, _hasEventListeners, _onChange) {
+        this._featureStore = _featureStore;
+        this._hasEventListeners = _hasEventListeners;
+        this._onChange = _onChange;
+        this._dependencyTracker = new DependencyTracker_1.default();
+      }
+      init(allData, callback, initMetadata) {
+        this.applyChanges(true, allData, callback, initMetadata);
+      }
+      upsert(kind, data, callback) {
+        this.applyChanges(
+          false,
+          // basis is false for upserts
+          {
+            [kind.namespace]: {
+              [data.key]: data
+            }
+          },
+          callback
+        );
+      }
+      applyChanges(basis, data, callback, initMetadata, selector) {
+        const checkForChanges = this._hasEventListeners();
+        const doApplyChanges = (oldData2) => {
+          this._featureStore.applyChanges(basis, data, () => {
+            Promise.resolve().then(() => {
+              if (basis) {
+                this._dependencyTracker.reset();
+              }
+              Object.entries(data).forEach(([namespace, items]) => {
+                Object.keys(items || {}).forEach((key) => {
+                  const item = items[key];
+                  this._dependencyTracker.updateDependenciesFrom(namespace, key, (0, DataSourceUpdates_1.computeDependencies)(namespace, item));
+                });
+              });
+              if (checkForChanges) {
+                const updatedItems = new NamespacedDataSet_1.default();
+                Object.keys(data).forEach((namespace) => {
+                  const oldDataForKind = oldData2[namespace];
+                  const newDataForKind = data[namespace];
+                  let iterateData;
+                  if (basis) {
+                    iterateData = Object.assign(Object.assign({}, oldDataForKind), newDataForKind);
+                  } else {
+                    iterateData = Object.assign({}, newDataForKind);
+                  }
+                  Object.keys(iterateData).forEach((key) => {
+                    this.addIfModified(namespace, key, oldDataForKind && oldDataForKind[key], newDataForKind && newDataForKind[key], updatedItems);
+                  });
+                });
+                this.sendChangeEvents(updatedItems);
+              }
+            });
+            callback === null || callback === void 0 ? void 0 : callback();
+          }, initMetadata, selector);
+        };
+        let oldData = {};
+        if (checkForChanges) {
+          this._featureStore.all(VersionedDataKinds_1.default.Features, (oldFlags) => {
+            this._featureStore.all(VersionedDataKinds_1.default.Segments, (oldSegments) => {
+              oldData = {
+                [VersionedDataKinds_1.default.Features.namespace]: oldFlags,
+                [VersionedDataKinds_1.default.Segments.namespace]: oldSegments
+              };
+            });
+          });
+        }
+        doApplyChanges(oldData);
+      }
+      addIfModified(namespace, key, oldValue, newValue, toDataSet) {
+        if (newValue && oldValue && newValue.version <= oldValue.version) {
+          return;
+        }
+        this._dependencyTracker.updateModifiedItems(toDataSet, namespace, key);
+      }
+      sendChangeEvents(dataSet) {
+        dataSet.enumerate((namespace, key) => {
+          if (namespace === VersionedDataKinds_1.default.Features.namespace) {
+            this._onChange(key);
+          }
+        });
+      }
+    };
+    exports.default = TransactionalDataSourceUpdates;
   }
 });
 
@@ -23108,17 +24655,19 @@ var require_Configuration = __commonJS({
   "node_modules/@launchdarkly/js-server-sdk-common/dist/options/Configuration.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.defaultValues = void 0;
-    var js_sdk_common_1 = require_dist();
+    exports.defaultValues = exports.DEFAULT_STREAM_RECONNECT_DELAY = exports.DEFAULT_POLL_INTERVAL = void 0;
+    var js_sdk_common_1 = require_cjs();
+    var LDDataSystemOptions_1 = require_LDDataSystemOptions();
     var InMemoryFeatureStore_1 = require_InMemoryFeatureStore();
     var validations = {
       baseUri: js_sdk_common_1.TypeValidators.String,
       streamUri: js_sdk_common_1.TypeValidators.String,
       eventsUri: js_sdk_common_1.TypeValidators.String,
-      timeout: js_sdk_common_1.TypeValidators.Number,
+      timeout: js_sdk_common_1.TypeValidators.numberWithMin(1),
       capacity: js_sdk_common_1.TypeValidators.Number,
       logger: js_sdk_common_1.TypeValidators.Object,
       featureStore: js_sdk_common_1.TypeValidators.ObjectOrFactory,
+      dataSystem: js_sdk_common_1.TypeValidators.Object,
       bigSegments: js_sdk_common_1.TypeValidators.Object,
       updateProcessor: js_sdk_common_1.TypeValidators.ObjectOrFactory,
       flushInterval: js_sdk_common_1.TypeValidators.Number,
@@ -23138,19 +24687,41 @@ var require_Configuration = __commonJS({
       diagnosticRecordingInterval: js_sdk_common_1.TypeValidators.numberWithMin(60),
       wrapperName: js_sdk_common_1.TypeValidators.String,
       wrapperVersion: js_sdk_common_1.TypeValidators.String,
-      application: js_sdk_common_1.TypeValidators.Object
+      application: js_sdk_common_1.TypeValidators.Object,
+      payloadFilterKey: js_sdk_common_1.TypeValidators.stringMatchingRegex(/^[a-zA-Z0-9](\w|\.|-)*$/),
+      hooks: js_sdk_common_1.TypeValidators.createTypeArray("Hook[]", {}),
+      enableEventCompression: js_sdk_common_1.TypeValidators.Boolean,
+      dataSourceOptionsType: js_sdk_common_1.TypeValidators.String
+    };
+    exports.DEFAULT_POLL_INTERVAL = 30;
+    exports.DEFAULT_STREAM_RECONNECT_DELAY = 1;
+    var defaultStandardDataSourceOptions = {
+      dataSourceOptionsType: "standard",
+      streamInitialReconnectDelay: exports.DEFAULT_STREAM_RECONNECT_DELAY,
+      pollInterval: exports.DEFAULT_POLL_INTERVAL
+    };
+    var defaultStreamingDataSourceOptions = {
+      dataSourceOptionsType: "streamingOnly",
+      streamInitialReconnectDelay: exports.DEFAULT_STREAM_RECONNECT_DELAY
+    };
+    var defaultPollingDataSourceOptions = {
+      dataSourceOptionsType: "pollingOnly",
+      pollInterval: exports.DEFAULT_POLL_INTERVAL
+    };
+    var defaultDataSystemOptions = {
+      dataSource: defaultStandardDataSourceOptions
     };
     exports.defaultValues = {
       baseUri: "https://sdk.launchdarkly.com",
       streamUri: "https://stream.launchdarkly.com",
       eventsUri: js_sdk_common_1.ServiceEndpoints.DEFAULT_EVENTS,
       stream: true,
-      streamInitialReconnectDelay: 1,
+      streamInitialReconnectDelay: exports.DEFAULT_STREAM_RECONNECT_DELAY,
       sendEvents: true,
-      timeout: 5,
+      timeout: 10,
       capacity: 1e4,
       flushInterval: 5,
-      pollInterval: 30,
+      pollInterval: exports.DEFAULT_POLL_INTERVAL,
       offline: false,
       useLdd: false,
       allAttributesPrivate: false,
@@ -23159,11 +24730,13 @@ var require_Configuration = __commonJS({
       contextKeysFlushInterval: 300,
       diagnosticOptOut: false,
       diagnosticRecordingInterval: 900,
-      featureStore: () => new InMemoryFeatureStore_1.default()
+      featureStore: () => new InMemoryFeatureStore_1.default(),
+      enableEventCompression: false,
+      dataSystem: defaultDataSystemOptions
     };
-    function validateTypesAndNames(options) {
+    function validateTypesAndNames(options, defaults) {
       const errors = [];
-      const validatedOptions = Object.assign({}, exports.defaultValues);
+      const validatedOptions = Object.assign({}, defaults);
       Object.keys(options).forEach((optionName) => {
         var _a;
         const optionValue = options[optionName];
@@ -23209,17 +24782,112 @@ var require_Configuration = __commonJS({
         (_c = validatedOptions.logger) === null || _c === void 0 ? void 0 : _c.warn(js_sdk_common_1.OptionMessages.partialEndpoint("eventsUri"));
       }
     }
+    var fdv1FallbackValidations = {
+      baseUri: js_sdk_common_1.TypeValidators.String,
+      pollInterval: js_sdk_common_1.TypeValidators.numberWithMin(30)
+    };
+    function validateFDv1FallbackOptions(options) {
+      const errors = [];
+      const validatedOptions = {};
+      Object.keys(options).forEach((optionName) => {
+        const optionValue = options[optionName];
+        const validator = fdv1FallbackValidations[optionName];
+        if (!validator) {
+          errors.push(js_sdk_common_1.OptionMessages.unknownOption(`dataSystem.fdv1Fallback.${optionName}`));
+          return;
+        }
+        if (!validator.is(optionValue)) {
+          if (validator instanceof js_sdk_common_1.NumberWithMinimum && js_sdk_common_1.TypeValidators.Number.is(optionValue)) {
+            const { min } = validator;
+            errors.push(js_sdk_common_1.OptionMessages.optionBelowMinimum(`dataSystem.fdv1Fallback.${optionName}`, optionValue, min));
+            validatedOptions[optionName] = min;
+          } else {
+            errors.push(js_sdk_common_1.OptionMessages.wrongOptionType(`dataSystem.fdv1Fallback.${optionName}`, validator.getType(), typeof optionValue));
+          }
+        } else {
+          validatedOptions[optionName] = optionValue;
+        }
+      });
+      return { errors, validatedOptions };
+    }
+    function validateDataSystemOptions(options) {
+      const allErrors = [];
+      const validatedOptions = Object.assign({}, options);
+      if (options.persistentStore && !js_sdk_common_1.TypeValidators.ObjectOrFactory.is(options.persistentStore)) {
+        validatedOptions.persistentStore = void 0;
+        allErrors.push(js_sdk_common_1.OptionMessages.wrongOptionType("persistentStore", "LDFeatureStore", typeof options.persistentStore));
+      }
+      if (options.fdv1Fallback !== void 0 && options.fdv1Fallback !== null) {
+        if (js_sdk_common_1.TypeValidators.Object.is(options.fdv1Fallback)) {
+          const { errors: fbErrors, validatedOptions: fbValidated } = validateFDv1FallbackOptions(options.fdv1Fallback);
+          validatedOptions.fdv1Fallback = fbValidated;
+          allErrors.push(...fbErrors);
+        } else {
+          validatedOptions.fdv1Fallback = void 0;
+          allErrors.push(js_sdk_common_1.OptionMessages.wrongOptionType("dataSystem.fdv1Fallback", "FDv1FallbackConfiguration", typeof options.fdv1Fallback));
+        }
+      }
+      if (options.dataSource) {
+        let errors;
+        let validatedDataSourceOptions;
+        if ((0, LDDataSystemOptions_1.isStandardOptions)(options.dataSource)) {
+          ({ errors, validatedOptions: validatedDataSourceOptions } = validateTypesAndNames(options.dataSource, defaultStandardDataSourceOptions));
+        } else if ((0, LDDataSystemOptions_1.isStreamingOnlyOptions)(options.dataSource)) {
+          ({ errors, validatedOptions: validatedDataSourceOptions } = validateTypesAndNames(options.dataSource, defaultStreamingDataSourceOptions));
+        } else if ((0, LDDataSystemOptions_1.isPollingOnlyOptions)(options.dataSource)) {
+          ({ errors, validatedOptions: validatedDataSourceOptions } = validateTypesAndNames(options.dataSource, defaultPollingDataSourceOptions));
+        } else if ((0, LDDataSystemOptions_1.isCustomOptions)(options.dataSource)) {
+          validatedDataSourceOptions = options.dataSource;
+          errors = [];
+        } else {
+          validatedDataSourceOptions = defaultStandardDataSourceOptions;
+          errors = [
+            js_sdk_common_1.OptionMessages.wrongOptionType("dataSource", "DataSourceOptions", typeof options.dataSource)
+          ];
+        }
+        validatedOptions.dataSource = validatedDataSourceOptions;
+        allErrors.push(...errors);
+      } else {
+        validatedOptions.dataSource = defaultStandardDataSourceOptions;
+      }
+      return { errors: allErrors, validatedOptions };
+    }
     var Configuration = class {
-      constructor(options = {}) {
+      constructor(options = {}, internalOptions = {}) {
+        var _a;
         options = options || {};
         this.logger = options.logger;
-        const { errors, validatedOptions } = validateTypesAndNames(options);
+        const { errors, validatedOptions: topLevelResult } = validateTypesAndNames(options, exports.defaultValues);
+        const validatedOptions = topLevelResult;
         errors.forEach((error2) => {
-          var _a;
-          (_a = this.logger) === null || _a === void 0 ? void 0 : _a.warn(error2);
+          var _a2;
+          (_a2 = this.logger) === null || _a2 === void 0 ? void 0 : _a2.warn(error2);
         });
         validateEndpoints(options, validatedOptions);
-        this.serviceEndpoints = new js_sdk_common_1.ServiceEndpoints(validatedOptions.streamUri, validatedOptions.baseUri, validatedOptions.eventsUri);
+        if (options.dataSystem) {
+          const { errors: dsErrors, validatedOptions: dsResult } = validateDataSystemOptions(options.dataSystem);
+          const validatedDSOptions = dsResult;
+          this.dataSystem = {
+            dataSource: validatedDSOptions.dataSource,
+            useLdd: validatedDSOptions.useLdd,
+            fdv1Fallback: validatedDSOptions.fdv1Fallback,
+            // @ts-ignore
+            featureStoreFactory: (clientContext) => {
+              if (validatedDSOptions.persistentStore === void 0) {
+                return new InMemoryFeatureStore_1.default();
+              }
+              if (js_sdk_common_1.TypeValidators.Function.is(validatedDSOptions.persistentStore)) {
+                return validatedDSOptions.persistentStore(clientContext);
+              }
+              return validatedDSOptions.persistentStore;
+            }
+          };
+          dsErrors.forEach((error2) => {
+            var _a2;
+            (_a2 = this.logger) === null || _a2 === void 0 ? void 0 : _a2.warn(error2);
+          });
+        }
+        this.serviceEndpoints = new js_sdk_common_1.ServiceEndpoints(validatedOptions.streamUri, validatedOptions.baseUri, validatedOptions.eventsUri, internalOptions.analyticsEventPath, internalOptions.diagnosticEventPath, internalOptions.includeAuthorizationHeader, validatedOptions.payloadFilterKey);
         this.eventsCapacity = validatedOptions.capacity;
         this.timeout = validatedOptions.timeout;
         this.bigSegments = validatedOptions.bigSegments;
@@ -23238,6 +24906,7 @@ var require_Configuration = __commonJS({
         this.tlsParams = validatedOptions.tlsParams;
         this.diagnosticOptOut = validatedOptions.diagnosticOptOut;
         this.wrapperName = validatedOptions.wrapperName;
+        this.payloadFilterKey = validatedOptions.payloadFilterKey;
         this.wrapperVersion = validatedOptions.wrapperVersion;
         this.tags = new js_sdk_common_1.ApplicationTags(validatedOptions);
         this.diagnosticRecordingInterval = validatedOptions.diagnosticRecordingInterval;
@@ -23251,6 +24920,10 @@ var require_Configuration = __commonJS({
         } else {
           this.featureStoreFactory = () => validatedOptions.featureStore;
         }
+        this.hooks = validatedOptions.hooks;
+        this.enableEventCompression = validatedOptions.enableEventCompression;
+        this.getImplementationHooks = (_a = internalOptions.getImplementationHooks) !== null && _a !== void 0 ? _a : (() => []);
+        this.applicationInfo = validatedOptions.application;
       }
     };
     exports.default = Configuration;
@@ -23262,11 +24935,34 @@ var require_createDiagnosticsInitConfig = __commonJS({
   "node_modules/@launchdarkly/js-server-sdk-common/dist/diagnostics/createDiagnosticsInitConfig.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    var js_sdk_common_1 = require_dist();
+    var js_sdk_common_1 = require_cjs();
+    var api_1 = require_api2();
     var Configuration_1 = require_Configuration();
     var createDiagnosticsInitConfig = (config, platform2, featureStore) => {
-      var _a, _b, _c, _d, _e, _f;
-      return {
+      var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
+      let pollingIntervalMillis;
+      if ((_a = config.dataSystem) === null || _a === void 0 ? void 0 : _a.dataSource) {
+        if (((0, api_1.isStandardOptions)(config.dataSystem.dataSource) || (0, api_1.isPollingOnlyOptions)(config.dataSystem.dataSource)) && config.dataSystem.dataSource.pollInterval) {
+          pollingIntervalMillis = (0, js_sdk_common_1.secondsToMillis)(config.dataSystem.dataSource.pollInterval);
+        }
+      } else {
+        pollingIntervalMillis = (0, js_sdk_common_1.secondsToMillis)(config.pollInterval);
+      }
+      let reconnectTimeMillis;
+      if ((_b = config.dataSystem) === null || _b === void 0 ? void 0 : _b.dataSource) {
+        if (((0, api_1.isStandardOptions)(config.dataSystem.dataSource) || (0, api_1.isStreamingOnlyOptions)(config.dataSystem.dataSource)) && config.dataSystem.dataSource.streamInitialReconnectDelay) {
+          reconnectTimeMillis = (0, js_sdk_common_1.secondsToMillis)(config.dataSystem.dataSource.streamInitialReconnectDelay);
+        }
+      } else {
+        reconnectTimeMillis = (0, js_sdk_common_1.secondsToMillis)(config.streamInitialReconnectDelay);
+      }
+      let streamDisabled;
+      if ((_c = config.dataSystem) === null || _c === void 0 ? void 0 : _c.dataSource) {
+        streamDisabled = (0, api_1.isPollingOnlyOptions)((_d = config.dataSystem) === null || _d === void 0 ? void 0 : _d.dataSource);
+      } else {
+        streamDisabled = !config.stream;
+      }
+      return Object.assign(Object.assign(Object.assign({
         customBaseURI: config.serviceEndpoints.polling !== Configuration_1.defaultValues.baseUri,
         customStreamURI: config.serviceEndpoints.streaming !== Configuration_1.defaultValues.streamUri,
         customEventsURI: config.serviceEndpoints.events !== Configuration_1.defaultValues.eventsUri,
@@ -23275,20 +24971,8 @@ var require_createDiagnosticsInitConfig = __commonJS({
         // based implementations would be able to either.
         connectTimeoutMillis: (0, js_sdk_common_1.secondsToMillis)(config.timeout),
         socketTimeoutMillis: (0, js_sdk_common_1.secondsToMillis)(config.timeout),
-        eventsFlushIntervalMillis: (0, js_sdk_common_1.secondsToMillis)(config.flushInterval),
-        pollingIntervalMillis: (0, js_sdk_common_1.secondsToMillis)(config.pollInterval),
-        reconnectTimeMillis: (0, js_sdk_common_1.secondsToMillis)(config.streamInitialReconnectDelay),
-        contextKeysFlushIntervalMillis: (0, js_sdk_common_1.secondsToMillis)(config.contextKeysFlushInterval),
-        diagnosticRecordingIntervalMillis: (0, js_sdk_common_1.secondsToMillis)(config.diagnosticRecordingInterval),
-        streamingDisabled: !config.stream,
-        usingRelayDaemon: config.useLdd,
-        offline: config.offline,
-        allAttributesPrivate: config.allAttributesPrivate,
-        contextKeysCapacity: config.contextKeysCapacity,
-        usingProxy: !!((_b = (_a = platform2.requests).usingProxy) === null || _b === void 0 ? void 0 : _b.call(_a)),
-        usingProxyAuthenticator: !!((_d = (_c = platform2.requests).usingProxyAuth) === null || _d === void 0 ? void 0 : _d.call(_c)),
-        dataStoreType: (_f = (_e = featureStore.getDescription) === null || _e === void 0 ? void 0 : _e.call(featureStore)) !== null && _f !== void 0 ? _f : "memory"
-      };
+        eventsFlushIntervalMillis: (0, js_sdk_common_1.secondsToMillis)(config.flushInterval)
+      }, pollingIntervalMillis ? { pollingIntervalMillis } : null), reconnectTimeMillis ? { reconnectTimeMillis } : null), { contextKeysFlushIntervalMillis: (0, js_sdk_common_1.secondsToMillis)(config.contextKeysFlushInterval), diagnosticRecordingIntervalMillis: (0, js_sdk_common_1.secondsToMillis)(config.diagnosticRecordingInterval), streamingDisabled: streamDisabled, usingRelayDaemon: (_f = (_e = config.dataSystem) === null || _e === void 0 ? void 0 : _e.useLdd) !== null && _f !== void 0 ? _f : config.useLdd, offline: config.offline, allAttributesPrivate: config.allAttributesPrivate, contextKeysCapacity: config.contextKeysCapacity, usingProxy: !!((_h = (_g = platform2.requests).usingProxy) === null || _h === void 0 ? void 0 : _h.call(_g)), usingProxyAuthenticator: !!((_k = (_j = platform2.requests).usingProxyAuth) === null || _k === void 0 ? void 0 : _k.call(_j)), dataStoreType: (_m = (_l = featureStore.getDescription) === null || _l === void 0 ? void 0 : _l.call(featureStore)) !== null && _m !== void 0 ? _m : "memory" });
     };
     exports.default = createDiagnosticsInitConfig;
   }
@@ -23386,9 +25070,7 @@ var require_EvalResult = __commonJS({
   "node_modules/@launchdarkly/js-server-sdk-common/dist/evaluation/EvalResult.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    var js_sdk_common_1 = require_dist();
     var Reasons_1 = require_Reasons();
-    var { createErrorEvaluationDetail, createSuccessEvaluationDetail } = js_sdk_common_1.internal;
     var EvalResult = class _EvalResult {
       constructor(isError, detail, message) {
         this.isError = isError;
@@ -23405,11 +25087,18 @@ var require_EvalResult = __commonJS({
         this.detail.value = def;
       }
       static forError(errorKind, message, def) {
-        return new _EvalResult(true, createErrorEvaluationDetail(errorKind, def), message);
+        return new _EvalResult(true, {
+          value: def !== null && def !== void 0 ? def : null,
+          variationIndex: null,
+          reason: { kind: "ERROR", errorKind }
+        }, message);
       }
       static forSuccess(value, reason, variationIndex) {
-        const successDetail = createSuccessEvaluationDetail(value, variationIndex, reason);
-        return new _EvalResult(false, successDetail);
+        return new _EvalResult(false, {
+          value,
+          variationIndex: variationIndex === void 0 ? null : variationIndex,
+          reason
+        });
       }
     };
     exports.default = EvalResult;
@@ -23432,11 +25121,14 @@ var require_Bucketer = __commonJS({
     }
     var Bucketer = class {
       constructor(crypto2) {
-        this.crypto = crypto2;
+        this._crypto = crypto2;
       }
-      sha1Hex(value) {
-        const hash = this.crypto.createHash("sha1");
+      _sha1Hex(value) {
+        const hash = this._crypto.createHash("sha1");
         hash.update(value);
+        if (!hash.digest) {
+          throw new Error("Platform must implement digest or asyncDigest");
+        }
         return hash.digest("hex");
       }
       /**
@@ -23462,7 +25154,7 @@ var require_Bucketer = __commonJS({
         }
         const prefix = seed ? Number(seed) : `${key}.${salt}`;
         const hashKey = `${prefix}.${bucketableValue}`;
-        const hashVal = parseInt(this.sha1Hex(hashKey).substring(0, 15), 16);
+        const hashVal = parseInt(this._sha1Hex(hashKey).substring(0, 15), 16);
         return [hashVal / 1152921504606847e3, true];
       }
     };
@@ -23476,7 +25168,7 @@ var require_variations = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.getBucketBy = exports.getOffVariation = exports.getVariation = void 0;
-    var js_sdk_common_1 = require_dist();
+    var js_sdk_common_1 = require_cjs();
     var EvalResult_1 = require_EvalResult();
     var { ErrorKinds } = js_sdk_common_1.internal;
     var KEY_ATTR_REF = new js_sdk_common_1.AttributeReference("key");
@@ -23507,7 +25199,7 @@ var require_evalTargets = __commonJS({
   "node_modules/@launchdarkly/js-server-sdk-common/dist/evaluation/evalTargets.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    var js_sdk_common_1 = require_dist();
+    var js_sdk_common_1 = require_cjs();
     var collection_1 = require_collection();
     var Reasons_1 = require_Reasons();
     var variations_1 = require_variations();
@@ -23527,7 +25219,7 @@ var require_evalTargets = __commonJS({
         return (0, collection_1.firstResult)(flag.targets, (target) => evalTarget(flag, target, context));
       }
       return (0, collection_1.firstResult)(flag.contextTargets, (target) => {
-        if (!target.contextKind || target.contextKind === js_sdk_common_1.Context.userKind) {
+        if (!target.contextKind || target.contextKind === js_sdk_common_1.Context.UserKind) {
           const userTarget = (flag.targets || []).find((ut) => ut.variation === target.variation);
           if (userTarget) {
             return evalTarget(flag, userTarget, context);
@@ -23553,9 +25245,9 @@ var require_makeBigSegmentRef = __commonJS({
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/internal/constants.js
+// node_modules/semver/internal/constants.js
 var require_constants6 = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/internal/constants.js"(exports, module) {
+  "node_modules/semver/internal/constants.js"(exports, module) {
     var SEMVER_SPEC_VERSION = "2.0.0";
     var MAX_LENGTH = 256;
     var MAX_SAFE_INTEGER = Number.MAX_SAFE_INTEGER || /* istanbul ignore next */
@@ -23584,18 +25276,18 @@ var require_constants6 = __commonJS({
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/internal/debug.js
+// node_modules/semver/internal/debug.js
 var require_debug = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/internal/debug.js"(exports, module) {
+  "node_modules/semver/internal/debug.js"(exports, module) {
     var debug2 = typeof process === "object" && process.env && process.env.NODE_DEBUG && /\bsemver\b/i.test(process.env.NODE_DEBUG) ? (...args) => console.error("SEMVER", ...args) : () => {
     };
     module.exports = debug2;
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/internal/re.js
+// node_modules/semver/internal/re.js
 var require_re = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/internal/re.js"(exports, module) {
+  "node_modules/semver/internal/re.js"(exports, module) {
     var {
       MAX_SAFE_COMPONENT_LENGTH,
       MAX_SAFE_BUILD_LENGTH,
@@ -23675,9 +25367,9 @@ var require_re = __commonJS({
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/internal/parse-options.js
+// node_modules/semver/internal/parse-options.js
 var require_parse_options = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/internal/parse-options.js"(exports, module) {
+  "node_modules/semver/internal/parse-options.js"(exports, module) {
     var looseOption = Object.freeze({ loose: true });
     var emptyOpts = Object.freeze({});
     var parseOptions = (options) => {
@@ -23693,9 +25385,9 @@ var require_parse_options = __commonJS({
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/internal/identifiers.js
+// node_modules/semver/internal/identifiers.js
 var require_identifiers = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/internal/identifiers.js"(exports, module) {
+  "node_modules/semver/internal/identifiers.js"(exports, module) {
     var numeric = /^[0-9]+$/;
     var compareIdentifiers = (a, b) => {
       const anum = numeric.test(a);
@@ -23714,9 +25406,9 @@ var require_identifiers = __commonJS({
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/classes/semver.js
+// node_modules/semver/classes/semver.js
 var require_semver = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/classes/semver.js"(exports, module) {
+  "node_modules/semver/classes/semver.js"(exports, module) {
     var debug2 = require_debug();
     var { MAX_LENGTH, MAX_SAFE_INTEGER } = require_constants6();
     var { safeRe: re, t } = require_re();
@@ -23960,9 +25652,9 @@ var require_semver = __commonJS({
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/parse.js
+// node_modules/semver/functions/parse.js
 var require_parse2 = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/parse.js"(exports, module) {
+  "node_modules/semver/functions/parse.js"(exports, module) {
     var SemVer = require_semver();
     var parse = (version, options, throwErrors = false) => {
       if (version instanceof SemVer) {
@@ -23981,9 +25673,9 @@ var require_parse2 = __commonJS({
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/valid.js
+// node_modules/semver/functions/valid.js
 var require_valid = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/valid.js"(exports, module) {
+  "node_modules/semver/functions/valid.js"(exports, module) {
     var parse = require_parse2();
     var valid = (version, options) => {
       const v = parse(version, options);
@@ -23993,9 +25685,9 @@ var require_valid = __commonJS({
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/clean.js
+// node_modules/semver/functions/clean.js
 var require_clean = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/clean.js"(exports, module) {
+  "node_modules/semver/functions/clean.js"(exports, module) {
     var parse = require_parse2();
     var clean = (version, options) => {
       const s = parse(version.trim().replace(/^[=v]+/, ""), options);
@@ -24005,9 +25697,9 @@ var require_clean = __commonJS({
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/inc.js
+// node_modules/semver/functions/inc.js
 var require_inc = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/inc.js"(exports, module) {
+  "node_modules/semver/functions/inc.js"(exports, module) {
     var SemVer = require_semver();
     var inc = (version, release, options, identifier, identifierBase) => {
       if (typeof options === "string") {
@@ -24028,9 +25720,9 @@ var require_inc = __commonJS({
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/diff.js
+// node_modules/semver/functions/diff.js
 var require_diff = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/diff.js"(exports, module) {
+  "node_modules/semver/functions/diff.js"(exports, module) {
     var parse = require_parse2();
     var diff = (version1, version2) => {
       const v1 = parse(version1, null, true);
@@ -24072,36 +25764,36 @@ var require_diff = __commonJS({
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/major.js
+// node_modules/semver/functions/major.js
 var require_major = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/major.js"(exports, module) {
+  "node_modules/semver/functions/major.js"(exports, module) {
     var SemVer = require_semver();
     var major = (a, loose) => new SemVer(a, loose).major;
     module.exports = major;
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/minor.js
+// node_modules/semver/functions/minor.js
 var require_minor = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/minor.js"(exports, module) {
+  "node_modules/semver/functions/minor.js"(exports, module) {
     var SemVer = require_semver();
     var minor = (a, loose) => new SemVer(a, loose).minor;
     module.exports = minor;
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/patch.js
+// node_modules/semver/functions/patch.js
 var require_patch = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/patch.js"(exports, module) {
+  "node_modules/semver/functions/patch.js"(exports, module) {
     var SemVer = require_semver();
     var patch = (a, loose) => new SemVer(a, loose).patch;
     module.exports = patch;
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/prerelease.js
+// node_modules/semver/functions/prerelease.js
 var require_prerelease = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/prerelease.js"(exports, module) {
+  "node_modules/semver/functions/prerelease.js"(exports, module) {
     var parse = require_parse2();
     var prerelease = (version, options) => {
       const parsed = parse(version, options);
@@ -24111,36 +25803,36 @@ var require_prerelease = __commonJS({
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/compare.js
+// node_modules/semver/functions/compare.js
 var require_compare = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/compare.js"(exports, module) {
+  "node_modules/semver/functions/compare.js"(exports, module) {
     var SemVer = require_semver();
     var compare = (a, b, loose) => new SemVer(a, loose).compare(new SemVer(b, loose));
     module.exports = compare;
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/rcompare.js
+// node_modules/semver/functions/rcompare.js
 var require_rcompare = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/rcompare.js"(exports, module) {
+  "node_modules/semver/functions/rcompare.js"(exports, module) {
     var compare = require_compare();
     var rcompare = (a, b, loose) => compare(b, a, loose);
     module.exports = rcompare;
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/compare-loose.js
+// node_modules/semver/functions/compare-loose.js
 var require_compare_loose = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/compare-loose.js"(exports, module) {
+  "node_modules/semver/functions/compare-loose.js"(exports, module) {
     var compare = require_compare();
     var compareLoose = (a, b) => compare(a, b, true);
     module.exports = compareLoose;
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/compare-build.js
+// node_modules/semver/functions/compare-build.js
 var require_compare_build = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/compare-build.js"(exports, module) {
+  "node_modules/semver/functions/compare-build.js"(exports, module) {
     var SemVer = require_semver();
     var compareBuild = (a, b, loose) => {
       const versionA = new SemVer(a, loose);
@@ -24151,81 +25843,81 @@ var require_compare_build = __commonJS({
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/sort.js
+// node_modules/semver/functions/sort.js
 var require_sort = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/sort.js"(exports, module) {
+  "node_modules/semver/functions/sort.js"(exports, module) {
     var compareBuild = require_compare_build();
     var sort = (list, loose) => list.sort((a, b) => compareBuild(a, b, loose));
     module.exports = sort;
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/rsort.js
+// node_modules/semver/functions/rsort.js
 var require_rsort = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/rsort.js"(exports, module) {
+  "node_modules/semver/functions/rsort.js"(exports, module) {
     var compareBuild = require_compare_build();
     var rsort = (list, loose) => list.sort((a, b) => compareBuild(b, a, loose));
     module.exports = rsort;
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/gt.js
+// node_modules/semver/functions/gt.js
 var require_gt = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/gt.js"(exports, module) {
+  "node_modules/semver/functions/gt.js"(exports, module) {
     var compare = require_compare();
     var gt = (a, b, loose) => compare(a, b, loose) > 0;
     module.exports = gt;
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/lt.js
+// node_modules/semver/functions/lt.js
 var require_lt = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/lt.js"(exports, module) {
+  "node_modules/semver/functions/lt.js"(exports, module) {
     var compare = require_compare();
     var lt = (a, b, loose) => compare(a, b, loose) < 0;
     module.exports = lt;
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/eq.js
+// node_modules/semver/functions/eq.js
 var require_eq = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/eq.js"(exports, module) {
+  "node_modules/semver/functions/eq.js"(exports, module) {
     var compare = require_compare();
     var eq = (a, b, loose) => compare(a, b, loose) === 0;
     module.exports = eq;
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/neq.js
+// node_modules/semver/functions/neq.js
 var require_neq = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/neq.js"(exports, module) {
+  "node_modules/semver/functions/neq.js"(exports, module) {
     var compare = require_compare();
     var neq = (a, b, loose) => compare(a, b, loose) !== 0;
     module.exports = neq;
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/gte.js
+// node_modules/semver/functions/gte.js
 var require_gte = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/gte.js"(exports, module) {
+  "node_modules/semver/functions/gte.js"(exports, module) {
     var compare = require_compare();
     var gte = (a, b, loose) => compare(a, b, loose) >= 0;
     module.exports = gte;
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/lte.js
+// node_modules/semver/functions/lte.js
 var require_lte = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/lte.js"(exports, module) {
+  "node_modules/semver/functions/lte.js"(exports, module) {
     var compare = require_compare();
     var lte = (a, b, loose) => compare(a, b, loose) <= 0;
     module.exports = lte;
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/cmp.js
+// node_modules/semver/functions/cmp.js
 var require_cmp = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/cmp.js"(exports, module) {
+  "node_modules/semver/functions/cmp.js"(exports, module) {
     var eq = require_eq();
     var neq = require_neq();
     var gt = require_gt();
@@ -24272,9 +25964,9 @@ var require_cmp = __commonJS({
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/coerce.js
+// node_modules/semver/functions/coerce.js
 var require_coerce = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/coerce.js"(exports, module) {
+  "node_modules/semver/functions/coerce.js"(exports, module) {
     var SemVer = require_semver();
     var parse = require_parse2();
     var { safeRe: re, t } = require_re();
@@ -24311,9 +26003,9 @@ var require_coerce = __commonJS({
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/yallist/iterator.js
+// node_modules/yallist/iterator.js
 var require_iterator = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/yallist/iterator.js"(exports, module) {
+  "node_modules/yallist/iterator.js"(exports, module) {
     "use strict";
     module.exports = function(Yallist) {
       Yallist.prototype[Symbol.iterator] = function* () {
@@ -24325,9 +26017,9 @@ var require_iterator = __commonJS({
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/yallist/yallist.js
+// node_modules/yallist/yallist.js
 var require_yallist = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/yallist/yallist.js"(exports, module) {
+  "node_modules/yallist/yallist.js"(exports, module) {
     "use strict";
     module.exports = Yallist;
     Yallist.Node = Node;
@@ -24694,9 +26386,9 @@ var require_yallist = __commonJS({
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/lru-cache/index.js
+// node_modules/lru-cache/index.js
 var require_lru_cache = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/lru-cache/index.js"(exports, module) {
+  "node_modules/lru-cache/index.js"(exports, module) {
     "use strict";
     var Yallist = require_yallist();
     var MAX = /* @__PURE__ */ Symbol("max");
@@ -24963,9 +26655,9 @@ var require_lru_cache = __commonJS({
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/classes/range.js
+// node_modules/semver/classes/range.js
 var require_range = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/classes/range.js"(exports, module) {
+  "node_modules/semver/classes/range.js"(exports, module) {
     var Range = class _Range {
       constructor(range, options) {
         options = parseOptions(options);
@@ -25320,9 +27012,9 @@ var require_range = __commonJS({
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/classes/comparator.js
+// node_modules/semver/classes/comparator.js
 var require_comparator = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/classes/comparator.js"(exports, module) {
+  "node_modules/semver/classes/comparator.js"(exports, module) {
     var ANY = /* @__PURE__ */ Symbol("SemVer ANY");
     var Comparator = class _Comparator {
       static get ANY() {
@@ -25432,9 +27124,9 @@ var require_comparator = __commonJS({
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/satisfies.js
+// node_modules/semver/functions/satisfies.js
 var require_satisfies = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/functions/satisfies.js"(exports, module) {
+  "node_modules/semver/functions/satisfies.js"(exports, module) {
     var Range = require_range();
     var satisfies = (version, range, options) => {
       try {
@@ -25448,18 +27140,18 @@ var require_satisfies = __commonJS({
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/ranges/to-comparators.js
+// node_modules/semver/ranges/to-comparators.js
 var require_to_comparators = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/ranges/to-comparators.js"(exports, module) {
+  "node_modules/semver/ranges/to-comparators.js"(exports, module) {
     var Range = require_range();
     var toComparators = (range, options) => new Range(range, options).set.map((comp) => comp.map((c) => c.value).join(" ").trim().split(" "));
     module.exports = toComparators;
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/ranges/max-satisfying.js
+// node_modules/semver/ranges/max-satisfying.js
 var require_max_satisfying = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/ranges/max-satisfying.js"(exports, module) {
+  "node_modules/semver/ranges/max-satisfying.js"(exports, module) {
     var SemVer = require_semver();
     var Range = require_range();
     var maxSatisfying = (versions, range, options) => {
@@ -25485,9 +27177,9 @@ var require_max_satisfying = __commonJS({
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/ranges/min-satisfying.js
+// node_modules/semver/ranges/min-satisfying.js
 var require_min_satisfying = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/ranges/min-satisfying.js"(exports, module) {
+  "node_modules/semver/ranges/min-satisfying.js"(exports, module) {
     var SemVer = require_semver();
     var Range = require_range();
     var minSatisfying = (versions, range, options) => {
@@ -25513,9 +27205,9 @@ var require_min_satisfying = __commonJS({
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/ranges/min-version.js
+// node_modules/semver/ranges/min-version.js
 var require_min_version = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/ranges/min-version.js"(exports, module) {
+  "node_modules/semver/ranges/min-version.js"(exports, module) {
     var SemVer = require_semver();
     var Range = require_range();
     var gt = require_gt();
@@ -25571,9 +27263,9 @@ var require_min_version = __commonJS({
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/ranges/valid.js
+// node_modules/semver/ranges/valid.js
 var require_valid2 = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/ranges/valid.js"(exports, module) {
+  "node_modules/semver/ranges/valid.js"(exports, module) {
     var Range = require_range();
     var validRange = (range, options) => {
       try {
@@ -25586,9 +27278,9 @@ var require_valid2 = __commonJS({
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/ranges/outside.js
+// node_modules/semver/ranges/outside.js
 var require_outside = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/ranges/outside.js"(exports, module) {
+  "node_modules/semver/ranges/outside.js"(exports, module) {
     var SemVer = require_semver();
     var Comparator = require_comparator();
     var { ANY } = Comparator;
@@ -25654,27 +27346,27 @@ var require_outside = __commonJS({
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/ranges/gtr.js
+// node_modules/semver/ranges/gtr.js
 var require_gtr = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/ranges/gtr.js"(exports, module) {
+  "node_modules/semver/ranges/gtr.js"(exports, module) {
     var outside = require_outside();
     var gtr = (version, range, options) => outside(version, range, ">", options);
     module.exports = gtr;
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/ranges/ltr.js
+// node_modules/semver/ranges/ltr.js
 var require_ltr = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/ranges/ltr.js"(exports, module) {
+  "node_modules/semver/ranges/ltr.js"(exports, module) {
     var outside = require_outside();
     var ltr = (version, range, options) => outside(version, range, "<", options);
     module.exports = ltr;
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/ranges/intersects.js
+// node_modules/semver/ranges/intersects.js
 var require_intersects = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/ranges/intersects.js"(exports, module) {
+  "node_modules/semver/ranges/intersects.js"(exports, module) {
     var Range = require_range();
     var intersects = (r1, r2, options) => {
       r1 = new Range(r1, options);
@@ -25685,9 +27377,9 @@ var require_intersects = __commonJS({
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/ranges/simplify.js
+// node_modules/semver/ranges/simplify.js
 var require_simplify = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/ranges/simplify.js"(exports, module) {
+  "node_modules/semver/ranges/simplify.js"(exports, module) {
     var satisfies = require_satisfies();
     var compare = require_compare();
     module.exports = (versions, range, options) => {
@@ -25734,9 +27426,9 @@ var require_simplify = __commonJS({
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/ranges/subset.js
+// node_modules/semver/ranges/subset.js
 var require_subset = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/ranges/subset.js"(exports, module) {
+  "node_modules/semver/ranges/subset.js"(exports, module) {
     var Range = require_range();
     var Comparator = require_comparator();
     var { ANY } = Comparator;
@@ -25895,9 +27587,9 @@ var require_subset = __commonJS({
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/index.js
+// node_modules/semver/index.js
 var require_semver2 = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/node_modules/semver/index.js"(exports, module) {
+  "node_modules/semver/index.js"(exports, module) {
     var internalRe = require_re();
     var constants3 = require_constants6();
     var SemVer = require_semver();
@@ -25995,7 +27687,7 @@ var require_Operations = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var semver_1 = require_semver2();
-    var js_sdk_common_1 = require_dist();
+    var js_sdk_common_1 = require_cjs();
     var VERSION_COMPONENTS_REGEX = /^\d+(\.\d+)?(\.\d+)?/;
     function parseSemver(input) {
       if (js_sdk_common_1.TypeValidators.String.is(input) && !input.startsWith("v")) {
@@ -26166,7 +27858,7 @@ var require_Evaluator = __commonJS({
   "node_modules/@launchdarkly/js-server-sdk-common/dist/evaluation/Evaluator.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    var js_sdk_common_1 = require_dist();
+    var js_sdk_common_1 = require_cjs();
     var Bucketer_1 = require_Bucketer();
     var collection_1 = require_collection();
     var EvalResult_1 = require_EvalResult();
@@ -26203,30 +27895,26 @@ var require_Evaluator = __commonJS({
     }
     var Evaluator = class {
       constructor(platform2, queries) {
-        this.queries = queries;
-        this.bucketer = new Bucketer_1.default(platform2.crypto);
+        this._queries = queries;
+        this._bucketer = new Bucketer_1.default(platform2.crypto);
       }
       async evaluate(flag, context, eventFactory) {
         return new Promise((resolve) => {
-          const state = {};
-          this.evaluateInternal(flag, context, state, [], (res) => {
-            if (state.bigSegmentsStatus) {
-              res.detail.reason = Object.assign(Object.assign({}, res.detail.reason), { bigSegmentsStatus: state.bigSegmentsStatus });
-            }
-            res.events = state.events;
-            resolve(res);
-          }, eventFactory);
+          this.evaluateCb(flag, context, resolve, eventFactory);
         });
       }
       evaluateCb(flag, context, cb, eventFactory) {
         const state = {};
-        this.evaluateInternal(flag, context, state, [], (res) => {
+        this._evaluateInternal(flag, context, state, [], (res) => {
           if (state.bigSegmentsStatus) {
             res.detail.reason = Object.assign(Object.assign({}, res.detail.reason), { bigSegmentsStatus: state.bigSegmentsStatus });
           }
+          if (state.prerequisites) {
+            res.prerequisites = state.prerequisites;
+          }
           res.events = state.events;
           cb(res);
-        }, eventFactory);
+        }, true, eventFactory);
       }
       /**
        * Evaluate the given flag against the given context. This internal method is entered
@@ -26237,13 +27925,15 @@ var require_Evaluator = __commonJS({
        * @param state The current evaluation state.
        * @param visitedFlags The flags that have been visited during this evaluation.
        * This is not part of the state, because it needs to be forked during prerequisite evaluations.
+       * @param topLevel True when this function is being called in the direct evaluation of a flag,
+       * versus the evaluataion of a prerequisite.
        */
-      evaluateInternal(flag, context, state, visitedFlags, cb, eventFactory) {
+      _evaluateInternal(flag, context, state, visitedFlags, cb, topLevel, eventFactory) {
         if (!flag.on) {
           cb((0, variations_1.getOffVariation)(flag, Reasons_1.default.Off));
           return;
         }
-        this.checkPrerequisites(flag, context, state, visitedFlags, (res) => {
+        this._checkPrerequisites(flag, context, state, visitedFlags, (res) => {
           if (res) {
             cb(res);
             return;
@@ -26253,14 +27943,14 @@ var require_Evaluator = __commonJS({
             cb(targetRes);
             return;
           }
-          this.evaluateRules(flag, context, state, (evalRes) => {
+          this._evaluateRules(flag, context, state, (evalRes) => {
             if (evalRes) {
               cb(evalRes);
               return;
             }
-            cb(this.variationForContext(flag.fallthrough, context, flag, Reasons_1.default.Fallthrough));
+            cb(this._variationForContext(flag.fallthrough, context, flag, Reasons_1.default.Fallthrough));
           });
-        }, eventFactory);
+        }, topLevel, eventFactory);
       }
       /**
        * Evaluate the prerequisite flags for the given flag.
@@ -26271,8 +27961,10 @@ var require_Evaluator = __commonJS({
        * @param cb A callback which is executed when prerequisite checks are complete it is called with
        * an {@link EvalResult} containing an error result or `undefined` if the prerequisites
        * are met.
+       * @param topLevel True when this function is being called in the direct evaluation of a flag,
+       * versus the evaluataion of a prerequisite.
        */
-      checkPrerequisites(flag, context, state, visitedFlags, cb, eventFactory) {
+      _checkPrerequisites(flag, context, state, visitedFlags, cb, topLevel, eventFactory) {
         let prereqResult;
         if (!flag.prerequisites || !flag.prerequisites.length) {
           cb(void 0);
@@ -26285,28 +27977,41 @@ var require_Evaluator = __commonJS({
             return;
           }
           const updatedVisitedFlags = [...visitedFlags, prereq.key];
-          this.queries.getFlag(prereq.key, (prereqFlag) => {
+          this._queries.getFlag(prereq.key, (prereqFlag) => {
             if (!prereqFlag) {
               prereqResult = (0, variations_1.getOffVariation)(flag, Reasons_1.default.prerequisiteFailed(prereq.key));
               iterCb(false);
               return;
             }
-            this.evaluateInternal(prereqFlag, context, state, updatedVisitedFlags, (res) => {
-              var _a;
-              (_a = state.events) !== null && _a !== void 0 ? _a : state.events = [];
-              if (eventFactory) {
-                state.events.push(eventFactory.evalEventServer(prereqFlag, context, res.detail, null, flag));
-              }
-              if (res.isError) {
-                prereqResult = res;
-                return iterCb(false);
-              }
-              if (res.isOff || res.detail.variationIndex !== prereq.variation) {
-                prereqResult = (0, variations_1.getOffVariation)(flag, Reasons_1.default.prerequisiteFailed(prereq.key));
-                return iterCb(false);
-              }
-              return iterCb(true);
-            }, eventFactory);
+            this._evaluateInternal(
+              prereqFlag,
+              context,
+              state,
+              updatedVisitedFlags,
+              (res) => {
+                var _a, _b;
+                (_a = state.events) !== null && _a !== void 0 ? _a : state.events = [];
+                if (topLevel) {
+                  (_b = state.prerequisites) !== null && _b !== void 0 ? _b : state.prerequisites = [];
+                  state.prerequisites.push(prereqFlag.key);
+                }
+                if (eventFactory) {
+                  state.events.push(eventFactory.evalEventServer(prereqFlag, context, res.detail, null, flag));
+                }
+                if (res.isError) {
+                  prereqResult = res;
+                  return iterCb(false);
+                }
+                if (res.isOff || res.detail.variationIndex !== prereq.variation) {
+                  prereqResult = (0, variations_1.getOffVariation)(flag, Reasons_1.default.prerequisiteFailed(prereq.key));
+                  return iterCb(false);
+                }
+                return iterCb(true);
+              },
+              false,
+              // topLevel false evaluating the prerequisite.
+              eventFactory
+            );
           });
         }, () => {
           cb(prereqResult);
@@ -26321,20 +28026,20 @@ var require_Evaluator = __commonJS({
        * @param cb Callback called when rule evaluation is complete, it will be called with either
        * an {@link EvalResult} or 'undefined'.
        */
-      evaluateRules(flag, context, state, cb) {
+      _evaluateRules(flag, context, state, cb) {
         let ruleResult;
         (0, collection_1.firstSeriesAsync)(flag.rules, (rule, ruleIndex, iterCb) => {
-          this.ruleMatchContext(flag, rule, ruleIndex, context, state, [], (res) => {
+          this._ruleMatchContext(flag, rule, ruleIndex, context, state, [], (res) => {
             ruleResult = res;
             iterCb(!!res);
           });
         }, () => cb(ruleResult));
       }
-      clauseMatchContext(clause, context, segmentsVisited, state, cb) {
+      _clauseMatchContext(clause, context, segmentsVisited, state, cb) {
         let errorResult;
         if (clause.op === "segmentMatch") {
           (0, collection_1.firstSeriesAsync)(clause.values, (value, _index, iterCb) => {
-            this.queries.getSegment(value, (segment) => {
+            this._queries.getSegment(value, (segment) => {
               if (segment) {
                 if (segmentsVisited.includes(segment.key)) {
                   errorResult = EvalResult_1.default.forError(ErrorKinds.MalformedFlag, `Segment rule referencing segment ${segment.key} caused a circular reference. This is probably a temporary condition due to an incomplete update`);
@@ -26375,14 +28080,14 @@ var require_Evaluator = __commonJS({
        * @param cb Called when matching is complete with an {@link EvalResult} or `undefined` if there
        * are no matches or errors.
        */
-      ruleMatchContext(flag, rule, ruleIndex, context, state, segmentsVisited, cb) {
+      _ruleMatchContext(flag, rule, ruleIndex, context, state, segmentsVisited, cb) {
         if (!rule.clauses) {
           cb(void 0);
           return;
         }
         let errorResult;
         (0, collection_1.allSeriesAsync)(rule.clauses, (clause, _index, iterCb) => {
-          this.clauseMatchContext(clause, context, segmentsVisited, state, (res) => {
+          this._clauseMatchContext(clause, context, segmentsVisited, state, (res) => {
             errorResult = res.result;
             return iterCb(res.error || res.isMatch);
           });
@@ -26391,12 +28096,12 @@ var require_Evaluator = __commonJS({
             return cb(errorResult);
           }
           if (match) {
-            return cb(this.variationForContext(rule, context, flag, Reasons_1.default.ruleMatch(rule.id, ruleIndex)));
+            return cb(this._variationForContext(rule, context, flag, Reasons_1.default.ruleMatch(rule.id, ruleIndex)));
           }
           return cb(void 0);
         });
       }
-      variationForContext(varOrRollout, context, flag, reason) {
+      _variationForContext(varOrRollout, context, flag, reason) {
         if (varOrRollout === void 0) {
           return EvalResult_1.default.forError(ErrorKinds.MalformedFlag, "Fallthrough variation undefined");
         }
@@ -26412,7 +28117,7 @@ var require_Evaluator = __commonJS({
             if (!bucketBy.isValid) {
               return EvalResult_1.default.forError(ErrorKinds.MalformedFlag, "Invalid attribute reference for bucketBy in rollout");
             }
-            const [bucket, hadContext] = this.bucketer.bucket(context, flag.key, bucketBy, flag.salt || "", rollout.contextKind, rollout.seed);
+            const [bucket, hadContext] = this._bucketer.bucket(context, flag.key, bucketBy, flag.salt || "", rollout.contextKind, rollout.seed);
             const updatedReason = Object.assign({}, reason);
             let sum = 0;
             for (let i = 0; i < variations.length; i += 1) {
@@ -26437,7 +28142,7 @@ var require_Evaluator = __commonJS({
       segmentRuleMatchContext(segment, rule, context, state, segmentsVisited, cb) {
         let errorResult;
         (0, collection_1.allSeriesAsync)(rule.clauses, (clause, _index, iterCb) => {
-          this.clauseMatchContext(clause, context, segmentsVisited, state, (res) => {
+          this._clauseMatchContext(clause, context, segmentsVisited, state, (res) => {
             errorResult = res.result;
             iterCb(res.error || res.isMatch);
           });
@@ -26453,13 +28158,12 @@ var require_Evaluator = __commonJS({
             if (!bucketBy.isValid) {
               return cb(makeError(EvalResult_1.default.forError(ErrorKinds.MalformedFlag, "Invalid attribute reference in clause")));
             }
-            const [bucket] = this.bucketer.bucket(context, segment.key, bucketBy, segment.salt || "", rule.rolloutContextKind);
+            const [bucket] = this._bucketer.bucket(context, segment.key, bucketBy, segment.salt || "", rule.rolloutContextKind);
             return cb(makeMatch(bucket < rule.weight / 1e5));
           }
           return cb(makeMatch(false));
         });
       }
-      // eslint-disable-next-line class-methods-use-this
       simpleSegmentMatchContext(segment, context, state, segmentsVisited, cb) {
         if (!segment.unbounded) {
           const includeExclude = (0, matchSegmentTargets_1.default)(segment, context);
@@ -26501,7 +28205,7 @@ var require_Evaluator = __commonJS({
           this.bigSegmentMatchContext(state.bigSegmentsMembership[keyForBigSegment], segment, context, state).then(cb);
           return;
         }
-        this.queries.getBigSegmentsMembership(keyForBigSegment).then((result) => {
+        this._queries.getBigSegmentsMembership(keyForBigSegment).then((result) => {
           state.bigSegmentsMembership = state.bigSegmentsMembership || {};
           if (result) {
             const [membership, status] = result;
@@ -26537,17 +28241,17 @@ var require_ContextDeduplicator = __commonJS({
     var LruCache_1 = require_LruCache();
     var ContextDeduplicator = class {
       constructor(options) {
-        this.contextKeysCache = new LruCache_1.default({ max: options.contextKeysCapacity });
+        this._contextKeysCache = new LruCache_1.default({ max: options.contextKeysCapacity });
         this.flushInterval = options.contextKeysFlushInterval;
       }
       processContext(context) {
         const { canonicalKey } = context;
-        const inCache = this.contextKeysCache.get(canonicalKey);
-        this.contextKeysCache.set(canonicalKey, true);
+        const inCache = this._contextKeysCache.get(canonicalKey);
+        this._contextKeysCache.set(canonicalKey, true);
         return !inCache;
       }
       flush() {
-        this.contextKeysCache.clear();
+        this._contextKeysCache.clear();
       }
     };
     exports.default = ContextDeduplicator;
@@ -26589,7 +28293,7 @@ var require_EventFactory = __commonJS({
   "node_modules/@launchdarkly/js-server-sdk-common/dist/events/EventFactory.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    var js_sdk_common_1 = require_dist();
+    var js_sdk_common_1 = require_cjs();
     var isExperiment_1 = require_isExperiment();
     var EventFactory = class extends js_sdk_common_1.internal.EventFactoryBase {
       evalEventServer(flag, context, detail, defaultVal, prereqOfFlag) {
@@ -26622,14 +28326,14 @@ var require_FlagsStateBuilder = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var FlagsStateBuilder = class {
-      constructor(valid, withReasons) {
-        this.valid = valid;
-        this.withReasons = withReasons;
-        this.flagValues = {};
-        this.flagMetadata = {};
+      constructor(_valid, _withReasons) {
+        this._valid = _valid;
+        this._withReasons = _withReasons;
+        this._flagValues = {};
+        this._flagMetadata = {};
       }
-      addFlag(flag, value, variation, reason, trackEvents, trackReason, detailsOnlyIfTracked) {
-        this.flagValues[flag.key] = value;
+      addFlag(flag, value, variation, reason, trackEvents, trackReason, detailsOnlyIfTracked, prerequisites) {
+        this._flagValues[flag.key] = value;
         const meta = {};
         if (variation !== void 0) {
           meta.variation = variation;
@@ -26638,7 +28342,7 @@ var require_FlagsStateBuilder = __commonJS({
         if (!omitDetails) {
           meta.version = flag.version;
         }
-        if (reason && (trackReason || this.withReasons && !omitDetails)) {
+        if (reason && (trackReason || this._withReasons && !omitDetails)) {
           meta.reason = reason;
         }
         if (trackEvents) {
@@ -26650,23 +28354,116 @@ var require_FlagsStateBuilder = __commonJS({
         if (flag.debugEventsUntilDate !== void 0) {
           meta.debugEventsUntilDate = flag.debugEventsUntilDate;
         }
-        this.flagMetadata[flag.key] = meta;
+        if (prerequisites && prerequisites.length) {
+          meta.prerequisites = prerequisites;
+        }
+        this._flagMetadata[flag.key] = meta;
       }
       build() {
-        const state = this;
         return {
-          valid: state.valid,
-          allValues: () => state.flagValues,
-          getFlagValue: (key) => state.flagValues[key],
+          valid: this._valid,
+          allValues: () => this._flagValues,
+          getFlagValue: (key) => this._flagValues[key],
           getFlagReason: (key) => {
             var _a;
-            return (_a = state.flagMetadata[key] ? state.flagMetadata[key].reason : null) !== null && _a !== void 0 ? _a : null;
+            return (_a = this._flagMetadata[key] ? this._flagMetadata[key].reason : null) !== null && _a !== void 0 ? _a : null;
           },
-          toJSON: () => Object.assign(Object.assign({}, state.flagValues), { $flagsState: state.flagMetadata, $valid: state.valid })
+          toJSON: () => Object.assign(Object.assign({}, this._flagValues), { $flagsState: this._flagMetadata, $valid: this._valid })
         };
       }
     };
     exports.default = FlagsStateBuilder;
+  }
+});
+
+// node_modules/@launchdarkly/js-server-sdk-common/dist/hooks/HookRunner.js
+var require_HookRunner = __commonJS({
+  "node_modules/@launchdarkly/js-server-sdk-common/dist/hooks/HookRunner.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var BEFORE_EVALUATION_STAGE_NAME = "beforeEvaluation";
+    var AFTER_EVALUATION_STAGE_NAME = "afterEvaluation";
+    var UNKNOWN_HOOK_NAME = "unknown hook";
+    var HookRunner = class {
+      constructor(_logger, hooks) {
+        this._logger = _logger;
+        this._hooks = [];
+        this._hooks.push(...hooks);
+      }
+      async withEvaluationSeries(key, context, defaultValue, methodName, method, environmentId) {
+        if (this._hooks.length === 0) {
+          return method();
+        }
+        return this.withEvaluationSeriesExtraDetail(key, context, defaultValue, methodName, async () => {
+          const detail = await method();
+          return { detail };
+        }, environmentId).then(({ detail }) => detail);
+      }
+      /**
+       * This function allows extra information to be returned with the detail for situations like
+       * migrations where a tracker is returned with the detail.
+       */
+      async withEvaluationSeriesExtraDetail(key, context, defaultValue, methodName, method, environmentId) {
+        if (this._hooks.length === 0) {
+          return method();
+        }
+        const { hooks, hookContext } = this._prepareHooks(key, context, defaultValue, methodName, environmentId);
+        const hookData = this._executeBeforeEvaluation(hooks, hookContext);
+        const result = await method();
+        this._executeAfterEvaluation(hooks, hookContext, hookData, result.detail);
+        return result;
+      }
+      _tryExecuteStage(method, hookName, stage) {
+        var _a;
+        try {
+          return stage();
+        } catch (err) {
+          (_a = this._logger) === null || _a === void 0 ? void 0 : _a.error(`An error was encountered in "${method}" of the "${hookName}" hook: ${err}`);
+          return {};
+        }
+      }
+      _hookName(hook) {
+        var _a, _b;
+        try {
+          return (_a = hook === null || hook === void 0 ? void 0 : hook.getMetadata().name) !== null && _a !== void 0 ? _a : UNKNOWN_HOOK_NAME;
+        } catch (_c) {
+          (_b = this._logger) === null || _b === void 0 ? void 0 : _b.error(`Exception thrown getting metadata for hook. Unable to get hook name.`);
+          return UNKNOWN_HOOK_NAME;
+        }
+      }
+      _executeAfterEvaluation(hooks, hookContext, updatedData, result) {
+        var _a;
+        for (let hookIndex = hooks.length - 1; hookIndex >= 0; hookIndex -= 1) {
+          const hook = hooks[hookIndex];
+          const data = (_a = updatedData[hookIndex]) !== null && _a !== void 0 ? _a : {};
+          this._tryExecuteStage(AFTER_EVALUATION_STAGE_NAME, this._hookName(hook), () => {
+            var _a2, _b;
+            return (_b = (_a2 = hook === null || hook === void 0 ? void 0 : hook.afterEvaluation) === null || _a2 === void 0 ? void 0 : _a2.call(hook, hookContext, data, result)) !== null && _b !== void 0 ? _b : {};
+          });
+        }
+      }
+      _executeBeforeEvaluation(hooks, hookContext) {
+        return hooks.map((hook) => this._tryExecuteStage(BEFORE_EVALUATION_STAGE_NAME, this._hookName(hook), () => {
+          var _a, _b;
+          return (_b = (_a = hook === null || hook === void 0 ? void 0 : hook.beforeEvaluation) === null || _a === void 0 ? void 0 : _a.call(hook, hookContext, {})) !== null && _b !== void 0 ? _b : {};
+        }));
+      }
+      _prepareHooks(key, context, defaultValue, methodName, environmentId) {
+        const hooks = [...this._hooks];
+        const hookContext = {
+          flagKey: key,
+          context,
+          defaultValue,
+          method: methodName,
+          environmentId
+        };
+        return { hooks, hookContext };
+      }
+      addHook(hook) {
+        this._hooks.push(hook);
+      }
+    };
+    exports.default = HookRunner;
   }
 });
 
@@ -26675,7 +28472,7 @@ var require_MigrationOpEventConversion = __commonJS({
   "node_modules/@launchdarkly/js-server-sdk-common/dist/MigrationOpEventConversion.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    var js_sdk_common_1 = require_dist();
+    var js_sdk_common_1 = require_cjs();
     function isOperation(value) {
       if (!js_sdk_common_1.TypeValidators.String.is(value)) {
         return false;
@@ -26807,7 +28604,7 @@ var require_MigrationOpEventConversion = __commonJS({
         outReason.ruleId = inReason.ruleId;
       }
       if (js_sdk_common_1.TypeValidators.String.is(inReason.prerequisiteKey)) {
-        outReason.ruleId = inReason.ruleId;
+        outReason.prerequisiteKey = inReason.prerequisiteKey;
       }
       if (js_sdk_common_1.TypeValidators.Boolean.is(inReason.inExperiment)) {
         outReason.inExperiment = inReason.inExperiment;
@@ -26834,35 +28631,36 @@ var require_MigrationOpEventConversion = __commonJS({
       if (!isOperation(inEvent.operation)) {
         return void 0;
       }
-      if (!js_sdk_common_1.TypeValidators.Object.is(inEvent.contextKeys)) {
-        return void 0;
-      }
       if (!js_sdk_common_1.TypeValidators.Number.is(inEvent.creationDate)) {
         return void 0;
       }
-      if (!Object.keys(inEvent.contextKeys).every((key) => js_sdk_common_1.TypeValidators.Kind.is(key))) {
+      const contextKeysOrContext = {};
+      if (js_sdk_common_1.TypeValidators.Object.is(inEvent.context)) {
+        const context = js_sdk_common_1.Context.fromLDContext(inEvent.context);
+        if (context.valid) {
+          contextKeysOrContext.context = context;
+        }
+      } else if (js_sdk_common_1.TypeValidators.Object.is(inEvent.contextKeys)) {
+        if (Object.keys(inEvent.contextKeys).every((key) => js_sdk_common_1.TypeValidators.Kind.is(key)) && Object.values(inEvent.contextKeys).every((value) => js_sdk_common_1.TypeValidators.String.is(value) && value !== "")) {
+          contextKeysOrContext.contextKeys = Object.assign({}, inEvent.contextKeys);
+        }
+      }
+      if (!contextKeysOrContext.context && !contextKeysOrContext.contextKeys) {
         return void 0;
       }
       const samplingRatio = (_a = inEvent.samplingRatio) !== null && _a !== void 0 ? _a : 1;
       if (!js_sdk_common_1.TypeValidators.Number.is(samplingRatio)) {
         return void 0;
       }
-      if (!Object.values(inEvent.contextKeys).every((value) => js_sdk_common_1.TypeValidators.String.is(value) && value !== "")) {
-        return void 0;
-      }
       const evaluation = validateEvaluation(inEvent.evaluation);
       if (!evaluation) {
         return void 0;
       }
-      return {
-        kind: inEvent.kind,
-        operation: inEvent.operation,
-        creationDate: inEvent.creationDate,
-        contextKeys: Object.assign({}, inEvent.contextKeys),
+      return Object.assign(Object.assign({ kind: inEvent.kind, operation: inEvent.operation, creationDate: inEvent.creationDate }, contextKeysOrContext), {
         measurements: validateMeasurements(inEvent.measurements),
         evaluation,
         samplingRatio
-      };
+      });
     }
     exports.default = MigrationOpEventToInputEvent;
   }
@@ -26873,130 +28671,130 @@ var require_MigrationOpTracker = __commonJS({
   "node_modules/@launchdarkly/js-server-sdk-common/dist/MigrationOpTracker.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    var js_sdk_common_1 = require_dist();
-    var data_1 = require_data2();
+    var js_sdk_common_1 = require_cjs();
+    var data_1 = require_data();
     function isPopulated(data) {
       return !Number.isNaN(data);
     }
     var MigrationOpTracker = class {
-      constructor(flagKey, contextKeys, defaultStage, stage, reason, checkRatio, variation, version, samplingRatio, logger) {
-        this.flagKey = flagKey;
-        this.contextKeys = contextKeys;
-        this.defaultStage = defaultStage;
-        this.stage = stage;
-        this.reason = reason;
-        this.checkRatio = checkRatio;
-        this.variation = variation;
-        this.version = version;
-        this.samplingRatio = samplingRatio;
-        this.logger = logger;
-        this.errors = {
+      constructor(_flagKey, _context, _defaultStage, _stage, _reason, _checkRatio, _variation, _version, _samplingRatio, _logger) {
+        this._flagKey = _flagKey;
+        this._context = _context;
+        this._defaultStage = _defaultStage;
+        this._stage = _stage;
+        this._reason = _reason;
+        this._checkRatio = _checkRatio;
+        this._variation = _variation;
+        this._version = _version;
+        this._samplingRatio = _samplingRatio;
+        this._logger = _logger;
+        this._errors = {
           old: false,
           new: false
         };
-        this.wasInvoked = {
+        this._wasInvoked = {
           old: false,
           new: false
         };
-        this.consistencyCheck = data_1.LDConsistencyCheck.NotChecked;
-        this.latencyMeasurement = {
+        this._consistencyCheck = data_1.LDConsistencyCheck.NotChecked;
+        this._latencyMeasurement = {
           old: NaN,
           new: NaN
         };
       }
       op(op) {
-        this.operation = op;
+        this._operation = op;
       }
       error(origin) {
-        this.errors[origin] = true;
+        this._errors[origin] = true;
       }
       consistency(check) {
         var _a, _b;
-        if (js_sdk_common_1.internal.shouldSample((_a = this.checkRatio) !== null && _a !== void 0 ? _a : 1)) {
+        if (js_sdk_common_1.internal.shouldSample((_a = this._checkRatio) !== null && _a !== void 0 ? _a : 1)) {
           try {
             const res = check();
-            this.consistencyCheck = res ? data_1.LDConsistencyCheck.Consistent : data_1.LDConsistencyCheck.Inconsistent;
+            this._consistencyCheck = res ? data_1.LDConsistencyCheck.Consistent : data_1.LDConsistencyCheck.Inconsistent;
           } catch (exception) {
-            (_b = this.logger) === null || _b === void 0 ? void 0 : _b.error(`Exception when executing consistency check function for migration '${this.flagKey}' the consistency check will not be included in the generated migration op event. Exception: ${exception}`);
+            (_b = this._logger) === null || _b === void 0 ? void 0 : _b.error(`Exception when executing consistency check function for migration '${this._flagKey}' the consistency check will not be included in the generated migration op event. Exception: ${exception}`);
           }
         }
       }
       latency(origin, value) {
-        this.latencyMeasurement[origin] = value;
+        this._latencyMeasurement[origin] = value;
       }
       invoked(origin) {
-        this.wasInvoked[origin] = true;
+        this._wasInvoked[origin] = true;
       }
       createEvent() {
         var _a, _b, _c, _d, _e;
-        if (!js_sdk_common_1.TypeValidators.String.is(this.flagKey) || this.flagKey === "") {
-          (_a = this.logger) === null || _a === void 0 ? void 0 : _a.error("The flag key for a migration operation must be a non-empty string.");
+        if (!js_sdk_common_1.TypeValidators.String.is(this._flagKey) || this._flagKey === "") {
+          (_a = this._logger) === null || _a === void 0 ? void 0 : _a.error("The flag key for a migration operation must be a non-empty string.");
           return void 0;
         }
-        if (!this.operation) {
-          (_b = this.logger) === null || _b === void 0 ? void 0 : _b.error('The operation must be set using "op" before an event can be created.');
+        if (!this._operation) {
+          (_b = this._logger) === null || _b === void 0 ? void 0 : _b.error('The operation must be set using "op" before an event can be created.');
           return void 0;
         }
-        if (Object.keys(this.contextKeys).length === 0) {
-          (_c = this.logger) === null || _c === void 0 ? void 0 : _c.error("The migration was not done against a valid context and cannot generate an event.");
+        if (!js_sdk_common_1.Context.fromLDContext(this._context).valid) {
+          (_c = this._logger) === null || _c === void 0 ? void 0 : _c.error("The migration was not done against a valid context and cannot generate an event.");
           return void 0;
         }
-        if (!this.wasInvoked.old && !this.wasInvoked.new) {
-          (_d = this.logger) === null || _d === void 0 ? void 0 : _d.error('The migration invoked neither the "old" or "new" implementation andan event cannot be generated');
+        if (!this._wasInvoked.old && !this._wasInvoked.new) {
+          (_d = this._logger) === null || _d === void 0 ? void 0 : _d.error('The migration invoked neither the "old" or "new" implementation andan event cannot be generated');
           return void 0;
         }
-        if (!this.measurementConsistencyCheck()) {
+        if (!this._measurementConsistencyCheck()) {
           return void 0;
         }
         const measurements = [];
-        this.populateInvoked(measurements);
-        this.populateConsistency(measurements);
-        this.populateLatency(measurements);
-        this.populateErrors(measurements);
+        this._populateInvoked(measurements);
+        this._populateConsistency(measurements);
+        this._populateLatency(measurements);
+        this._populateErrors(measurements);
         return {
           kind: "migration_op",
-          operation: this.operation,
+          operation: this._operation,
           creationDate: Date.now(),
-          contextKeys: this.contextKeys,
+          context: this._context,
           evaluation: {
-            key: this.flagKey,
-            value: this.stage,
-            default: this.defaultStage,
-            reason: this.reason,
-            variation: this.variation,
-            version: this.version
+            key: this._flagKey,
+            value: this._stage,
+            default: this._defaultStage,
+            reason: this._reason,
+            variation: this._variation,
+            version: this._version
           },
           measurements,
-          samplingRatio: (_e = this.samplingRatio) !== null && _e !== void 0 ? _e : 1
+          samplingRatio: (_e = this._samplingRatio) !== null && _e !== void 0 ? _e : 1
         };
       }
-      logTag() {
-        return `For migration ${this.operation}-${this.flagKey}:`;
+      _logTag() {
+        return `For migration ${this._operation}-${this._flagKey}:`;
       }
-      latencyConsistencyMessage(origin) {
+      _latencyConsistencyMessage(origin) {
         return `Latency measurement for "${origin}", but "${origin}" was not invoked.`;
       }
-      errorConsistencyMessage(origin) {
+      _errorConsistencyMessage(origin) {
         return `Error occurred for "${origin}", but "${origin}" was not invoked.`;
       }
-      consistencyCheckConsistencyMessage(origin) {
+      _consistencyCheckConsistencyMessage(origin) {
         return `Consistency check was done, but "${origin}" was not invoked.Both "old" and "new" must be invoked to do a consistency check.`;
       }
-      checkOriginEventConsistency(origin) {
+      _checkOriginEventConsistency(origin) {
         var _a, _b, _c;
-        if (this.wasInvoked[origin]) {
+        if (this._wasInvoked[origin]) {
           return true;
         }
-        if (!Number.isNaN(this.latencyMeasurement[origin])) {
-          (_a = this.logger) === null || _a === void 0 ? void 0 : _a.error(`${this.logTag()} ${this.latencyConsistencyMessage(origin)}`);
+        if (!Number.isNaN(this._latencyMeasurement[origin])) {
+          (_a = this._logger) === null || _a === void 0 ? void 0 : _a.error(`${this._logTag()} ${this._latencyConsistencyMessage(origin)}`);
           return false;
         }
-        if (this.errors[origin]) {
-          (_b = this.logger) === null || _b === void 0 ? void 0 : _b.error(`${this.logTag()} ${this.errorConsistencyMessage(origin)}`);
+        if (this._errors[origin]) {
+          (_b = this._logger) === null || _b === void 0 ? void 0 : _b.error(`${this._logTag()} ${this._errorConsistencyMessage(origin)}`);
           return false;
         }
-        if (this.consistencyCheck !== data_1.LDConsistencyCheck.NotChecked) {
-          (_c = this.logger) === null || _c === void 0 ? void 0 : _c.error(`${this.logTag()} ${this.consistencyCheckConsistencyMessage(origin)}`);
+        if (this._consistencyCheck !== data_1.LDConsistencyCheck.NotChecked) {
+          (_c = this._logger) === null || _c === void 0 ? void 0 : _c.error(`${this._logTag()} ${this._consistencyCheckConsistencyMessage(origin)}`);
           return false;
         }
         return true;
@@ -27004,61 +28802,61 @@ var require_MigrationOpTracker = __commonJS({
       /**
        * Check that the latency, error, consistency and invoked measurements are self-consistent.
        */
-      measurementConsistencyCheck() {
-        return this.checkOriginEventConsistency("old") && this.checkOriginEventConsistency("new");
+      _measurementConsistencyCheck() {
+        return this._checkOriginEventConsistency("old") && this._checkOriginEventConsistency("new");
       }
-      populateInvoked(measurements) {
+      _populateInvoked(measurements) {
         var _a;
         const measurement = {
           key: "invoked",
           values: {}
         };
-        if (!this.wasInvoked.old && !this.wasInvoked.new) {
-          (_a = this.logger) === null || _a === void 0 ? void 0 : _a.error("Migration op completed without executing any origins (old/new).");
+        if (!this._wasInvoked.old && !this._wasInvoked.new) {
+          (_a = this._logger) === null || _a === void 0 ? void 0 : _a.error("Migration op completed without executing any origins (old/new).");
         }
-        if (this.wasInvoked.old) {
+        if (this._wasInvoked.old) {
           measurement.values.old = true;
         }
-        if (this.wasInvoked.new) {
+        if (this._wasInvoked.new) {
           measurement.values.new = true;
         }
         measurements.push(measurement);
       }
-      populateConsistency(measurements) {
+      _populateConsistency(measurements) {
         var _a;
-        if (this.consistencyCheck !== void 0 && this.consistencyCheck !== data_1.LDConsistencyCheck.NotChecked) {
+        if (this._consistencyCheck !== void 0 && this._consistencyCheck !== data_1.LDConsistencyCheck.NotChecked) {
           measurements.push({
             key: "consistent",
-            value: this.consistencyCheck === data_1.LDConsistencyCheck.Consistent,
-            samplingRatio: (_a = this.checkRatio) !== null && _a !== void 0 ? _a : 1
+            value: this._consistencyCheck === data_1.LDConsistencyCheck.Consistent,
+            samplingRatio: (_a = this._checkRatio) !== null && _a !== void 0 ? _a : 1
           });
         }
       }
-      populateErrors(measurements) {
-        if (this.errors.new || this.errors.old) {
+      _populateErrors(measurements) {
+        if (this._errors.new || this._errors.old) {
           const measurement = {
             key: "error",
             values: {}
           };
-          if (this.errors.new) {
+          if (this._errors.new) {
             measurement.values.new = true;
           }
-          if (this.errors.old) {
+          if (this._errors.old) {
             measurement.values.old = true;
           }
           measurements.push(measurement);
         }
       }
-      populateLatency(measurements) {
-        const newIsPopulated = isPopulated(this.latencyMeasurement.new);
-        const oldIsPopulated = isPopulated(this.latencyMeasurement.old);
+      _populateLatency(measurements) {
+        const newIsPopulated = isPopulated(this._latencyMeasurement.new);
+        const oldIsPopulated = isPopulated(this._latencyMeasurement.old);
         if (newIsPopulated || oldIsPopulated) {
           const values = {};
           if (newIsPopulated) {
-            values.new = this.latencyMeasurement.new;
+            values.new = this._latencyMeasurement.new;
           }
           if (oldIsPopulated) {
-            values.old = this.latencyMeasurement.old;
+            values.old = this._latencyMeasurement.old;
           }
           measurements.push({
             key: "latency_ms",
@@ -27076,13 +28874,22 @@ var require_LDClientImpl = __commonJS({
   "node_modules/@launchdarkly/js-server-sdk-common/dist/LDClientImpl.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    var js_sdk_common_1 = require_dist();
-    var api_1 = require_api3();
+    var js_sdk_common_1 = require_cjs();
+    var api_1 = require_api2();
+    var LDDataSystemOptions_1 = require_LDDataSystemOptions();
     var BigSegmentsManager_1 = require_BigSegmentsManager();
+    var createPluginEnvironmentMetadata_1 = require_createPluginEnvironmentMetadata();
+    var createPayloadListenerFDv2_1 = require_createPayloadListenerFDv2();
     var createStreamListeners_1 = require_createStreamListeners();
     var DataSourceUpdates_1 = require_DataSourceUpdates();
+    var fileDataInitilizerFDv2_1 = require_fileDataInitilizerFDv2();
+    var OneShotInitializerFDv2_1 = require_OneShotInitializerFDv2();
     var PollingProcessor_1 = require_PollingProcessor();
+    var PollingProcessorFDv2_1 = require_PollingProcessorFDv2();
     var Requestor_1 = require_Requestor();
+    var StreamingProcessor_1 = require_StreamingProcessor();
+    var StreamingProcessorFDv2_1 = require_StreamingProcessorFDv2();
+    var TransactionalDataSourceUpdates_1 = require_TransactionalDataSourceUpdates();
     var createDiagnosticsInitConfig_1 = require_createDiagnosticsInitConfig();
     var collection_1 = require_collection();
     var EvalResult_1 = require_EvalResult();
@@ -27091,10 +28898,10 @@ var require_LDClientImpl = __commonJS({
     var EventFactory_1 = require_EventFactory();
     var isExperiment_1 = require_isExperiment();
     var FlagsStateBuilder_1 = require_FlagsStateBuilder();
+    var HookRunner_1 = require_HookRunner();
     var MigrationOpEventConversion_1 = require_MigrationOpEventConversion();
     var MigrationOpTracker_1 = require_MigrationOpTracker();
     var Configuration_1 = require_Configuration();
-    var AsyncStoreFacade_1 = require_AsyncStoreFacade();
     var VersionedDataKinds_1 = require_VersionedDataKinds();
     var { ClientMessages, ErrorKinds, NullEventProcessor } = js_sdk_common_1.internal;
     var InitState;
@@ -27103,99 +28910,318 @@ var require_LDClientImpl = __commonJS({
       InitState2[InitState2["Initialized"] = 1] = "Initialized";
       InitState2[InitState2["Failed"] = 2] = "Failed";
     })(InitState || (InitState = {}));
-    var LDClientImpl = class {
-      constructor(sdkKey, platform2, options, callbacks) {
-        var _a, _b, _c, _d, _e;
-        this.sdkKey = sdkKey;
-        this.platform = platform2;
-        this.initState = InitState.Initializing;
-        this.eventFactoryDefault = new EventFactory_1.default(false);
-        this.eventFactoryWithReasons = new EventFactory_1.default(true);
-        this.onError = callbacks.onError;
-        this.onFailed = callbacks.onFailed;
-        this.onReady = callbacks.onReady;
-        const { onUpdate, hasEventListeners } = callbacks;
-        const config = new Configuration_1.default(options);
-        if (!sdkKey && !config.offline) {
-          throw new Error("You must configure the client with an SDK key");
+    var HIGH_TIMEOUT_THRESHOLD = 60;
+    var BOOL_VARIATION_METHOD_NAME = "LDClient.boolVariation";
+    var NUMBER_VARIATION_METHOD_NAME = "LDClient.numberVariation";
+    var STRING_VARIATION_METHOD_NAME = "LDClient.stringVariation";
+    var JSON_VARIATION_METHOD_NAME = "LDClient.jsonVariation";
+    var VARIATION_METHOD_NAME = "LDClient.variation";
+    var MIGRATION_VARIATION_METHOD_NAME = "LDClient.migrationVariation";
+    var BOOL_VARIATION_DETAIL_METHOD_NAME = "LDClient.boolVariationDetail";
+    var NUMBER_VARIATION_DETAIL_METHOD_NAME = "LDClient.numberVariationDetail";
+    var STRING_VARIATION_DETAIL_METHOD_NAME = "LDClient.stringVariationDetail";
+    var JSON_VARIATION_DETAIL_METHOD_NAME = "LDClient.jsonVariationDetail";
+    var VARIATION_METHOD_DETAIL_NAME = "LDClient.variationDetail";
+    function constructFDv1(sdkKey, platform2, config, callbacks, initSuccess, dataSourceErrorHandler, hooks, instanceId, startEventProcessor) {
+      var _a, _b, _c, _d, _e;
+      const { onUpdate, hasEventListeners } = callbacks;
+      const hookRunner = new HookRunner_1.default(config.logger, hooks);
+      if (!sdkKey && !config.offline) {
+        throw new Error("You must configure the client with an SDK key");
+      }
+      const { logger } = config;
+      const baseHeaders = (0, js_sdk_common_1.defaultHeaders)(sdkKey, platform2.info, config.tags, true, "user-agent", instanceId);
+      const clientContext = new js_sdk_common_1.ClientContext(sdkKey, config, platform2);
+      const featureStore = config.featureStoreFactory(clientContext);
+      const dataSourceUpdates = new DataSourceUpdates_1.default(featureStore, hasEventListeners, onUpdate);
+      let diagnosticsManager;
+      if (config.sendEvents && !config.offline && !config.diagnosticOptOut) {
+        diagnosticsManager = new js_sdk_common_1.internal.DiagnosticsManager(sdkKey, platform2, (0, createDiagnosticsInitConfig_1.default)(config, platform2, featureStore));
+      }
+      let eventProcessor;
+      if (!config.sendEvents || config.offline) {
+        eventProcessor = new NullEventProcessor();
+      } else {
+        eventProcessor = new js_sdk_common_1.internal.EventProcessor(config, clientContext, baseHeaders, new ContextDeduplicator_1.default(config), diagnosticsManager, startEventProcessor);
+      }
+      const bigSegmentsManager = new BigSegmentsManager_1.default((_b = (_a = config.bigSegments) === null || _a === void 0 ? void 0 : _a.store) === null || _b === void 0 ? void 0 : _b.call(_a, clientContext), (_c = config.bigSegments) !== null && _c !== void 0 ? _c : {}, config.logger, platform2.crypto);
+      const queries = {
+        getFlag(key, cb) {
+          featureStore.get(VersionedDataKinds_1.default.Features, key, (item) => cb(item));
+        },
+        getSegment(key, cb) {
+          featureStore.get(VersionedDataKinds_1.default.Segments, key, (item) => cb(item));
+        },
+        getBigSegmentsMembership(userKey) {
+          return bigSegmentsManager.getUserMembership(userKey);
         }
-        this.config = config;
-        this.logger = config.logger;
-        const clientContext = new js_sdk_common_1.ClientContext(sdkKey, config, platform2);
-        const featureStore = config.featureStoreFactory(clientContext);
-        this.asyncFeatureStore = new AsyncStoreFacade_1.default(featureStore);
-        const dataSourceUpdates = new DataSourceUpdates_1.default(featureStore, hasEventListeners, onUpdate);
-        if (config.sendEvents && !config.offline && !config.diagnosticOptOut) {
-          this.diagnosticsManager = new js_sdk_common_1.internal.DiagnosticsManager(sdkKey, platform2, (0, createDiagnosticsInitConfig_1.default)(config, platform2, featureStore));
+      };
+      const evaluator = new Evaluator_1.default(platform2, queries);
+      const listeners = (0, createStreamListeners_1.createStreamListeners)(dataSourceUpdates, logger, {
+        put: initSuccess
+      });
+      const makeDefaultProcessor = () => config.stream ? new StreamingProcessor_1.default(clientContext, "/all", [], listeners, baseHeaders, diagnosticsManager, dataSourceErrorHandler, config.streamInitialReconnectDelay) : new PollingProcessor_1.default(new Requestor_1.default(config, platform2.requests, baseHeaders), config.pollInterval, dataSourceUpdates, config.logger, initSuccess, dataSourceErrorHandler);
+      let updateProcessor;
+      if (!(config.offline || config.useLdd)) {
+        updateProcessor = (_e = (_d = config.updateProcessorFactory) === null || _d === void 0 ? void 0 : _d.call(config, clientContext, dataSourceUpdates, initSuccess, dataSourceErrorHandler)) !== null && _e !== void 0 ? _e : makeDefaultProcessor();
+      }
+      return {
+        config,
+        logger,
+        evaluator,
+        featureStore,
+        updateProcessor,
+        eventProcessor,
+        bigSegmentsManager,
+        hookRunner,
+        onError: callbacks.onError,
+        onFailed: callbacks.onFailed,
+        onReady: callbacks.onReady
+      };
+    }
+    function constructFDv2(sdkKey, platform2, config, callbacks, initSuccess, hooks, instanceId, startEventProcessor) {
+      var _a, _b, _c, _d, _e, _f;
+      const { onUpdate, hasEventListeners } = callbacks;
+      const hookRunner = new HookRunner_1.default(config.logger, hooks);
+      if (!sdkKey && !config.offline) {
+        throw new Error("You must configure the client with an SDK key");
+      }
+      const { logger } = config;
+      const baseHeaders = (0, js_sdk_common_1.defaultHeaders)(sdkKey, platform2.info, config.tags, true, "user-agent", instanceId);
+      const clientContext = new js_sdk_common_1.ClientContext(sdkKey, config, platform2);
+      const dataSystem = config.dataSystem;
+      const featureStore = dataSystem.featureStoreFactory(clientContext);
+      const dataSourceUpdates = new TransactionalDataSourceUpdates_1.default(featureStore, hasEventListeners, onUpdate);
+      let diagnosticsManager;
+      if (config.sendEvents && !config.offline && !config.diagnosticOptOut) {
+        diagnosticsManager = new js_sdk_common_1.internal.DiagnosticsManager(sdkKey, platform2, (0, createDiagnosticsInitConfig_1.default)(config, platform2, featureStore));
+      }
+      let eventProcessor;
+      if (!config.sendEvents || config.offline) {
+        eventProcessor = new NullEventProcessor();
+      } else {
+        eventProcessor = new js_sdk_common_1.internal.EventProcessor(config, clientContext, baseHeaders, new ContextDeduplicator_1.default(config), diagnosticsManager, startEventProcessor);
+      }
+      const bigSegmentsManager = new BigSegmentsManager_1.default((_b = (_a = config.bigSegments) === null || _a === void 0 ? void 0 : _a.store) === null || _b === void 0 ? void 0 : _b.call(_a, clientContext), (_c = config.bigSegments) !== null && _c !== void 0 ? _c : {}, config.logger, platform2.crypto);
+      const queries = {
+        getFlag(key, cb) {
+          featureStore.get(VersionedDataKinds_1.default.Features, key, (item) => cb(item));
+        },
+        getSegment(key, cb) {
+          featureStore.get(VersionedDataKinds_1.default.Segments, key, (item) => cb(item));
+        },
+        getBigSegmentsMembership(userKey) {
+          return bigSegmentsManager.getUserMembership(userKey);
         }
-        if (!config.sendEvents || config.offline) {
-          this.eventProcessor = new NullEventProcessor();
+      };
+      const evaluator = new Evaluator_1.default(platform2, queries);
+      let dataSource;
+      let payloadListener;
+      if (!(config.offline || config.dataSystem.useLdd)) {
+        const initializers = [];
+        const synchronizers = [];
+        const fdv1FallbackSynchronizers = [];
+        if ((0, LDDataSystemOptions_1.isCustomOptions)(dataSystem.dataSource)) {
+          const { initializers: initializerConfigs = [], synchronizers: synchronizerConfigs = [] } = dataSystem.dataSource;
+          initializerConfigs.forEach((initializerConfig) => {
+            switch (initializerConfig.type) {
+              case "file": {
+                initializers.push(() => new fileDataInitilizerFDv2_1.default(initializerConfig, platform2, config.logger));
+                break;
+              }
+              case "polling": {
+                initializers.push(() => new OneShotInitializerFDv2_1.default(new Requestor_1.default(config, platform2.requests, baseHeaders, "/sdk/poll", config.logger), config.logger));
+                break;
+              }
+              default: {
+                throw new Error("Unsupported initializer type");
+              }
+            }
+          });
+          synchronizerConfigs.forEach((synchronizerConfig) => {
+            switch (synchronizerConfig.type) {
+              case "streaming": {
+                const { streamInitialReconnectDelay = Configuration_1.DEFAULT_STREAM_RECONNECT_DELAY } = synchronizerConfig;
+                synchronizers.push(() => new StreamingProcessorFDv2_1.default(clientContext, "/sdk/stream", [], baseHeaders, diagnosticsManager, streamInitialReconnectDelay));
+                break;
+              }
+              case "polling": {
+                const { pollInterval = Configuration_1.DEFAULT_POLL_INTERVAL } = synchronizerConfig;
+                synchronizers.push(() => new PollingProcessorFDv2_1.default(new Requestor_1.default(config, platform2.requests, baseHeaders, "/sdk/poll", config.logger), pollInterval, config.logger));
+                break;
+              }
+              default: {
+                throw new Error("Unsupported synchronizer type");
+              }
+            }
+          });
         } else {
-          this.eventProcessor = new js_sdk_common_1.internal.EventProcessor(config, clientContext, new ContextDeduplicator_1.default(config), this.diagnosticsManager);
-        }
-        this.featureStore = featureStore;
-        const manager = new BigSegmentsManager_1.default((_b = (_a = config.bigSegments) === null || _a === void 0 ? void 0 : _a.store) === null || _b === void 0 ? void 0 : _b.call(_a, clientContext), (_c = config.bigSegments) !== null && _c !== void 0 ? _c : {}, config.logger, this.platform.crypto);
-        this.bigSegmentsManager = manager;
-        this.bigSegmentStatusProviderInternal = manager.statusProvider;
-        const queries = {
-          getFlag(key, cb) {
-            featureStore.get(VersionedDataKinds_1.default.Features, key, (item) => cb(item));
-          },
-          getSegment(key, cb) {
-            featureStore.get(VersionedDataKinds_1.default.Segments, key, (item) => cb(item));
-          },
-          getBigSegmentsMembership(userKey) {
-            return manager.getUserMembership(userKey);
+          if ((0, LDDataSystemOptions_1.isStandardOptions)(dataSystem.dataSource)) {
+            initializers.push(() => new OneShotInitializerFDv2_1.default(new Requestor_1.default(config, platform2.requests, baseHeaders, "/sdk/poll", config.logger), config.logger));
           }
-        };
-        this.evaluator = new Evaluator_1.default(this.platform, queries);
-        const listeners = (0, createStreamListeners_1.createStreamListeners)(dataSourceUpdates, this.logger, {
-          put: () => this.initSuccess()
-        });
-        const makeDefaultProcessor = () => config.stream ? new js_sdk_common_1.internal.StreamingProcessor(sdkKey, clientContext, "/all", listeners, this.diagnosticsManager, (e) => this.dataSourceErrorHandler(e), this.config.streamInitialReconnectDelay) : new PollingProcessor_1.default(config, new Requestor_1.default(sdkKey, config, this.platform.info, this.platform.requests), dataSourceUpdates, () => this.initSuccess(), (e) => this.dataSourceErrorHandler(e));
-        if (!(config.offline || config.useLdd)) {
-          this.updateProcessor = (_e = (_d = config.updateProcessorFactory) === null || _d === void 0 ? void 0 : _d.call(config, clientContext, dataSourceUpdates, () => this.initSuccess(), (e) => this.dataSourceErrorHandler(e))) !== null && _e !== void 0 ? _e : makeDefaultProcessor();
+          if ((0, LDDataSystemOptions_1.isStandardOptions)(dataSystem.dataSource) || (0, LDDataSystemOptions_1.isStreamingOnlyOptions)(dataSystem.dataSource)) {
+            const reconnectDelay = dataSystem.dataSource.streamInitialReconnectDelay;
+            synchronizers.push(() => new StreamingProcessorFDv2_1.default(clientContext, "/sdk/stream", [], baseHeaders, diagnosticsManager, reconnectDelay));
+          }
+          let pollingInterval = Configuration_1.DEFAULT_POLL_INTERVAL;
+          if ((0, LDDataSystemOptions_1.isStandardOptions)(dataSystem.dataSource) || (0, LDDataSystemOptions_1.isPollingOnlyOptions)(dataSystem.dataSource)) {
+            pollingInterval = (_d = dataSystem.dataSource.pollInterval) !== null && _d !== void 0 ? _d : Configuration_1.DEFAULT_POLL_INTERVAL;
+            synchronizers.push(() => new PollingProcessorFDv2_1.default(new Requestor_1.default(config, platform2.requests, baseHeaders, "/sdk/poll", logger), pollingInterval, logger));
+          }
         }
-        if (this.updateProcessor) {
-          this.updateProcessor.start();
+        const fdv1FallbackConfig = dataSystem.fdv1Fallback;
+        if (fdv1FallbackConfig !== null) {
+          const fdv1FallbackPollInterval = (_f = (_e = fdv1FallbackConfig === null || fdv1FallbackConfig === void 0 ? void 0 : fdv1FallbackConfig.pollInterval) !== null && _e !== void 0 ? _e : config.pollInterval) !== null && _f !== void 0 ? _f : Configuration_1.DEFAULT_POLL_INTERVAL;
+          const fdv1FallbackEndpoints = (fdv1FallbackConfig === null || fdv1FallbackConfig === void 0 ? void 0 : fdv1FallbackConfig.baseUri) ? new js_sdk_common_1.ServiceEndpoints(config.serviceEndpoints.streaming, fdv1FallbackConfig.baseUri, config.serviceEndpoints.events, config.serviceEndpoints.analyticsEventPath, config.serviceEndpoints.diagnosticEventPath, config.serviceEndpoints.includeAuthorizationHeader, config.serviceEndpoints.payloadFilterKey) : void 0;
+          fdv1FallbackSynchronizers.push(() => new PollingProcessorFDv2_1.default(new Requestor_1.default(config, platform2.requests, baseHeaders, "/sdk/latest-all", config.logger, fdv1FallbackEndpoints), fdv1FallbackPollInterval, config.logger, true));
+        }
+        dataSource = new js_sdk_common_1.CompositeDataSource(initializers, synchronizers, fdv1FallbackSynchronizers, logger);
+        payloadListener = (0, createPayloadListenerFDv2_1.createPayloadListener)(dataSourceUpdates, logger, initSuccess);
+      }
+      return {
+        config,
+        logger,
+        evaluator,
+        featureStore,
+        dataSource,
+        payloadListener,
+        eventProcessor,
+        bigSegmentsManager,
+        hookRunner,
+        onError: callbacks.onError,
+        onFailed: callbacks.onFailed,
+        onReady: callbacks.onReady
+      };
+    }
+    var LDClientImpl = class {
+      get logger() {
+        return this._logger;
+      }
+      constructor(_sdkKey, _platform, options, callbacks, internalOptions) {
+        this._sdkKey = _sdkKey;
+        this._platform = _platform;
+        this._initState = InitState.Initializing;
+        this._eventFactoryDefault = new EventFactory_1.default(false);
+        this._eventFactoryWithReasons = new EventFactory_1.default(true);
+        const config = new Configuration_1.default(options, internalOptions);
+        const startEventProcessor = !(internalOptions === null || internalOptions === void 0 ? void 0 : internalOptions.disableBackgroundEventFlush);
+        this.environmentMetadata = (0, createPluginEnvironmentMetadata_1.createPluginEnvironmentMetadata)(_platform, _sdkKey, config);
+        const hooks = [];
+        if (config.hooks) {
+          hooks.push(...config.hooks);
+        }
+        config.getImplementationHooks(this.environmentMetadata).forEach((hook) => {
+          hooks.push(hook);
+        });
+        if (!config.dataSystem) {
+          ({
+            config: this._config,
+            logger: this._logger,
+            evaluator: this._evaluator,
+            featureStore: this._featureStore,
+            updateProcessor: this._updateProcessor,
+            eventProcessor: this._eventProcessor,
+            bigSegmentsManager: this._bigSegmentsManager,
+            hookRunner: this._hookRunner,
+            onError: this._onError,
+            onFailed: this._onFailed,
+            onReady: this._onReady
+          } = constructFDv1(_sdkKey, _platform, config, callbacks, () => this._initSuccess(), (e) => this._dataSourceErrorHandler(e), hooks, internalOptions === null || internalOptions === void 0 ? void 0 : internalOptions.instanceId, startEventProcessor));
+          this.bigSegmentStatusProviderInternal = this._bigSegmentsManager.statusProvider;
+          if (this._updateProcessor) {
+            this._updateProcessor.start();
+          } else {
+            setTimeout(() => this._initSuccess(), 0);
+          }
         } else {
-          setTimeout(() => this.initSuccess(), 0);
+          let transactionalStore;
+          let payloadListener;
+          ({
+            config: this._config,
+            logger: this._logger,
+            evaluator: this._evaluator,
+            featureStore: transactionalStore,
+            dataSource: this._dataSource,
+            payloadListener,
+            eventProcessor: this._eventProcessor,
+            bigSegmentsManager: this._bigSegmentsManager,
+            hookRunner: this._hookRunner,
+            onError: this._onError,
+            onFailed: this._onFailed,
+            onReady: this._onReady
+          } = constructFDv2(_sdkKey, _platform, config, callbacks, () => this._initSuccess(), hooks, internalOptions === null || internalOptions === void 0 ? void 0 : internalOptions.instanceId, startEventProcessor));
+          this._featureStore = transactionalStore;
+          this.bigSegmentStatusProviderInternal = this._bigSegmentsManager.statusProvider;
+          if (this._dataSource) {
+            this._dataSource.start((_, payload) => {
+              payloadListener === null || payloadListener === void 0 ? void 0 : payloadListener(payload);
+            }, (state, err) => {
+              if (state === js_sdk_common_1.subsystem.DataSourceState.Closed && err) {
+                this._dataSourceErrorHandler(err);
+              }
+            }, () => {
+              var _a;
+              return (_a = transactionalStore.getSelector) === null || _a === void 0 ? void 0 : _a.call(transactionalStore);
+            });
+          } else {
+            setTimeout(() => this._initSuccess(), 0);
+          }
         }
       }
       initialized() {
-        return this.initState === InitState.Initialized;
+        return this._initState === InitState.Initialized;
       }
-      waitForInitialization() {
-        if (this.initState === InitState.Initialized) {
-          return Promise.resolve(this);
+      waitForInitialization(options) {
+        var _a, _b;
+        if ((options === null || options === void 0 ? void 0 : options.timeout) === void 0 && (this._updateProcessor !== void 0 || this._dataSource !== void 0)) {
+          (_a = this._logger) === null || _a === void 0 ? void 0 : _a.warn("The waitForInitialization function was called without a timeout specified. In a future version a default timeout will be applied.");
         }
-        if (!this.initializedPromise) {
-          this.initializedPromise = new Promise((resolve, reject) => {
-            this.initResolve = resolve;
-            this.initReject = reject;
+        if ((options === null || options === void 0 ? void 0 : options.timeout) !== void 0 && (options === null || options === void 0 ? void 0 : options.timeout) > HIGH_TIMEOUT_THRESHOLD && (this._updateProcessor !== void 0 || this._dataSource !== void 0)) {
+          (_b = this._logger) === null || _b === void 0 ? void 0 : _b.warn(`The waitForInitialization function was called with a timeout greater than ${HIGH_TIMEOUT_THRESHOLD} seconds. We recommend a timeout of less than ${HIGH_TIMEOUT_THRESHOLD} seconds.`);
+        }
+        if (this._initializedPromise) {
+          return this._clientWithTimeout(this._initializedPromise, options === null || options === void 0 ? void 0 : options.timeout, this._logger);
+        }
+        if (this._initState === InitState.Initialized) {
+          this._initializedPromise = Promise.resolve(this);
+          return this._initializedPromise;
+        }
+        if (this._initState === InitState.Failed) {
+          this._initializedPromise = Promise.reject(this._rejectionReason);
+          return this._initializedPromise;
+        }
+        if (!this._initializedPromise) {
+          this._initializedPromise = new Promise((resolve, reject) => {
+            this._initResolve = resolve;
+            this._initReject = reject;
           });
         }
-        return this.initializedPromise;
+        return this._clientWithTimeout(this._initializedPromise, options === null || options === void 0 ? void 0 : options.timeout, this._logger);
       }
       variation(key, context, defaultValue, callback) {
-        return new Promise((resolve) => {
-          this.evaluateIfPossible(key, context, defaultValue, this.eventFactoryDefault, (res) => {
-            resolve(res.detail.value);
-            callback === null || callback === void 0 ? void 0 : callback(null, res.detail.value);
+        var _a, _b, _c;
+        return this._hookRunner.withEvaluationSeries(key, context, defaultValue, VARIATION_METHOD_NAME, () => new Promise((resolve) => {
+          this._evaluateIfPossible(key, context, defaultValue, this._eventFactoryDefault, (res) => {
+            resolve(res.detail);
           });
+        }), (_c = (_b = (_a = this._featureStore).getInitMetaData) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.environmentId).then((detail) => {
+          callback === null || callback === void 0 ? void 0 : callback(null, detail.value);
+          return detail.value;
         });
       }
       variationDetail(key, context, defaultValue, callback) {
-        return new Promise((resolve) => {
-          this.evaluateIfPossible(key, context, defaultValue, this.eventFactoryWithReasons, (res) => {
+        var _a, _b, _c;
+        return this._hookRunner.withEvaluationSeries(key, context, defaultValue, VARIATION_METHOD_DETAIL_NAME, () => new Promise((resolve) => {
+          this._evaluateIfPossible(key, context, defaultValue, this._eventFactoryWithReasons, (res) => {
             resolve(res.detail);
             callback === null || callback === void 0 ? void 0 : callback(null, res.detail);
           });
-        });
+        }), (_c = (_b = (_a = this._featureStore).getInitMetaData) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.environmentId);
       }
-      typedEval(key, context, defaultValue, eventFactory, typeChecker) {
-        return new Promise((resolve) => {
-          this.evaluateIfPossible(key, context, defaultValue, eventFactory, (res) => {
+      _typedEval(key, context, defaultValue, eventFactory, methodName, typeChecker) {
+        var _a, _b, _c;
+        return this._hookRunner.withEvaluationSeries(key, context, defaultValue, methodName, () => new Promise((resolve) => {
+          this._evaluateIfPossible(key, context, defaultValue, eventFactory, (res) => {
             const typedRes = {
               value: res.detail.value,
               reason: res.detail.reason,
@@ -27203,105 +29229,108 @@ var require_LDClientImpl = __commonJS({
             };
             resolve(typedRes);
           }, typeChecker);
-        });
+        }), (_c = (_b = (_a = this._featureStore).getInitMetaData) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.environmentId);
       }
       async boolVariation(key, context, defaultValue) {
-        return (await this.typedEval(key, context, defaultValue, this.eventFactoryDefault, (value) => [
-          js_sdk_common_1.TypeValidators.Boolean.is(value),
-          js_sdk_common_1.TypeValidators.Boolean.getType()
-        ])).value;
+        return (await this._typedEval(key, context, defaultValue, this._eventFactoryDefault, BOOL_VARIATION_METHOD_NAME, (value) => [js_sdk_common_1.TypeValidators.Boolean.is(value), js_sdk_common_1.TypeValidators.Boolean.getType()])).value;
       }
       async numberVariation(key, context, defaultValue) {
-        return (await this.typedEval(key, context, defaultValue, this.eventFactoryDefault, (value) => [
-          js_sdk_common_1.TypeValidators.Number.is(value),
-          js_sdk_common_1.TypeValidators.Number.getType()
-        ])).value;
+        return (await this._typedEval(key, context, defaultValue, this._eventFactoryDefault, NUMBER_VARIATION_METHOD_NAME, (value) => [js_sdk_common_1.TypeValidators.Number.is(value), js_sdk_common_1.TypeValidators.Number.getType()])).value;
       }
       async stringVariation(key, context, defaultValue) {
-        return (await this.typedEval(key, context, defaultValue, this.eventFactoryDefault, (value) => [
-          js_sdk_common_1.TypeValidators.String.is(value),
-          js_sdk_common_1.TypeValidators.String.getType()
-        ])).value;
+        return (await this._typedEval(key, context, defaultValue, this._eventFactoryDefault, STRING_VARIATION_METHOD_NAME, (value) => [js_sdk_common_1.TypeValidators.String.is(value), js_sdk_common_1.TypeValidators.String.getType()])).value;
       }
       jsonVariation(key, context, defaultValue) {
-        return this.variation(key, context, defaultValue);
+        var _a, _b, _c;
+        return this._hookRunner.withEvaluationSeries(key, context, defaultValue, JSON_VARIATION_METHOD_NAME, () => new Promise((resolve) => {
+          this._evaluateIfPossible(key, context, defaultValue, this._eventFactoryDefault, (res) => {
+            resolve(res.detail);
+          });
+        }), (_c = (_b = (_a = this._featureStore).getInitMetaData) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.environmentId).then((detail) => detail.value);
       }
       boolVariationDetail(key, context, defaultValue) {
-        return this.typedEval(key, context, defaultValue, this.eventFactoryWithReasons, (value) => [
-          js_sdk_common_1.TypeValidators.Boolean.is(value),
-          js_sdk_common_1.TypeValidators.Boolean.getType()
-        ]);
+        return this._typedEval(key, context, defaultValue, this._eventFactoryWithReasons, BOOL_VARIATION_DETAIL_METHOD_NAME, (value) => [js_sdk_common_1.TypeValidators.Boolean.is(value), js_sdk_common_1.TypeValidators.Boolean.getType()]);
       }
       numberVariationDetail(key, context, defaultValue) {
-        return this.typedEval(key, context, defaultValue, this.eventFactoryWithReasons, (value) => [
-          js_sdk_common_1.TypeValidators.Number.is(value),
-          js_sdk_common_1.TypeValidators.Number.getType()
-        ]);
+        return this._typedEval(key, context, defaultValue, this._eventFactoryWithReasons, NUMBER_VARIATION_DETAIL_METHOD_NAME, (value) => [js_sdk_common_1.TypeValidators.Number.is(value), js_sdk_common_1.TypeValidators.Number.getType()]);
       }
       stringVariationDetail(key, context, defaultValue) {
-        return this.typedEval(key, context, defaultValue, this.eventFactoryWithReasons, (value) => [
-          js_sdk_common_1.TypeValidators.String.is(value),
-          js_sdk_common_1.TypeValidators.String.getType()
-        ]);
+        return this._typedEval(key, context, defaultValue, this._eventFactoryWithReasons, STRING_VARIATION_DETAIL_METHOD_NAME, (value) => [js_sdk_common_1.TypeValidators.String.is(value), js_sdk_common_1.TypeValidators.String.getType()]);
       }
       jsonVariationDetail(key, context, defaultValue) {
-        return this.variationDetail(key, context, defaultValue);
+        var _a, _b, _c;
+        return this._hookRunner.withEvaluationSeries(key, context, defaultValue, JSON_VARIATION_DETAIL_METHOD_NAME, () => new Promise((resolve) => {
+          this._evaluateIfPossible(key, context, defaultValue, this._eventFactoryWithReasons, (res) => {
+            resolve(res.detail);
+          });
+        }), (_c = (_b = (_a = this._featureStore).getInitMetaData) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.environmentId);
       }
-      async migrationVariation(key, context, defaultValue) {
-        const convertedContext = js_sdk_common_1.Context.fromLDContext(context);
-        return new Promise((resolve) => {
-          this.evaluateIfPossible(key, context, defaultValue, this.eventFactoryWithReasons, ({ detail }, flag) => {
-            var _a;
-            const contextKeys = convertedContext.valid ? convertedContext.kindsAndKeys : {};
-            const checkRatio = (_a = flag === null || flag === void 0 ? void 0 : flag.migration) === null || _a === void 0 ? void 0 : _a.checkRatio;
-            const samplingRatio = flag === null || flag === void 0 ? void 0 : flag.samplingRatio;
-            if (!(0, api_1.IsMigrationStage)(detail.value)) {
+      async _migrationVariationInternal(key, context, defaultValue) {
+        var _a;
+        const res = await new Promise((resolve) => {
+          this._evaluateIfPossible(key, context, defaultValue, this._eventFactoryWithReasons, ({ detail: detail2 }, flag2) => {
+            if (!(0, api_1.IsMigrationStage)(detail2.value)) {
               const error2 = new Error(`Unrecognized MigrationState for "${key}"; returning default value.`);
-              this.onError(error2);
+              this._onError(error2);
               const reason = {
                 kind: "ERROR",
                 errorKind: ErrorKinds.WrongType
               };
               resolve({
-                value: defaultValue,
-                tracker: new MigrationOpTracker_1.default(key, contextKeys, defaultValue, defaultValue, reason, checkRatio, void 0, flag === null || flag === void 0 ? void 0 : flag.version, samplingRatio, this.logger)
+                detail: {
+                  value: defaultValue,
+                  reason
+                },
+                flag: flag2
               });
               return;
             }
-            resolve({
-              value: detail.value,
-              tracker: new MigrationOpTracker_1.default(
-                key,
-                contextKeys,
-                defaultValue,
-                detail.value,
-                detail.reason,
-                checkRatio,
-                // Can be null for compatibility reasons.
-                detail.variationIndex === null ? void 0 : detail.variationIndex,
-                flag === null || flag === void 0 ? void 0 : flag.version,
-                samplingRatio,
-                this.logger
-              )
-            });
+            resolve({ detail: detail2, flag: flag2 });
           });
         });
+        const { detail, flag } = res;
+        const checkRatio = (_a = flag === null || flag === void 0 ? void 0 : flag.migration) === null || _a === void 0 ? void 0 : _a.checkRatio;
+        const samplingRatio = flag === null || flag === void 0 ? void 0 : flag.samplingRatio;
+        return {
+          detail,
+          migration: {
+            value: detail.value,
+            tracker: new MigrationOpTracker_1.default(
+              key,
+              context,
+              defaultValue,
+              detail.value,
+              detail.reason,
+              checkRatio,
+              // Can be null for compatibility reasons.
+              detail.variationIndex === null ? void 0 : detail.variationIndex,
+              flag === null || flag === void 0 ? void 0 : flag.version,
+              samplingRatio,
+              this._logger
+            )
+          }
+        };
+      }
+      async migrationVariation(key, context, defaultValue) {
+        var _a, _b, _c;
+        const res = await this._hookRunner.withEvaluationSeriesExtraDetail(key, context, defaultValue, MIGRATION_VARIATION_METHOD_NAME, () => this._migrationVariationInternal(key, context, defaultValue), (_c = (_b = (_a = this._featureStore).getInitMetaData) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.environmentId);
+        return res.migration;
       }
       allFlagsState(context, options, callback) {
         var _a, _b, _c;
-        if (this.config.offline) {
-          (_a = this.logger) === null || _a === void 0 ? void 0 : _a.info("allFlagsState() called in offline mode. Returning empty state.");
+        if (this._config.offline) {
+          (_a = this._logger) === null || _a === void 0 ? void 0 : _a.info("allFlagsState() called in offline mode. Returning empty state.");
           const allFlagState = new FlagsStateBuilder_1.default(false, false).build();
           callback === null || callback === void 0 ? void 0 : callback(null, allFlagState);
           return Promise.resolve(allFlagState);
         }
         const evalContext = js_sdk_common_1.Context.fromLDContext(context);
         if (!evalContext.valid) {
-          (_b = this.logger) === null || _b === void 0 ? void 0 : _b.info(`${(_c = evalContext.message) !== null && _c !== void 0 ? _c : "Invalid context."}. Returning empty state.`);
+          (_b = this._logger) === null || _b === void 0 ? void 0 : _b.info(`${(_c = evalContext.message) !== null && _c !== void 0 ? _c : "Invalid context."}. Returning empty state.`);
           return Promise.resolve(new FlagsStateBuilder_1.default(false, false).build());
         }
         return new Promise((resolve) => {
-          const doEval = (valid) => this.featureStore.all(VersionedDataKinds_1.default.Features, (allFlags) => {
+          const doEval = (valid) => this._featureStore.all(VersionedDataKinds_1.default.Features, (allFlags) => {
             const builder = new FlagsStateBuilder_1.default(valid, !!(options === null || options === void 0 ? void 0 : options.withReasons));
             const clientOnly = !!(options === null || options === void 0 ? void 0 : options.clientSideOnly);
             const detailsOnlyIfTracked = !!(options === null || options === void 0 ? void 0 : options.detailsOnlyForTrackedFlags);
@@ -27312,13 +29341,13 @@ var require_LDClientImpl = __commonJS({
                 iterCb(true);
                 return;
               }
-              this.evaluator.evaluateCb(flag, evalContext, (res) => {
+              this._evaluator.evaluateCb(flag, evalContext, (res) => {
                 var _a3;
                 if (res.isError) {
-                  this.onError(new Error(`Error for feature flag "${flag.key}" while evaluating all flags: ${res.message}`));
+                  this._onError(new Error(`Error for feature flag "${flag.key}" while evaluating all flags: ${res.message}`));
                 }
                 const requireExperimentData = (0, isExperiment_1.default)(flag, res.detail.reason);
-                builder.addFlag(flag, res.detail.value, (_a3 = res.detail.variationIndex) !== null && _a3 !== void 0 ? _a3 : void 0, res.detail.reason, flag.trackEvents || requireExperimentData, requireExperimentData, detailsOnlyIfTracked);
+                builder.addFlag(flag, res.detail.value, (_a3 = res.detail.variationIndex) !== null && _a3 !== void 0 ? _a3 : void 0, res.detail.reason, flag.trackEvents || requireExperimentData, requireExperimentData, detailsOnlyIfTracked, res.prerequisites);
                 iterCb(true);
               });
             }, () => {
@@ -27328,13 +29357,13 @@ var require_LDClientImpl = __commonJS({
             });
           });
           if (!this.initialized()) {
-            this.featureStore.initialized((storeInitialized) => {
+            this._featureStore.initialized((storeInitialized) => {
               var _a2, _b2;
               let valid = true;
               if (storeInitialized) {
-                (_a2 = this.logger) === null || _a2 === void 0 ? void 0 : _a2.warn("Called allFlagsState before client initialization; using last known values from data store");
+                (_a2 = this._logger) === null || _a2 === void 0 ? void 0 : _a2.warn("Called allFlagsState before client initialization; using last known values from data store");
               } else {
-                (_b2 = this.logger) === null || _b2 === void 0 ? void 0 : _b2.warn("Called allFlagsState before client initialization. Data store not available; returning empty state");
+                (_b2 = this._logger) === null || _b2 === void 0 ? void 0 : _b2.warn("Called allFlagsState before client initialization. Data store not available; returning empty state");
                 valid = false;
               }
               doEval(valid);
@@ -27347,7 +29376,10 @@ var require_LDClientImpl = __commonJS({
       secureModeHash(context) {
         const checkedContext = js_sdk_common_1.Context.fromLDContext(context);
         const key = checkedContext.valid ? checkedContext.canonicalKey : void 0;
-        const hmac = this.platform.crypto.createHmac("sha256", this.sdkKey);
+        if (!this._platform.crypto.createHmac) {
+          throw new Error("Platform must implement createHmac");
+        }
+        const hmac = this._platform.crypto.createHmac("sha256", this._sdkKey);
         if (key === void 0) {
           throw new js_sdk_common_1.LDClientError("Could not generate secure mode hash for invalid context");
         }
@@ -27355,131 +29387,166 @@ var require_LDClientImpl = __commonJS({
         return hmac.digest("hex");
       }
       close() {
-        var _a;
-        this.eventProcessor.close();
-        (_a = this.updateProcessor) === null || _a === void 0 ? void 0 : _a.close();
-        this.featureStore.close();
-        this.bigSegmentsManager.close();
+        var _a, _b;
+        this._eventProcessor.close();
+        (_a = this._updateProcessor) === null || _a === void 0 ? void 0 : _a.close();
+        (_b = this._dataSource) === null || _b === void 0 ? void 0 : _b.stop();
+        this._featureStore.close();
+        this._bigSegmentsManager.close();
       }
       isOffline() {
-        return this.config.offline;
+        return this._config.offline;
       }
       track(key, context, data, metricValue) {
-        var _a;
+        var _a, _b;
         const checkedContext = js_sdk_common_1.Context.fromLDContext(context);
         if (!checkedContext.valid) {
-          (_a = this.logger) === null || _a === void 0 ? void 0 : _a.warn(ClientMessages.missingContextKeyNoEvent);
+          (_a = this._logger) === null || _a === void 0 ? void 0 : _a.warn(ClientMessages.MissingContextKeyNoEvent);
           return;
         }
-        this.eventProcessor.sendEvent(this.eventFactoryDefault.customEvent(key, checkedContext, data, metricValue));
+        if (metricValue !== void 0 && !js_sdk_common_1.TypeValidators.Number.is(metricValue)) {
+          (_b = this._logger) === null || _b === void 0 ? void 0 : _b.warn(ClientMessages.invalidMetricValue(typeof metricValue));
+        }
+        this._eventProcessor.sendEvent(this._eventFactoryDefault.customEvent(key, checkedContext, data, metricValue));
       }
       trackMigration(event) {
         const converted = (0, MigrationOpEventConversion_1.default)(event);
         if (!converted) {
           return;
         }
-        this.eventProcessor.sendEvent(converted);
+        this._eventProcessor.sendEvent(converted);
       }
       identify(context) {
         var _a;
         const checkedContext = js_sdk_common_1.Context.fromLDContext(context);
         if (!checkedContext.valid) {
-          (_a = this.logger) === null || _a === void 0 ? void 0 : _a.warn(ClientMessages.missingContextKeyNoEvent);
+          (_a = this._logger) === null || _a === void 0 ? void 0 : _a.warn(ClientMessages.MissingContextKeyNoEvent);
           return;
         }
-        this.eventProcessor.sendEvent(this.eventFactoryDefault.identifyEvent(checkedContext));
+        this._eventProcessor.sendEvent(this._eventFactoryDefault.identifyEvent(checkedContext));
       }
       async flush(callback) {
         try {
-          await this.eventProcessor.flush();
+          await this._eventProcessor.flush();
         } catch (err) {
-          callback === null || callback === void 0 ? void 0 : callback(err, false);
+          return callback === null || callback === void 0 ? void 0 : callback(err, false);
         }
-        callback === null || callback === void 0 ? void 0 : callback(null, true);
+        return callback === null || callback === void 0 ? void 0 : callback(null, true);
       }
-      variationInternal(flagKey, context, defaultValue, eventFactory, cb, typeChecker) {
+      addHook(hook) {
+        this._hookRunner.addHook(hook);
+      }
+      _variationInternal(flagKey, context, defaultValue, eventFactory, cb, typeChecker) {
         var _a, _b;
-        if (this.config.offline) {
-          (_a = this.logger) === null || _a === void 0 ? void 0 : _a.info("Variation called in offline mode. Returning default value.");
+        if (this._config.offline) {
+          (_a = this._logger) === null || _a === void 0 ? void 0 : _a.info("Variation called in offline mode. Returning default value.");
           cb(EvalResult_1.default.forError(ErrorKinds.ClientNotReady, void 0, defaultValue));
           return;
         }
         const evalContext = js_sdk_common_1.Context.fromLDContext(context);
         if (!evalContext.valid) {
-          this.onError(new js_sdk_common_1.LDClientError(`${(_b = evalContext.message) !== null && _b !== void 0 ? _b : "Context not valid;"} returning default value.`));
+          this._onError(new js_sdk_common_1.LDClientError(`${(_b = evalContext.message) !== null && _b !== void 0 ? _b : "Context not valid;"} returning default value.`));
           cb(EvalResult_1.default.forError(ErrorKinds.UserNotSpecified, void 0, defaultValue));
           return;
         }
-        this.featureStore.get(VersionedDataKinds_1.default.Features, flagKey, (item) => {
+        this._featureStore.get(VersionedDataKinds_1.default.Features, flagKey, (item) => {
           const flag = item;
           if (!flag) {
             const error2 = new js_sdk_common_1.LDClientError(`Unknown feature flag "${flagKey}"; returning default value`);
-            this.onError(error2);
+            this._onError(error2);
             const result = EvalResult_1.default.forError(ErrorKinds.FlagNotFound, void 0, defaultValue);
-            this.eventProcessor.sendEvent(this.eventFactoryDefault.unknownFlagEvent(flagKey, defaultValue, evalContext));
+            this._eventProcessor.sendEvent(this._eventFactoryDefault.unknownFlagEvent(flagKey, defaultValue, evalContext));
             cb(result);
             return;
           }
-          this.evaluator.evaluateCb(flag, evalContext, (evalRes) => {
+          this._evaluator.evaluateCb(flag, evalContext, (evalRes) => {
             var _a2;
             if (evalRes.detail.variationIndex === void 0 || evalRes.detail.variationIndex === null) {
-              (_a2 = this.logger) === null || _a2 === void 0 ? void 0 : _a2.debug("Result value is null in variation");
+              (_a2 = this._logger) === null || _a2 === void 0 ? void 0 : _a2.debug("Result value is null in variation");
               evalRes.setDefault(defaultValue);
             }
             if (typeChecker) {
               const [matched, type] = typeChecker(evalRes.detail.value);
               if (!matched) {
                 const errorRes = EvalResult_1.default.forError(ErrorKinds.WrongType, `Did not receive expected type (${type}) evaluating feature flag "${flagKey}"`, defaultValue);
-                this.sendEvalEvent(errorRes, eventFactory, flag, evalContext, defaultValue);
+                this._sendEvalEvent(errorRes, eventFactory, flag, evalContext, defaultValue);
                 cb(errorRes, flag);
                 return;
               }
             }
-            this.sendEvalEvent(evalRes, eventFactory, flag, evalContext, defaultValue);
+            this._sendEvalEvent(evalRes, eventFactory, flag, evalContext, defaultValue);
             cb(evalRes, flag);
           }, eventFactory);
         });
       }
-      sendEvalEvent(evalRes, eventFactory, flag, evalContext, defaultValue) {
+      _sendEvalEvent(evalRes, eventFactory, flag, evalContext, defaultValue) {
         var _a;
         (_a = evalRes.events) === null || _a === void 0 ? void 0 : _a.forEach((event) => {
-          this.eventProcessor.sendEvent(Object.assign({}, event));
+          this._eventProcessor.sendEvent(Object.assign({}, event));
         });
-        this.eventProcessor.sendEvent(eventFactory.evalEventServer(flag, evalContext, evalRes.detail, defaultValue, void 0));
+        this._eventProcessor.sendEvent(eventFactory.evalEventServer(flag, evalContext, evalRes.detail, defaultValue, void 0));
       }
-      evaluateIfPossible(flagKey, context, defaultValue, eventFactory, cb, typeChecker) {
+      _evaluateIfPossible(flagKey, context, defaultValue, eventFactory, cb, typeChecker) {
         if (!this.initialized()) {
-          this.featureStore.initialized((storeInitialized) => {
+          this._featureStore.initialized((storeInitialized) => {
             var _a, _b;
             if (storeInitialized) {
-              (_a = this.logger) === null || _a === void 0 ? void 0 : _a.warn("Variation called before LaunchDarkly client initialization completed (did you wait for the 'ready' event?) - using last known values from feature store");
-              this.variationInternal(flagKey, context, defaultValue, eventFactory, cb, typeChecker);
+              (_a = this._logger) === null || _a === void 0 ? void 0 : _a.warn("Variation called before LaunchDarkly client initialization completed (did you wait for the 'ready' event?) - using last known values from feature store");
+              this._variationInternal(flagKey, context, defaultValue, eventFactory, cb, typeChecker);
               return;
             }
-            (_b = this.logger) === null || _b === void 0 ? void 0 : _b.warn("Variation called before LaunchDarkly client initialization completed (did you wait for the'ready' event?) - using default value");
+            (_b = this._logger) === null || _b === void 0 ? void 0 : _b.warn("Variation called before LaunchDarkly client initialization completed (did you wait for the'ready' event?) - using default value");
             cb(EvalResult_1.default.forError(ErrorKinds.ClientNotReady, void 0, defaultValue));
           });
           return;
         }
-        this.variationInternal(flagKey, context, defaultValue, eventFactory, cb, typeChecker);
+        this._variationInternal(flagKey, context, defaultValue, eventFactory, cb, typeChecker);
       }
-      dataSourceErrorHandler(e) {
+      _dataSourceErrorHandler(e) {
         var _a;
         const error2 = e.code === 401 ? new Error("Authentication failed. Double check your SDK key.") : e;
-        this.onError(error2);
-        this.onFailed(error2);
+        this._onError(error2);
+        this._onFailed(error2);
         if (!this.initialized()) {
-          this.initState = InitState.Failed;
-          (_a = this.initReject) === null || _a === void 0 ? void 0 : _a.call(this, error2);
+          this._initState = InitState.Failed;
+          this._rejectionReason = error2;
+          (_a = this._initReject) === null || _a === void 0 ? void 0 : _a.call(this, error2);
         }
       }
-      initSuccess() {
+      _initSuccess() {
         var _a;
         if (!this.initialized()) {
-          this.initState = InitState.Initialized;
-          (_a = this.initResolve) === null || _a === void 0 ? void 0 : _a.call(this, this);
-          this.onReady();
+          this._initState = InitState.Initialized;
+          (_a = this._initResolve) === null || _a === void 0 ? void 0 : _a.call(this, this);
+          this._onReady();
         }
+      }
+      /**
+       * Apply a timeout promise to a base promise. This is for use with waitForInitialization.
+       * Currently it returns a LDClient. In the future it should return a status.
+       *
+       * The client isn't always the expected type of the consumer. It returns an LDClient interface
+       * which is less capable than, for example, the node client interface.
+       *
+       * @param basePromise The promise to race against a timeout.
+       * @param timeout The timeout in seconds.
+       * @param logger A logger to log when the timeout expires.
+       * @returns
+       */
+      _clientWithTimeout(basePromise, timeout, logger) {
+        if (timeout) {
+          const cancelableTimeout = (0, js_sdk_common_1.cancelableTimedPromise)(timeout, "waitForInitialization");
+          return Promise.race([
+            basePromise.then(() => this),
+            cancelableTimeout.promise.then(() => this)
+          ]).catch((reason) => {
+            if (reason instanceof js_sdk_common_1.LDTimeoutError) {
+              logger === null || logger === void 0 ? void 0 : logger.error(reason.message);
+            }
+            throw reason;
+          }).finally(() => cancelableTimeout.cancel());
+        }
+        return basePromise;
       }
     };
     exports.default = LDClientImpl;
@@ -27492,7 +29559,7 @@ var require_Migration = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.createMigration = exports.LDMigrationError = exports.LDMigrationSuccess = void 0;
-    var api_1 = require_api3();
+    var api_1 = require_api2();
     var LDMigrationOptions_1 = require_LDMigrationOptions();
     async function safeCall(method) {
       try {
@@ -27520,177 +29587,177 @@ var require_Migration = __commonJS({
     }
     exports.LDMigrationError = LDMigrationError;
     var Migration = class {
-      constructor(client, config) {
+      constructor(_client, _config) {
         var _a, _b;
-        this.client = client;
-        this.config = config;
-        this.readTable = {
-          [api_1.LDMigrationStage.Off]: async (context) => this.doSingleOp(context, "old", this.config.readOld.bind(this.config)),
-          [api_1.LDMigrationStage.DualWrite]: async (context) => this.doSingleOp(context, "old", this.config.readOld.bind(this.config)),
+        this._client = _client;
+        this._config = _config;
+        this._readTable = {
+          [api_1.LDMigrationStage.Off]: async (context) => this._doSingleOp(context, "old", this._config.readOld.bind(this._config)),
+          [api_1.LDMigrationStage.DualWrite]: async (context) => this._doSingleOp(context, "old", this._config.readOld.bind(this._config)),
           [api_1.LDMigrationStage.Shadow]: async (context) => {
-            const { fromOld, fromNew } = await this.doRead(context);
-            this.trackConsistency(context, fromOld, fromNew);
+            const { fromOld, fromNew } = await this._doRead(context);
+            this._trackConsistency(context, fromOld, fromNew);
             return fromOld;
           },
           [api_1.LDMigrationStage.Live]: async (context) => {
-            const { fromNew, fromOld } = await this.doRead(context);
-            this.trackConsistency(context, fromOld, fromNew);
+            const { fromNew, fromOld } = await this._doRead(context);
+            this._trackConsistency(context, fromOld, fromNew);
             return fromNew;
           },
-          [api_1.LDMigrationStage.RampDown]: async (context) => this.doSingleOp(context, "new", this.config.readNew.bind(this.config)),
-          [api_1.LDMigrationStage.Complete]: async (context) => this.doSingleOp(context, "new", this.config.readNew.bind(this.config))
+          [api_1.LDMigrationStage.RampDown]: async (context) => this._doSingleOp(context, "new", this._config.readNew.bind(this._config)),
+          [api_1.LDMigrationStage.Complete]: async (context) => this._doSingleOp(context, "new", this._config.readNew.bind(this._config))
         };
-        this.writeTable = {
+        this._writeTable = {
           [api_1.LDMigrationStage.Off]: async (context) => ({
-            authoritative: await this.doSingleOp(context, "old", this.config.writeOld.bind(this.config))
+            authoritative: await this._doSingleOp(context, "old", this._config.writeOld.bind(this._config))
           }),
           [api_1.LDMigrationStage.DualWrite]: async (context) => {
-            const fromOld = await this.doSingleOp(context, "old", this.config.writeOld.bind(this.config));
+            const fromOld = await this._doSingleOp(context, "old", this._config.writeOld.bind(this._config));
             if (!fromOld.success) {
               return {
                 authoritative: fromOld
               };
             }
-            const fromNew = await this.doSingleOp(context, "new", this.config.writeNew.bind(this.config));
+            const fromNew = await this._doSingleOp(context, "new", this._config.writeNew.bind(this._config));
             return {
               authoritative: fromOld,
               nonAuthoritative: fromNew
             };
           },
           [api_1.LDMigrationStage.Shadow]: async (context) => {
-            const fromOld = await this.doSingleOp(context, "old", this.config.writeOld.bind(this.config));
+            const fromOld = await this._doSingleOp(context, "old", this._config.writeOld.bind(this._config));
             if (!fromOld.success) {
               return {
                 authoritative: fromOld
               };
             }
-            const fromNew = await this.doSingleOp(context, "new", this.config.writeNew.bind(this.config));
+            const fromNew = await this._doSingleOp(context, "new", this._config.writeNew.bind(this._config));
             return {
               authoritative: fromOld,
               nonAuthoritative: fromNew
             };
           },
           [api_1.LDMigrationStage.Live]: async (context) => {
-            const fromNew = await this.doSingleOp(context, "new", this.config.writeNew.bind(this.config));
+            const fromNew = await this._doSingleOp(context, "new", this._config.writeNew.bind(this._config));
             if (!fromNew.success) {
               return {
                 authoritative: fromNew
               };
             }
-            const fromOld = await this.doSingleOp(context, "old", this.config.writeOld.bind(this.config));
+            const fromOld = await this._doSingleOp(context, "old", this._config.writeOld.bind(this._config));
             return {
               authoritative: fromNew,
               nonAuthoritative: fromOld
             };
           },
           [api_1.LDMigrationStage.RampDown]: async (context) => {
-            const fromNew = await this.doSingleOp(context, "new", this.config.writeNew.bind(this.config));
+            const fromNew = await this._doSingleOp(context, "new", this._config.writeNew.bind(this._config));
             if (!fromNew.success) {
               return {
                 authoritative: fromNew
               };
             }
-            const fromOld = await this.doSingleOp(context, "old", this.config.writeOld.bind(this.config));
+            const fromOld = await this._doSingleOp(context, "old", this._config.writeOld.bind(this._config));
             return {
               authoritative: fromNew,
               nonAuthoritative: fromOld
             };
           },
           [api_1.LDMigrationStage.Complete]: async (context) => ({
-            authoritative: await this.doSingleOp(context, "new", this.config.writeNew.bind(this.config))
+            authoritative: await this._doSingleOp(context, "new", this._config.writeNew.bind(this._config))
           })
         };
-        if (this.config.execution) {
-          this.execution = this.config.execution;
+        if (this._config.execution) {
+          this._execution = this._config.execution;
         } else {
-          this.execution = new LDMigrationOptions_1.LDConcurrentExecution();
+          this._execution = new LDMigrationOptions_1.LDConcurrentExecution();
         }
-        this.latencyTracking = (_a = this.config.latencyTracking) !== null && _a !== void 0 ? _a : true;
-        this.errorTracking = (_b = this.config.errorTracking) !== null && _b !== void 0 ? _b : true;
+        this._latencyTracking = (_a = this._config.latencyTracking) !== null && _a !== void 0 ? _a : true;
+        this._errorTracking = (_b = this._config.errorTracking) !== null && _b !== void 0 ? _b : true;
       }
       async read(key, context, defaultStage, payload) {
-        const stage = await this.client.migrationVariation(key, context, defaultStage);
-        const res = await this.readTable[stage.value]({
+        const stage = await this._client.migrationVariation(key, context, defaultStage);
+        const res = await this._readTable[stage.value]({
           payload,
           tracker: stage.tracker
         });
         stage.tracker.op("read");
-        this.sendEvent(stage.tracker);
+        this._sendEvent(stage.tracker);
         return res;
       }
       async write(key, context, defaultStage, payload) {
-        const stage = await this.client.migrationVariation(key, context, defaultStage);
-        const res = await this.writeTable[stage.value]({
+        const stage = await this._client.migrationVariation(key, context, defaultStage);
+        const res = await this._writeTable[stage.value]({
           payload,
           tracker: stage.tracker
         });
         stage.tracker.op("write");
-        this.sendEvent(stage.tracker);
+        this._sendEvent(stage.tracker);
         return res;
       }
-      sendEvent(tracker) {
+      _sendEvent(tracker) {
         const event = tracker.createEvent();
         if (event) {
-          this.client.trackMigration(event);
+          this._client.trackMigration(event);
         }
       }
-      trackConsistency(context, oldValue, newValue) {
-        if (!this.config.check) {
+      _trackConsistency(context, oldValue, newValue) {
+        if (!this._config.check) {
           return;
         }
         if (oldValue.success && newValue.success) {
-          context.tracker.consistency(() => this.config.check(oldValue.result, newValue.result));
+          context.tracker.consistency(() => this._config.check(oldValue.result, newValue.result));
         }
       }
-      async readSequentialFixed(context) {
-        const fromOld = await this.doSingleOp(context, "old", this.config.readOld.bind(this.config));
-        const fromNew = await this.doSingleOp(context, "new", this.config.readNew.bind(this.config));
+      async _readSequentialFixed(context) {
+        const fromOld = await this._doSingleOp(context, "old", this._config.readOld.bind(this._config));
+        const fromNew = await this._doSingleOp(context, "new", this._config.readNew.bind(this._config));
         return { fromOld, fromNew };
       }
-      async readConcurrent(context) {
-        const fromOldPromise = this.doSingleOp(context, "old", this.config.readOld.bind(this.config));
-        const fromNewPromise = this.doSingleOp(context, "new", this.config.readNew.bind(this.config));
+      async _readConcurrent(context) {
+        const fromOldPromise = this._doSingleOp(context, "old", this._config.readOld.bind(this._config));
+        const fromNewPromise = this._doSingleOp(context, "new", this._config.readNew.bind(this._config));
         const [fromOld, fromNew] = await Promise.all([fromOldPromise, fromNewPromise]);
         return { fromOld, fromNew };
       }
-      async readSequentialRandom(context) {
+      async _readSequentialRandom(context) {
         const randomIndex = Math.floor(Math.random() * 2);
         if (randomIndex === 0) {
-          const fromOld2 = await this.doSingleOp(context, "old", this.config.readOld.bind(this.config));
-          const fromNew2 = await this.doSingleOp(context, "new", this.config.readNew.bind(this.config));
+          const fromOld2 = await this._doSingleOp(context, "old", this._config.readOld.bind(this._config));
+          const fromNew2 = await this._doSingleOp(context, "new", this._config.readNew.bind(this._config));
           return { fromOld: fromOld2, fromNew: fromNew2 };
         }
-        const fromNew = await this.doSingleOp(context, "new", this.config.readNew.bind(this.config));
-        const fromOld = await this.doSingleOp(context, "old", this.config.readOld.bind(this.config));
+        const fromNew = await this._doSingleOp(context, "new", this._config.readNew.bind(this._config));
+        const fromOld = await this._doSingleOp(context, "old", this._config.readOld.bind(this._config));
         return { fromOld, fromNew };
       }
-      async doRead(context) {
+      async _doRead(context) {
         var _a;
-        if (((_a = this.execution) === null || _a === void 0 ? void 0 : _a.type) === LDMigrationOptions_1.LDExecution.Serial) {
-          const serial = this.execution;
+        if (((_a = this._execution) === null || _a === void 0 ? void 0 : _a.type) === LDMigrationOptions_1.LDExecution.Serial) {
+          const serial = this._execution;
           if (serial.ordering === LDMigrationOptions_1.LDExecutionOrdering.Fixed) {
-            return this.readSequentialFixed(context);
+            return this._readSequentialFixed(context);
           }
-          return this.readSequentialRandom(context);
+          return this._readSequentialRandom(context);
         }
-        return this.readConcurrent(context);
+        return this._readConcurrent(context);
       }
-      async doSingleOp(context, origin, method) {
+      async _doSingleOp(context, origin, method) {
         context.tracker.invoked(origin);
-        const res = await this.trackLatency(context.tracker, origin, () => safeCall(() => method(context.payload)));
-        if (!res.success && this.errorTracking) {
+        const res = await this._trackLatency(context.tracker, origin, () => safeCall(() => method(context.payload)));
+        if (!res.success && this._errorTracking) {
           context.tracker.error(origin);
         }
         return Object.assign({ origin }, res);
       }
-      async trackLatency(tracker, origin, method) {
-        if (!this.latencyTracking) {
+      async _trackLatency(tracker, origin, method) {
+        if (!this._latencyTracking) {
           return method();
         }
         let start;
         let end;
         let result;
-        if (typeof performance !== void 0) {
+        if (typeof performance !== "undefined") {
           start = performance.now();
           result = await method();
           end = performance.now();
@@ -27711,71 +29778,6 @@ var require_Migration = __commonJS({
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/FileLoader.js
-var require_FileLoader = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/FileLoader.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var FileLoader = class {
-      constructor(filesystem, paths, watch, callback) {
-        this.filesystem = filesystem;
-        this.paths = paths;
-        this.watch = watch;
-        this.callback = callback;
-        this.watchers = [];
-        this.fileData = {};
-        this.fileTimestamps = {};
-      }
-      /**
-       * Load all the files and start watching them if watching is enabled.
-       */
-      async loadAndWatch() {
-        const promises3 = this.paths.map(async (path) => {
-          const data = await this.filesystem.readFile(path);
-          const timeStamp = await this.filesystem.getFileTimestamp(path);
-          return { data, path, timeStamp };
-        });
-        const results = await Promise.all(promises3);
-        results.forEach((res) => {
-          this.fileData[res.path] = res.data;
-          this.fileTimestamps[res.path] = res.timeStamp;
-        });
-        this.callback(results);
-        if (this.watch) {
-          this.paths.forEach((path) => {
-            const watcher = this.filesystem.watch(path, async (_, updatePath) => {
-              const timeStamp = await this.filesystem.getFileTimestamp(updatePath);
-              if (timeStamp === this.fileTimestamps[updatePath]) {
-                return;
-              }
-              this.fileTimestamps[updatePath] = timeStamp;
-              const data = await this.filesystem.readFile(updatePath);
-              this.fileData[updatePath] = data;
-              this.debounceCallback();
-            });
-            this.watchers.push(watcher);
-          });
-        }
-      }
-      close() {
-        this.watchers.forEach((watcher) => watcher.close());
-      }
-      debounceCallback() {
-        if (!this.debounceHandle) {
-          this.debounceHandle = setTimeout(() => {
-            this.debounceHandle = void 0;
-            this.callback(Object.entries(this.fileData).reduce((acc, [path, data]) => {
-              acc.push({ path, data });
-              return acc;
-            }, []));
-          }, 10);
-        }
-      }
-    };
-    exports.default = FileLoader;
-  }
-});
-
 // node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/FileDataSource.js
 var require_FileDataSource = __commonJS({
   "node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/FileDataSource.js"(exports) {
@@ -27784,13 +29786,13 @@ var require_FileDataSource = __commonJS({
     var serialization_1 = require_serialization();
     var VersionedDataKinds_1 = require_VersionedDataKinds();
     var FileLoader_1 = require_FileLoader();
-    function makeFlagWithValue(key, value) {
+    function makeFlagWithValue(key, value, version) {
       return {
         key,
         on: true,
         fallthrough: { variation: 0 },
         variations: [value],
-        version: 1
+        version
       };
     }
     var FileDataSource = class {
@@ -27799,85 +29801,92 @@ var require_FileDataSource = __commonJS({
        * factory.
        * @internal
        */
-      constructor(options, filesystem, featureStore, initSuccessHandler = () => {
-      }, errorHandler) {
+      constructor(options, filesystem, _featureStore, _initSuccessHandler = () => {
+      }, _errorHandler) {
         var _a;
-        this.featureStore = featureStore;
-        this.initSuccessHandler = initSuccessHandler;
-        this.errorHandler = errorHandler;
-        this.allData = {};
-        this.fileLoader = new FileLoader_1.default(filesystem, options.paths, (_a = options.autoUpdate) !== null && _a !== void 0 ? _a : false, (results) => {
+        this._featureStore = _featureStore;
+        this._initSuccessHandler = _initSuccessHandler;
+        this._errorHandler = _errorHandler;
+        this._allData = {};
+        this._fileLoader = new FileLoader_1.default(filesystem, options.paths, (_a = options.autoUpdate) !== null && _a !== void 0 ? _a : false, (results) => {
           var _a2, _b;
           try {
-            this.processFileData(results);
+            this._processFileData(results);
           } catch (err) {
-            (_a2 = this.errorHandler) === null || _a2 === void 0 ? void 0 : _a2.call(this, err);
-            (_b = this.logger) === null || _b === void 0 ? void 0 : _b.error(`Error processing files: ${err}`);
+            (_a2 = this._errorHandler) === null || _a2 === void 0 ? void 0 : _a2.call(this, err);
+            (_b = this._logger) === null || _b === void 0 ? void 0 : _b.error(`Error processing files: ${err}`);
           }
         });
-        this.logger = options.logger;
-        this.yamlParser = options.yamlParser;
+        this._logger = options.logger;
+        this._yamlParser = options.yamlParser;
       }
       start() {
         (async () => {
           var _a;
           try {
-            await this.fileLoader.loadAndWatch();
+            await this._fileLoader.loadAndWatch();
           } catch (err) {
-            (_a = this.errorHandler) === null || _a === void 0 ? void 0 : _a.call(this, err);
+            (_a = this._errorHandler) === null || _a === void 0 ? void 0 : _a.call(this, err);
           }
         })();
       }
       stop() {
-        this.fileLoader.close();
+        this._fileLoader.close();
       }
       close() {
         this.stop();
       }
-      addItem(kind, item) {
-        if (!this.allData[kind.namespace]) {
-          this.allData[kind.namespace] = {};
+      _addItem(kind, item) {
+        if (!this._allData[kind.namespace]) {
+          this._allData[kind.namespace] = {};
         }
-        if (this.allData[kind.namespace][item.key]) {
+        if (this._allData[kind.namespace][item.key]) {
           throw new Error(`found duplicate key: "${item.key}"`);
         } else {
-          this.allData[kind.namespace][item.key] = item;
+          this._allData[kind.namespace][item.key] = item;
         }
       }
-      processFileData(fileData) {
-        this.allData = {};
+      _processFileData(fileData) {
+        const oldData = this._allData;
+        this._allData = {};
         fileData.forEach((fd) => {
           let parsed;
           if (fd.path.endsWith(".yml") || fd.path.endsWith(".yaml")) {
-            if (this.yamlParser) {
-              parsed = this.yamlParser(fd.data);
+            if (this._yamlParser) {
+              parsed = this._yamlParser(fd.data);
             } else {
               throw new Error(`Attempted to parse yaml file (${fd.path}) without parser.`);
             }
           } else {
             parsed = JSON.parse(fd.data);
           }
-          this.processParsedData(parsed);
+          this._processParsedData(parsed, oldData);
         });
-        this.featureStore.init(this.allData, () => {
-          this.initSuccessHandler();
-          this.initSuccessHandler = () => {
+        this._featureStore.init(this._allData, () => {
+          this._initSuccessHandler();
+          this._initSuccessHandler = () => {
           };
         });
       }
-      processParsedData(parsed) {
+      _processParsedData(parsed, oldData) {
         Object.keys(parsed.flags || {}).forEach((key) => {
           (0, serialization_1.processFlag)(parsed.flags[key]);
-          this.addItem(VersionedDataKinds_1.default.Features, parsed.flags[key]);
+          this._addItem(VersionedDataKinds_1.default.Features, parsed.flags[key]);
         });
         Object.keys(parsed.flagValues || {}).forEach((key) => {
-          const flag = makeFlagWithValue(key, parsed.flagValues[key]);
+          var _a, _b;
+          const previousInstance = (_a = oldData[VersionedDataKinds_1.default.Features.namespace]) === null || _a === void 0 ? void 0 : _a[key];
+          let { version } = previousInstance !== null && previousInstance !== void 0 ? previousInstance : { version: 1 };
+          if (previousInstance && JSON.stringify(parsed.flagValues[key]) !== JSON.stringify((_b = previousInstance === null || previousInstance === void 0 ? void 0 : previousInstance.variations) === null || _b === void 0 ? void 0 : _b[0])) {
+            version += 1;
+          }
+          const flag = makeFlagWithValue(key, parsed.flagValues[key], version);
           (0, serialization_1.processFlag)(flag);
-          this.addItem(VersionedDataKinds_1.default.Features, flag);
+          this._addItem(VersionedDataKinds_1.default.Features, flag);
         });
         Object.keys(parsed.segments || {}).forEach((key) => {
           (0, serialization_1.processSegment)(parsed.segments[key]);
-          this.addItem(VersionedDataKinds_1.default.Segments, parsed.segments[key]);
+          this._addItem(VersionedDataKinds_1.default.Segments, parsed.segments[key]);
         });
       }
     };
@@ -27892,8 +29901,8 @@ var require_FileDataSourceFactory = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     var FileDataSource_1 = require_FileDataSource();
     var FileDataSourceFactory = class {
-      constructor(options) {
-        this.options = options;
+      constructor(_options) {
+        this._options = _options;
       }
       /**
        * Method for creating instances of the file data source. This method is intended to be used
@@ -27907,10 +29916,10 @@ var require_FileDataSourceFactory = __commonJS({
        */
       create(ldClientContext, featureStore, initSuccessHandler, errorHandler) {
         const updatedOptions = {
-          paths: this.options.paths,
-          autoUpdate: this.options.autoUpdate,
-          logger: this.options.logger || ldClientContext.basicConfiguration.logger,
-          yamlParser: this.options.yamlParser
+          paths: this._options.paths,
+          autoUpdate: this._options.autoUpdate,
+          logger: this._options.logger || ldClientContext.basicConfiguration.logger,
+          yamlParser: this._options.yamlParser
         };
         return new FileDataSource_1.default(updatedOptions, ldClientContext.platform.fileSystem, featureStore, initSuccessHandler, errorHandler);
       }
@@ -27942,20 +29951,20 @@ var require_TestDataRuleBuilder = __commonJS({
   "node_modules/@launchdarkly/js-server-sdk-common/dist/integrations/test_data/TestDataRuleBuilder.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    var js_sdk_common_1 = require_dist();
+    var js_sdk_common_1 = require_cjs();
     var booleanVariation_1 = require_booleanVariation();
     var TestDataRuleBuilder = class _TestDataRuleBuilder {
       /**
        * @internal
        */
-      constructor(flagBuilder, clauses, variation) {
-        this.flagBuilder = flagBuilder;
-        this.clauses = [];
+      constructor(_flagBuilder, clauses, variation) {
+        this._flagBuilder = _flagBuilder;
+        this._clauses = [];
         if (clauses) {
-          this.clauses = [...clauses];
+          this._clauses = [...clauses];
         }
         if (variation !== void 0) {
-          this.variation = variation;
+          this._variation = variation;
         }
       }
       /**
@@ -27975,7 +29984,7 @@ var require_TestDataRuleBuilder = __commonJS({
        * @return the flag rule builder
        */
       andMatch(contextKind, attribute, ...values) {
-        this.clauses.push({
+        this._clauses.push({
           contextKind,
           attribute,
           attributeReference: new js_sdk_common_1.AttributeReference(attribute),
@@ -28002,7 +30011,7 @@ var require_TestDataRuleBuilder = __commonJS({
        * @return the flag rule builder
        */
       andNotMatch(contextKind, attribute, ...values) {
-        this.clauses.push({
+        this._clauses.push({
           contextKind,
           attribute,
           attributeReference: new js_sdk_common_1.AttributeReference(attribute),
@@ -28028,12 +30037,12 @@ var require_TestDataRuleBuilder = __commonJS({
        */
       thenReturn(variation) {
         if (js_sdk_common_1.TypeValidators.Boolean.is(variation)) {
-          this.flagBuilder.booleanFlag();
+          this._flagBuilder.booleanFlag();
           return this.thenReturn((0, booleanVariation_1.variationForBoolean)(variation));
         }
-        this.variation = variation;
-        this.flagBuilder.addRule(this);
-        return this.flagBuilder;
+        this._variation = variation;
+        this._flagBuilder.addRule(this);
+        return this._flagBuilder;
       }
       /**
        * @internal
@@ -28041,15 +30050,15 @@ var require_TestDataRuleBuilder = __commonJS({
       build(id) {
         return {
           id: `rule${id}`,
-          variation: this.variation,
-          clauses: this.clauses
+          variation: this._variation,
+          clauses: this._clauses
         };
       }
       /**
        * @internal
        */
       clone() {
-        return new _TestDataRuleBuilder(this.flagBuilder, this.clauses, this.variation);
+        return new _TestDataRuleBuilder(this._flagBuilder, this._clauses, this._variation);
       }
     };
     exports.default = TestDataRuleBuilder;
@@ -28061,44 +30070,44 @@ var require_TestDataFlagBuilder = __commonJS({
   "node_modules/@launchdarkly/js-server-sdk-common/dist/integrations/test_data/TestDataFlagBuilder.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    var js_sdk_common_1 = require_dist();
+    var js_sdk_common_1 = require_cjs();
     var booleanVariation_1 = require_booleanVariation();
     var TestDataRuleBuilder_1 = require_TestDataRuleBuilder();
     var TestDataFlagBuilder = class _TestDataFlagBuilder {
       /**
        * @internal
        */
-      constructor(key, data) {
-        this.key = key;
-        this.data = {
+      constructor(_key, data) {
+        this._key = _key;
+        this._data = {
           on: true,
           variations: []
         };
         if (data) {
-          this.data = {
+          this._data = {
             on: data.on,
             variations: [...data.variations]
           };
           if (data.offVariation !== void 0) {
-            this.data.offVariation = data.offVariation;
+            this._data.offVariation = data.offVariation;
           }
           if (data.fallthroughVariation !== void 0) {
-            this.data.fallthroughVariation = data.fallthroughVariation;
+            this._data.fallthroughVariation = data.fallthroughVariation;
           }
           if (data.targetsByVariation) {
-            this.data.targetsByVariation = JSON.parse(JSON.stringify(data.targetsByVariation));
+            this._data.targetsByVariation = JSON.parse(JSON.stringify(data.targetsByVariation));
           }
           if (data.rules) {
-            this.data.rules = [];
+            this._data.rules = [];
             data.rules.forEach((rule) => {
               var _a;
-              (_a = this.data.rules) === null || _a === void 0 ? void 0 : _a.push(rule.clone());
+              (_a = this._data.rules) === null || _a === void 0 ? void 0 : _a.push(rule.clone());
             });
           }
         }
       }
-      get isBooleanFlag() {
-        return this.data.variations.length === 2 && this.data.variations[booleanVariation_1.TRUE_VARIATION_INDEX] === true && this.data.variations[booleanVariation_1.FALSE_VARIATION_INDEX] === false;
+      get _isBooleanFlag() {
+        return this._data.variations.length === 2 && this._data.variations[booleanVariation_1.TRUE_VARIATION_INDEX] === true && this._data.variations[booleanVariation_1.FALSE_VARIATION_INDEX] === false;
       }
       /**
        * A shortcut for setting the flag to use the standard boolean configuration.
@@ -28111,7 +30120,7 @@ var require_TestDataFlagBuilder = __commonJS({
        * @return the flag builder
        */
       booleanFlag() {
-        if (this.isBooleanFlag) {
+        if (this._isBooleanFlag) {
           return this;
         }
         return this.variations(true, false).fallthroughVariation(booleanVariation_1.TRUE_VARIATION_INDEX).offVariation(booleanVariation_1.FALSE_VARIATION_INDEX);
@@ -28127,7 +30136,7 @@ var require_TestDataFlagBuilder = __commonJS({
        * @return the flag builder
        */
       variations(...values) {
-        this.data.variations = [...values];
+        this._data.variations = [...values];
         return this;
       }
       /**
@@ -28143,7 +30152,7 @@ var require_TestDataFlagBuilder = __commonJS({
        * @return the flag builder
        */
       on(targetingOn) {
-        this.data.on = targetingOn;
+        this._data.on = targetingOn;
         return this;
       }
       /**
@@ -28163,7 +30172,7 @@ var require_TestDataFlagBuilder = __commonJS({
         if (js_sdk_common_1.TypeValidators.Boolean.is(variation)) {
           return this.booleanFlag().fallthroughVariation((0, booleanVariation_1.variationForBoolean)(variation));
         }
-        this.data.fallthroughVariation = variation;
+        this._data.fallthroughVariation = variation;
         return this;
       }
       /**
@@ -28182,7 +30191,7 @@ var require_TestDataFlagBuilder = __commonJS({
         if (js_sdk_common_1.TypeValidators.Boolean.is(variation)) {
           return this.booleanFlag().offVariation((0, booleanVariation_1.variationForBoolean)(variation));
         }
-        this.data.offVariation = variation;
+        this._data.offVariation = variation;
         return this;
       }
       /**
@@ -28262,12 +30271,12 @@ var require_TestDataFlagBuilder = __commonJS({
         if (js_sdk_common_1.TypeValidators.Boolean.is(variation)) {
           return this.booleanFlag().variationForContext(contextKind, contextKey, (0, booleanVariation_1.variationForBoolean)(variation));
         }
-        if (!this.data.targetsByVariation) {
-          this.data.targetsByVariation = {};
+        if (!this._data.targetsByVariation) {
+          this._data.targetsByVariation = {};
         }
-        this.data.variations.forEach((_, i) => {
+        this._data.variations.forEach((_, i) => {
           if (i === variation) {
-            const targetsForVariation = this.data.targetsByVariation[i] || {};
+            const targetsForVariation = this._data.targetsByVariation[i] || {};
             if (!(contextKind in targetsForVariation)) {
               targetsForVariation[contextKind] = [];
             }
@@ -28275,9 +30284,9 @@ var require_TestDataFlagBuilder = __commonJS({
             if (!exists2) {
               targetsForVariation[contextKind].push(contextKey);
             }
-            this.data.targetsByVariation[i] = targetsForVariation;
+            this._data.targetsByVariation[i] = targetsForVariation;
           } else {
-            const targetsForVariation = this.data.targetsByVariation[i];
+            const targetsForVariation = this._data.targetsByVariation[i];
             if (targetsForVariation) {
               const targetsForContextKind = targetsForVariation[contextKind];
               if (targetsForContextKind) {
@@ -28290,7 +30299,7 @@ var require_TestDataFlagBuilder = __commonJS({
                 }
               }
               if (!Object.keys(targetsForVariation).length) {
-                delete this.data.targetsByVariation[i];
+                delete this._data.targetsByVariation[i];
               }
             }
           }
@@ -28304,7 +30313,7 @@ var require_TestDataFlagBuilder = __commonJS({
        * @return the same flag builder
        */
       clearRules() {
-        delete this.data.rules;
+        delete this._data.rules;
         return this;
       }
       /**
@@ -28314,7 +30323,7 @@ var require_TestDataFlagBuilder = __commonJS({
        * @return the same flag builder
        */
       clearAllTargets() {
-        delete this.data.targetsByVariation;
+        delete this._data.targetsByVariation;
         return this;
       }
       /**
@@ -28361,43 +30370,43 @@ var require_TestDataFlagBuilder = __commonJS({
       }
       checkRatio(ratio) {
         var _a;
-        this.data.migration = (_a = this.data.migration) !== null && _a !== void 0 ? _a : {};
-        this.data.migration.checkRatio = ratio;
+        this._data.migration = (_a = this._data.migration) !== null && _a !== void 0 ? _a : {};
+        this._data.migration.checkRatio = ratio;
         return this;
       }
       samplingRatio(ratio) {
-        this.data.samplingRatio = ratio;
+        this._data.samplingRatio = ratio;
         return this;
       }
       /**
        * @internal
        */
       addRule(flagRuleBuilder) {
-        if (!this.data.rules) {
-          this.data.rules = [];
+        if (!this._data.rules) {
+          this._data.rules = [];
         }
-        this.data.rules.push(flagRuleBuilder);
+        this._data.rules.push(flagRuleBuilder);
       }
       /**
        * @internal
        */
       build(version) {
         const baseFlagObject = {
-          key: this.key,
+          key: this._key,
           version,
-          on: this.data.on,
-          offVariation: this.data.offVariation,
+          on: this._data.on,
+          offVariation: this._data.offVariation,
           fallthrough: {
-            variation: this.data.fallthroughVariation
+            variation: this._data.fallthroughVariation
           },
-          variations: [...this.data.variations],
-          migration: this.data.migration,
-          samplingRatio: this.data.samplingRatio
+          variations: [...this._data.variations],
+          migration: this._data.migration,
+          samplingRatio: this._data.samplingRatio
         };
-        if (this.data.targetsByVariation) {
+        if (this._data.targetsByVariation) {
           const contextTargets = [];
           const userTargets = [];
-          Object.entries(this.data.targetsByVariation).forEach(([variation, contextTargetsForVariation]) => {
+          Object.entries(this._data.targetsByVariation).forEach(([variation, contextTargetsForVariation]) => {
             Object.entries(contextTargetsForVariation).forEach(([contextKind, values]) => {
               const numberVariation = parseInt(variation, 10);
               contextTargets.push({
@@ -28414,8 +30423,8 @@ var require_TestDataFlagBuilder = __commonJS({
           baseFlagObject.targets = userTargets;
           baseFlagObject.contextTargets = contextTargets;
         }
-        if (this.data.rules) {
-          baseFlagObject.rules = this.data.rules.map((rule, i) => rule.build(String(i)));
+        if (this._data.rules) {
+          baseFlagObject.rules = this._data.rules.map((rule, i) => rule.build(String(i)));
         }
         return baseFlagObject;
       }
@@ -28423,13 +30432,13 @@ var require_TestDataFlagBuilder = __commonJS({
        * @internal
        */
       clone() {
-        return new _TestDataFlagBuilder(this.key, this.data);
+        return new _TestDataFlagBuilder(this._key, this._data);
       }
       /**
        * @internal
        */
       getKey() {
-        return this.key;
+        return this._key;
       }
     };
     exports.default = TestDataFlagBuilder;
@@ -28442,27 +30451,27 @@ var require_TestDataSource = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var TestDataSource = class {
-      constructor(featureStore, initialFlags, initialSegments, onStop, listeners) {
-        this.featureStore = featureStore;
-        this.onStop = onStop;
-        this.listeners = listeners;
-        this.flags = Object.assign({}, initialFlags);
-        this.segments = Object.assign({}, initialSegments);
+      constructor(_featureStore, initialFlags, initialSegments, _onStop, _listeners) {
+        this._featureStore = _featureStore;
+        this._onStop = _onStop;
+        this._listeners = _listeners;
+        this._flags = Object.assign({}, initialFlags);
+        this._segments = Object.assign({}, initialSegments);
       }
       async start() {
-        this.listeners.forEach(({ processJson }) => {
-          const dataJson = { data: { flags: this.flags, segments: this.segments } };
+        this._listeners.forEach(({ processJson }) => {
+          const dataJson = { data: { flags: this._flags, segments: this._segments } };
           processJson(dataJson);
         });
       }
       stop() {
-        this.onStop(this);
+        this._onStop(this);
       }
       close() {
         this.stop();
       }
       async upsert(kind, value) {
-        return this.featureStore.upsert(kind, value);
+        return this._featureStore.upsert(kind, value);
       }
     };
     exports.default = TestDataSource;
@@ -28482,10 +30491,10 @@ var require_TestData = __commonJS({
     var TestDataSource_1 = require_TestDataSource();
     var TestData = class {
       constructor() {
-        this.currentFlags = {};
-        this.currentSegments = {};
-        this.dataSources = [];
-        this.flagBuilders = {};
+        this._currentFlags = {};
+        this._currentSegments = {};
+        this._dataSources = [];
+        this._flagBuilders = {};
       }
       /**
        * Get a factory for update processors that will be attached to this TestData instance.
@@ -28496,10 +30505,10 @@ var require_TestData = __commonJS({
           const listeners = (0, createStreamListeners_1.createStreamListeners)(featureStore, clientContext.basicConfiguration.logger, {
             put: initSuccessHandler
           });
-          const newSource = new TestDataSource_1.default(new AsyncStoreFacade_1.default(featureStore), this.currentFlags, this.currentSegments, (tds) => {
-            this.dataSources.splice(this.dataSources.indexOf(tds));
+          const newSource = new TestDataSource_1.default(new AsyncStoreFacade_1.default(featureStore), this._currentFlags, this._currentSegments, (tds) => {
+            this._dataSources.splice(this._dataSources.indexOf(tds));
           }, listeners);
-          this.dataSources.push(newSource);
+          this._dataSources.push(newSource);
           return newSource;
         };
       }
@@ -28524,8 +30533,8 @@ var require_TestData = __commonJS({
        *
        */
       flag(key) {
-        if (this.flagBuilders[key]) {
-          return this.flagBuilders[key].clone();
+        if (this._flagBuilders[key]) {
+          return this._flagBuilders[key].clone();
         }
         return new TestDataFlagBuilder_1.default(key).booleanFlag();
       }
@@ -28547,12 +30556,12 @@ var require_TestData = __commonJS({
        */
       update(flagBuilder) {
         const flagKey = flagBuilder.getKey();
-        const oldItem = this.currentFlags[flagKey];
+        const oldItem = this._currentFlags[flagKey];
         const oldVersion = oldItem ? oldItem.version : 0;
         const newFlag = flagBuilder.build(oldVersion + 1);
-        this.currentFlags[flagKey] = newFlag;
-        this.flagBuilders[flagKey] = flagBuilder.clone();
-        return Promise.all(this.dataSources.map((impl) => impl.upsert(VersionedDataKinds_1.default.Features, newFlag)));
+        this._currentFlags[flagKey] = newFlag;
+        this._flagBuilders[flagKey] = flagBuilder.clone();
+        return Promise.all(this._dataSources.map((impl) => impl.upsert(VersionedDataKinds_1.default.Features, newFlag)));
       }
       /**
        * Copies a full feature flag data model object into the test data.
@@ -28574,11 +30583,11 @@ var require_TestData = __commonJS({
        */
       usePreconfiguredFlag(inConfig) {
         const flagConfig = JSON.parse(JSON.stringify(inConfig));
-        const oldItem = this.currentFlags[flagConfig.key];
+        const oldItem = this._currentFlags[flagConfig.key];
         const newItem = Object.assign(Object.assign({}, flagConfig), { version: oldItem ? oldItem.version + 1 : flagConfig.version });
         (0, serialization_1.processFlag)(newItem);
-        this.currentFlags[flagConfig.key] = newItem;
-        return Promise.all(this.dataSources.map((impl) => impl.upsert(VersionedDataKinds_1.default.Features, newItem)));
+        this._currentFlags[flagConfig.key] = newItem;
+        return Promise.all(this._dataSources.map((impl) => impl.upsert(VersionedDataKinds_1.default.Features, newItem)));
       }
       /**
        * Copies a full segment data model object into the test data.
@@ -28598,11 +30607,11 @@ var require_TestData = __commonJS({
        */
       usePreconfiguredSegment(inConfig) {
         const segmentConfig = JSON.parse(JSON.stringify(inConfig));
-        const oldItem = this.currentSegments[segmentConfig.key];
+        const oldItem = this._currentSegments[segmentConfig.key];
         const newItem = Object.assign(Object.assign({}, segmentConfig), { version: oldItem ? oldItem.version + 1 : segmentConfig.version });
         (0, serialization_1.processSegment)(newItem);
-        this.currentSegments[segmentConfig.key] = newItem;
-        return Promise.all(this.dataSources.map((impl) => impl.upsert(VersionedDataKinds_1.default.Segments, newItem)));
+        this._currentSegments[segmentConfig.key] = newItem;
+        return Promise.all(this._dataSources.map((impl) => impl.upsert(VersionedDataKinds_1.default.Segments, newItem)));
       }
     };
     exports.default = TestData;
@@ -28649,6 +30658,7 @@ var require_integrations2 = __commonJS({
     var FileDataSourceFactory_1 = require_FileDataSourceFactory();
     exports.FileDataSourceFactory = FileDataSourceFactory_1.default;
     __exportStar(require_test_data(), exports);
+    __exportStar(require_integrations(), exports);
   }
 });
 
@@ -28682,7 +30692,7 @@ var require_NullEventSource = __commonJS({
 });
 
 // node_modules/@launchdarkly/js-server-sdk-common/dist/events/index.js
-var require_events3 = __commonJS({
+var require_events2 = __commonJS({
   "node_modules/@launchdarkly/js-server-sdk-common/dist/events/index.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -28692,8 +30702,19 @@ var require_events3 = __commonJS({
   }
 });
 
+// node_modules/@launchdarkly/js-server-sdk-common/dist/internal/index.js
+var require_internal = __commonJS({
+  "node_modules/@launchdarkly/js-server-sdk-common/dist/internal/index.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.TtlCache = void 0;
+    var TtlCache_1 = require_TtlCache();
+    exports.TtlCache = TtlCache_1.default;
+  }
+});
+
 // node_modules/@launchdarkly/js-server-sdk-common/dist/index.js
-var require_dist2 = __commonJS({
+var require_dist = __commonJS({
   "node_modules/@launchdarkly/js-server-sdk-common/dist/index.js"(exports) {
     "use strict";
     var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
@@ -28713,7 +30734,7 @@ var require_dist2 = __commonJS({
       for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports2, p)) __createBinding(exports2, m, p);
     };
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.createMigration = exports.LDMigrationSuccess = exports.LDMigrationError = exports.BigSegmentStoreStatusProviderImpl = exports.LDClientImpl = exports.platform = exports.integrations = void 0;
+    exports.createMigration = exports.LDMigrationSuccess = exports.LDMigrationError = exports.BigSegmentStoreStatusProviderImpl = exports.LDClientImpl = exports.internalServer = exports.platform = exports.integrations = void 0;
     var BigSegmentStatusProviderImpl_1 = require_BigSegmentStatusProviderImpl();
     exports.BigSegmentStoreStatusProviderImpl = BigSegmentStatusProviderImpl_1.default;
     var LDClientImpl_1 = require_LDClientImpl();
@@ -28729,11 +30750,12 @@ var require_dist2 = __commonJS({
       return Migration_1.LDMigrationSuccess;
     } });
     exports.integrations = require_integrations2();
-    exports.platform = require_dist();
-    __exportStar(require_api3(), exports);
+    exports.platform = require_cjs();
+    __exportStar(require_api2(), exports);
     __exportStar(require_store(), exports);
-    __exportStar(require_events3(), exports);
-    __exportStar(require_dist(), exports);
+    __exportStar(require_events2(), exports);
+    __exportStar(require_cjs(), exports);
+    exports.internalServer = require_internal();
   }
 });
 
@@ -28776,9 +30798,11 @@ var require_Emits = __commonJS({
         getMaxListeners() {
           return this.emitter.getMaxListeners();
         }
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
         listeners(eventName) {
           return this.emitter.listeners(eventName);
         }
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
         rawListeners(eventName) {
           return this.emitter.rawListeners(eventName);
         }
@@ -28813,18 +30837,18 @@ var require_BigSegmentsStoreStatusProviderNode = __commonJS({
     var events_1 = __require("events");
     var Emits_1 = require_Emits();
     var BigSegmentStoreStatusProviderNode = class {
-      constructor(provider) {
-        this.provider = provider;
+      constructor(_provider) {
+        this._provider = _provider;
         this.emitter = new events_1.EventEmitter();
-        this.provider.setListener((status) => {
+        this._provider.setListener((status) => {
           this.dispatch("change", status);
         });
       }
       getStatus() {
-        return this.provider.getStatus();
+        return this._provider.getStatus();
       }
       requireStatus() {
-        return this.provider.requireStatus();
+        return this._provider.requireStatus();
       }
       dispatch(eventType, status) {
         this.emitter.emit(eventType, status);
@@ -28884,90 +30908,14 @@ var require_NodeFilesystem = __commonJS({
   }
 });
 
-// node_modules/@launchdarkly/node-server-sdk/dist/package.json
-var require_package = __commonJS({
-  "node_modules/@launchdarkly/node-server-sdk/dist/package.json"(exports, module) {
-    module.exports = {
-      name: "@launchdarkly/node-server-sdk",
-      version: "9.0.1",
-      description: "LaunchDarkly Server-Side SDK for Node.js",
-      homepage: "https://github.com/launchdarkly/js-core/tree/main/packages/sdk/server-node",
-      repository: {
-        type: "git",
-        url: "https://github.com/launchdarkly/js-core.git"
-      },
-      type: "commonjs",
-      main: "./dist/src/index.js",
-      types: "./dist/src/index.d.ts",
-      exports: {
-        ".": {
-          types: "./dist/src/index.d.ts",
-          default: "./dist/src/index.js"
-        },
-        "./integrations": {
-          types: "./dist/src/integrations.d.ts",
-          default: "./dist/src/integrations.js"
-        }
-      },
-      typesVersions: {
-        "*": {
-          integrations: [
-            "./dist/src/integrations.d.ts"
-          ]
-        }
-      },
-      files: [
-        "dist"
-      ],
-      keywords: [
-        "launchdarkly",
-        "analytics",
-        "client"
-      ],
-      scripts: {
-        clean: "npx tsc --build --clean",
-        "//": "We run the tests in-band because the FS tests work best sequential.",
-        test: "npx jest --ci --runInBand",
-        build: "npx tsc",
-        lint: "npx eslint . --ext .ts",
-        "lint:fix": "yarn run lint --fix"
-      },
-      license: "Apache-2.0",
-      dependencies: {
-        "@launchdarkly/js-server-sdk-common": "2.0.1",
-        "https-proxy-agent": "^5.0.1",
-        "launchdarkly-eventsource": "2.0.1"
-      },
-      devDependencies: {
-        "@launchdarkly/private-js-mocks": "0.0.1",
-        "@trivago/prettier-plugin-sort-imports": "^4.1.1",
-        "@types/jest": "^29.4.0",
-        "@typescript-eslint/eslint-plugin": "^6.1.0",
-        "@typescript-eslint/parser": "^6.1.0",
-        eslint: "^8.45.0",
-        "eslint-config-airbnb-base": "^15.0.0",
-        "eslint-config-airbnb-typescript": "^17.1.0",
-        "eslint-config-prettier": "^8.8.0",
-        "eslint-plugin-import": "^2.27.5",
-        "eslint-plugin-prettier": "^5.0.0",
-        jest: "^29.5.0",
-        "launchdarkly-js-test-helpers": "^2.2.0",
-        prettier: "^3.0.0",
-        "ts-jest": "^29.0.5",
-        typedoc: "0.25.0",
-        typescript: "5.1.6"
-      }
-    };
-  }
-});
-
 // node_modules/@launchdarkly/node-server-sdk/dist/src/platform/NodeInfo.js
 var require_NodeInfo = __commonJS({
   "node_modules/@launchdarkly/node-server-sdk/dist/src/platform/NodeInfo.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var os5 = __require("os");
-    var packageJson = require_package();
+    var sdkName = "@launchdarkly/node-server-sdk";
+    var sdkVersion = "9.12.1";
     function processPlatformName(name) {
       switch (name) {
         case "darwin":
@@ -28981,6 +30929,9 @@ var require_NodeInfo = __commonJS({
       }
     }
     var NodeInfo = class {
+      constructor(_config) {
+        this._config = _config;
+      }
       platformData() {
         return {
           os: {
@@ -28996,10 +30947,11 @@ var require_NodeInfo = __commonJS({
       }
       sdkData() {
         return {
-          name: packageJson.name,
-          version: packageJson.version,
-          userAgentBase: "NodeJSClient"
-          // No wrapper name/version at the moment.
+          name: sdkName,
+          version: sdkVersion,
+          userAgentBase: "NodeJSClient",
+          wrapperName: this._config.wrapperName,
+          wrapperVersion: this._config.wrapperVersion
         };
       }
     };
@@ -29226,49 +31178,63 @@ var require_common = __commonJS({
         createDebug.namespaces = namespaces;
         createDebug.names = [];
         createDebug.skips = [];
-        let i;
-        const split = (typeof namespaces === "string" ? namespaces : "").split(/[\s,]+/);
-        const len = split.length;
-        for (i = 0; i < len; i++) {
-          if (!split[i]) {
-            continue;
-          }
-          namespaces = split[i].replace(/\*/g, ".*?");
-          if (namespaces[0] === "-") {
-            createDebug.skips.push(new RegExp("^" + namespaces.slice(1) + "$"));
+        const split = (typeof namespaces === "string" ? namespaces : "").trim().replace(/\s+/g, ",").split(",").filter(Boolean);
+        for (const ns of split) {
+          if (ns[0] === "-") {
+            createDebug.skips.push(ns.slice(1));
           } else {
-            createDebug.names.push(new RegExp("^" + namespaces + "$"));
+            createDebug.names.push(ns);
           }
         }
       }
+      function matchesTemplate(search, template) {
+        let searchIndex = 0;
+        let templateIndex = 0;
+        let starIndex = -1;
+        let matchIndex = 0;
+        while (searchIndex < search.length) {
+          if (templateIndex < template.length && (template[templateIndex] === search[searchIndex] || template[templateIndex] === "*")) {
+            if (template[templateIndex] === "*") {
+              starIndex = templateIndex;
+              matchIndex = searchIndex;
+              templateIndex++;
+            } else {
+              searchIndex++;
+              templateIndex++;
+            }
+          } else if (starIndex !== -1) {
+            templateIndex = starIndex + 1;
+            matchIndex++;
+            searchIndex = matchIndex;
+          } else {
+            return false;
+          }
+        }
+        while (templateIndex < template.length && template[templateIndex] === "*") {
+          templateIndex++;
+        }
+        return templateIndex === template.length;
+      }
       function disable() {
         const namespaces = [
-          ...createDebug.names.map(toNamespace),
-          ...createDebug.skips.map(toNamespace).map((namespace) => "-" + namespace)
+          ...createDebug.names,
+          ...createDebug.skips.map((namespace) => "-" + namespace)
         ].join(",");
         createDebug.enable("");
         return namespaces;
       }
       function enabled(name) {
-        if (name[name.length - 1] === "*") {
-          return true;
-        }
-        let i;
-        let len;
-        for (i = 0, len = createDebug.skips.length; i < len; i++) {
-          if (createDebug.skips[i].test(name)) {
+        for (const skip of createDebug.skips) {
+          if (matchesTemplate(name, skip)) {
             return false;
           }
         }
-        for (i = 0, len = createDebug.names.length; i < len; i++) {
-          if (createDebug.names[i].test(name)) {
+        for (const ns of createDebug.names) {
+          if (matchesTemplate(name, ns)) {
             return true;
           }
         }
         return false;
-      }
-      function toNamespace(regexp) {
-        return regexp.toString().substring(2, regexp.toString().length - 2).replace(/\.\*\?$/, "*");
       }
       function coerce(val) {
         if (val instanceof Error) {
@@ -29388,10 +31354,11 @@ var require_browser = __commonJS({
       if (typeof navigator !== "undefined" && navigator.userAgent && navigator.userAgent.toLowerCase().match(/(edge|trident)\/(\d+)/)) {
         return false;
       }
+      let m;
       return typeof document !== "undefined" && document.documentElement && document.documentElement.style && document.documentElement.style.WebkitAppearance || // Is firebug? http://stackoverflow.com/a/398120/376773
       typeof window !== "undefined" && window.console && (window.console.firebug || window.console.exception && window.console.table) || // Is firefox >= v31?
       // https://developer.mozilla.org/en-US/docs/Tools/Web_Console#Styling_messages
-      typeof navigator !== "undefined" && navigator.userAgent && navigator.userAgent.toLowerCase().match(/firefox\/(\d+)/) && parseInt(RegExp.$1, 10) >= 31 || // Double check webkit in userAgent just in case we are in a worker
+      typeof navigator !== "undefined" && navigator.userAgent && (m = navigator.userAgent.toLowerCase().match(/firefox\/(\d+)/)) && parseInt(m[1], 10) >= 31 || // Double check webkit in userAgent just in case we are in a worker
       typeof navigator !== "undefined" && navigator.userAgent && navigator.userAgent.toLowerCase().match(/applewebkit\/(\d+)/);
     }
     function formatArgs(args) {
@@ -29429,7 +31396,7 @@ var require_browser = __commonJS({
     function load() {
       let r;
       try {
-        r = exports.storage.getItem("debug");
+        r = exports.storage.getItem("debug") || exports.storage.getItem("DEBUG");
       } catch (error2) {
       }
       if (!r && typeof process !== "undefined" && "env" in process) {
@@ -29455,6 +31422,121 @@ var require_browser = __commonJS({
   }
 });
 
+// node_modules/has-flag/index.js
+var require_has_flag = __commonJS({
+  "node_modules/has-flag/index.js"(exports, module) {
+    "use strict";
+    module.exports = (flag, argv = process.argv) => {
+      const prefix = flag.startsWith("-") ? "" : flag.length === 1 ? "-" : "--";
+      const position = argv.indexOf(prefix + flag);
+      const terminatorPosition = argv.indexOf("--");
+      return position !== -1 && (terminatorPosition === -1 || position < terminatorPosition);
+    };
+  }
+});
+
+// node_modules/supports-color/index.js
+var require_supports_color = __commonJS({
+  "node_modules/supports-color/index.js"(exports, module) {
+    "use strict";
+    var os5 = __require("os");
+    var tty = __require("tty");
+    var hasFlag = require_has_flag();
+    var { env } = process;
+    var forceColor;
+    if (hasFlag("no-color") || hasFlag("no-colors") || hasFlag("color=false") || hasFlag("color=never")) {
+      forceColor = 0;
+    } else if (hasFlag("color") || hasFlag("colors") || hasFlag("color=true") || hasFlag("color=always")) {
+      forceColor = 1;
+    }
+    if ("FORCE_COLOR" in env) {
+      if (env.FORCE_COLOR === "true") {
+        forceColor = 1;
+      } else if (env.FORCE_COLOR === "false") {
+        forceColor = 0;
+      } else {
+        forceColor = env.FORCE_COLOR.length === 0 ? 1 : Math.min(parseInt(env.FORCE_COLOR, 10), 3);
+      }
+    }
+    function translateLevel(level) {
+      if (level === 0) {
+        return false;
+      }
+      return {
+        level,
+        hasBasic: true,
+        has256: level >= 2,
+        has16m: level >= 3
+      };
+    }
+    function supportsColor(haveStream, streamIsTTY) {
+      if (forceColor === 0) {
+        return 0;
+      }
+      if (hasFlag("color=16m") || hasFlag("color=full") || hasFlag("color=truecolor")) {
+        return 3;
+      }
+      if (hasFlag("color=256")) {
+        return 2;
+      }
+      if (haveStream && !streamIsTTY && forceColor === void 0) {
+        return 0;
+      }
+      const min = forceColor || 0;
+      if (env.TERM === "dumb") {
+        return min;
+      }
+      if (process.platform === "win32") {
+        const osRelease = os5.release().split(".");
+        if (Number(osRelease[0]) >= 10 && Number(osRelease[2]) >= 10586) {
+          return Number(osRelease[2]) >= 14931 ? 3 : 2;
+        }
+        return 1;
+      }
+      if ("CI" in env) {
+        if (["TRAVIS", "CIRCLECI", "APPVEYOR", "GITLAB_CI", "GITHUB_ACTIONS", "BUILDKITE"].some((sign) => sign in env) || env.CI_NAME === "codeship") {
+          return 1;
+        }
+        return min;
+      }
+      if ("TEAMCITY_VERSION" in env) {
+        return /^(9\.(0*[1-9]\d*)\.|\d{2,}\.)/.test(env.TEAMCITY_VERSION) ? 1 : 0;
+      }
+      if (env.COLORTERM === "truecolor") {
+        return 3;
+      }
+      if ("TERM_PROGRAM" in env) {
+        const version = parseInt((env.TERM_PROGRAM_VERSION || "").split(".")[0], 10);
+        switch (env.TERM_PROGRAM) {
+          case "iTerm.app":
+            return version >= 3 ? 3 : 2;
+          case "Apple_Terminal":
+            return 2;
+        }
+      }
+      if (/-256(color)?$/i.test(env.TERM)) {
+        return 2;
+      }
+      if (/^screen|^xterm|^vt100|^vt220|^rxvt|color|ansi|cygwin|linux/i.test(env.TERM)) {
+        return 1;
+      }
+      if ("COLORTERM" in env) {
+        return 1;
+      }
+      return min;
+    }
+    function getSupportLevel(stream) {
+      const level = supportsColor(stream, stream && stream.isTTY);
+      return translateLevel(level);
+    }
+    module.exports = {
+      supportsColor: getSupportLevel,
+      stdout: translateLevel(supportsColor(true, tty.isatty(1))),
+      stderr: translateLevel(supportsColor(true, tty.isatty(2)))
+    };
+  }
+});
+
 // node_modules/debug/src/node.js
 var require_node = __commonJS({
   "node_modules/debug/src/node.js"(exports, module) {
@@ -29473,7 +31555,7 @@ var require_node = __commonJS({
     );
     exports.colors = [6, 2, 3, 4, 5, 1];
     try {
-      const supportsColor = __require("supports-color");
+      const supportsColor = require_supports_color();
       if (supportsColor && (supportsColor.stderr || supportsColor).level >= 2) {
         exports.colors = [
           20,
@@ -29597,7 +31679,7 @@ var require_node = __commonJS({
       return (/* @__PURE__ */ new Date()).toISOString() + " ";
     }
     function log(...args) {
-      return process.stderr.write(util.format(...args) + "\n");
+      return process.stderr.write(util.formatWithOptions(exports.inspectOpts, ...args) + "\n");
     }
     function save(namespaces) {
       if (namespaces) {
@@ -29640,208 +31722,229 @@ var require_src = __commonJS({
   }
 });
 
-// node_modules/agent-base/dist/src/promisify.js
-var require_promisify2 = __commonJS({
-  "node_modules/agent-base/dist/src/promisify.js"(exports) {
+// node_modules/agent-base/dist/helpers.js
+var require_helpers = __commonJS({
+  "node_modules/agent-base/dist/helpers.js"(exports) {
     "use strict";
+    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      var desc = Object.getOwnPropertyDescriptor(m, k);
+      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+        desc = { enumerable: true, get: function() {
+          return m[k];
+        } };
+      }
+      Object.defineProperty(o, k2, desc);
+    }) : (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      o[k2] = m[k];
+    }));
+    var __setModuleDefault = exports && exports.__setModuleDefault || (Object.create ? (function(o, v) {
+      Object.defineProperty(o, "default", { enumerable: true, value: v });
+    }) : function(o, v) {
+      o["default"] = v;
+    });
+    var __importStar = exports && exports.__importStar || function(mod) {
+      if (mod && mod.__esModule) return mod;
+      var result = {};
+      if (mod != null) {
+        for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+      }
+      __setModuleDefault(result, mod);
+      return result;
+    };
     Object.defineProperty(exports, "__esModule", { value: true });
-    function promisify(fn) {
-      return function(req, opts) {
-        return new Promise((resolve, reject) => {
-          fn.call(this, req, opts, (err, rtn) => {
-            if (err) {
-              reject(err);
-            } else {
-              resolve(rtn);
-            }
-          });
-        });
-      };
+    exports.req = exports.json = exports.toBuffer = void 0;
+    var http = __importStar(__require("http"));
+    var https = __importStar(__require("https"));
+    async function toBuffer(stream) {
+      let length = 0;
+      const chunks = [];
+      for await (const chunk of stream) {
+        length += chunk.length;
+        chunks.push(chunk);
+      }
+      return Buffer.concat(chunks, length);
     }
-    exports.default = promisify;
+    exports.toBuffer = toBuffer;
+    async function json(stream) {
+      const buf = await toBuffer(stream);
+      const str = buf.toString("utf8");
+      try {
+        return JSON.parse(str);
+      } catch (_err) {
+        const err = _err;
+        err.message += ` (input: ${str})`;
+        throw err;
+      }
+    }
+    exports.json = json;
+    function req(url, opts = {}) {
+      const href = typeof url === "string" ? url : url.href;
+      const req2 = (href.startsWith("https:") ? https : http).request(url, opts);
+      const promise = new Promise((resolve, reject) => {
+        req2.once("response", resolve).once("error", reject).end();
+      });
+      req2.then = promise.then.bind(promise);
+      return req2;
+    }
+    exports.req = req;
   }
 });
 
-// node_modules/agent-base/dist/src/index.js
-var require_src2 = __commonJS({
-  "node_modules/agent-base/dist/src/index.js"(exports, module) {
+// node_modules/agent-base/dist/index.js
+var require_dist2 = __commonJS({
+  "node_modules/agent-base/dist/index.js"(exports) {
     "use strict";
-    var __importDefault = exports && exports.__importDefault || function(mod) {
-      return mod && mod.__esModule ? mod : { "default": mod };
+    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      var desc = Object.getOwnPropertyDescriptor(m, k);
+      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+        desc = { enumerable: true, get: function() {
+          return m[k];
+        } };
+      }
+      Object.defineProperty(o, k2, desc);
+    }) : (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      o[k2] = m[k];
+    }));
+    var __setModuleDefault = exports && exports.__setModuleDefault || (Object.create ? (function(o, v) {
+      Object.defineProperty(o, "default", { enumerable: true, value: v });
+    }) : function(o, v) {
+      o["default"] = v;
+    });
+    var __importStar = exports && exports.__importStar || function(mod) {
+      if (mod && mod.__esModule) return mod;
+      var result = {};
+      if (mod != null) {
+        for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+      }
+      __setModuleDefault(result, mod);
+      return result;
     };
-    var events_1 = __require("events");
-    var debug_1 = __importDefault(require_src());
-    var promisify_1 = __importDefault(require_promisify2());
-    var debug2 = debug_1.default("agent-base");
-    function isAgent(v) {
-      return Boolean(v) && typeof v.addRequest === "function";
-    }
-    function isSecureEndpoint() {
-      const { stack } = new Error();
-      if (typeof stack !== "string")
-        return false;
-      return stack.split("\n").some((l) => l.indexOf("(https.js:") !== -1 || l.indexOf("node:https:") !== -1);
-    }
-    function createAgent(callback, opts) {
-      return new createAgent.Agent(callback, opts);
-    }
-    (function(createAgent2) {
-      class Agent extends events_1.EventEmitter {
-        constructor(callback, _opts) {
-          super();
-          let opts = _opts;
-          if (typeof callback === "function") {
-            this.callback = callback;
-          } else if (callback) {
-            opts = callback;
+    var __exportStar = exports && exports.__exportStar || function(m, exports2) {
+      for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports2, p)) __createBinding(exports2, m, p);
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.Agent = void 0;
+    var net = __importStar(__require("net"));
+    var http = __importStar(__require("http"));
+    var https_1 = __require("https");
+    __exportStar(require_helpers(), exports);
+    var INTERNAL = /* @__PURE__ */ Symbol("AgentBaseInternalState");
+    var Agent = class extends http.Agent {
+      constructor(opts) {
+        super(opts);
+        this[INTERNAL] = {};
+      }
+      /**
+       * Determine whether this is an `http` or `https` request.
+       */
+      isSecureEndpoint(options) {
+        if (options) {
+          if (typeof options.secureEndpoint === "boolean") {
+            return options.secureEndpoint;
           }
-          this.timeout = null;
-          if (opts && typeof opts.timeout === "number") {
-            this.timeout = opts.timeout;
-          }
-          this.maxFreeSockets = 1;
-          this.maxSockets = 1;
-          this.maxTotalSockets = Infinity;
-          this.sockets = {};
-          this.freeSockets = {};
-          this.requests = {};
-          this.options = {};
-        }
-        get defaultPort() {
-          if (typeof this.explicitDefaultPort === "number") {
-            return this.explicitDefaultPort;
-          }
-          return isSecureEndpoint() ? 443 : 80;
-        }
-        set defaultPort(v) {
-          this.explicitDefaultPort = v;
-        }
-        get protocol() {
-          if (typeof this.explicitProtocol === "string") {
-            return this.explicitProtocol;
-          }
-          return isSecureEndpoint() ? "https:" : "http:";
-        }
-        set protocol(v) {
-          this.explicitProtocol = v;
-        }
-        callback(req, opts, fn) {
-          throw new Error('"agent-base" has no default implementation, you must subclass and override `callback()`');
-        }
-        /**
-         * Called by node-core's "_http_client.js" module when creating
-         * a new HTTP request with this Agent instance.
-         *
-         * @api public
-         */
-        addRequest(req, _opts) {
-          const opts = Object.assign({}, _opts);
-          if (typeof opts.secureEndpoint !== "boolean") {
-            opts.secureEndpoint = isSecureEndpoint();
-          }
-          if (opts.host == null) {
-            opts.host = "localhost";
-          }
-          if (opts.port == null) {
-            opts.port = opts.secureEndpoint ? 443 : 80;
-          }
-          if (opts.protocol == null) {
-            opts.protocol = opts.secureEndpoint ? "https:" : "http:";
-          }
-          if (opts.host && opts.path) {
-            delete opts.path;
-          }
-          delete opts.agent;
-          delete opts.hostname;
-          delete opts._defaultAgent;
-          delete opts.defaultPort;
-          delete opts.createConnection;
-          req._last = true;
-          req.shouldKeepAlive = false;
-          let timedOut = false;
-          let timeoutId = null;
-          const timeoutMs = opts.timeout || this.timeout;
-          const onerror = (err) => {
-            if (req._hadError)
-              return;
-            req.emit("error", err);
-            req._hadError = true;
-          };
-          const ontimeout = () => {
-            timeoutId = null;
-            timedOut = true;
-            const err = new Error(`A "socket" was not created for HTTP request before ${timeoutMs}ms`);
-            err.code = "ETIMEOUT";
-            onerror(err);
-          };
-          const callbackError = (err) => {
-            if (timedOut)
-              return;
-            if (timeoutId !== null) {
-              clearTimeout(timeoutId);
-              timeoutId = null;
-            }
-            onerror(err);
-          };
-          const onsocket = (socket) => {
-            if (timedOut)
-              return;
-            if (timeoutId != null) {
-              clearTimeout(timeoutId);
-              timeoutId = null;
-            }
-            if (isAgent(socket)) {
-              debug2("Callback returned another Agent instance %o", socket.constructor.name);
-              socket.addRequest(req, opts);
-              return;
-            }
-            if (socket) {
-              socket.once("free", () => {
-                this.freeSocket(socket, opts);
-              });
-              req.onSocket(socket);
-              return;
-            }
-            const err = new Error(`no Duplex stream was returned to agent-base for \`${req.method} ${req.path}\``);
-            onerror(err);
-          };
-          if (typeof this.callback !== "function") {
-            onerror(new Error("`callback` is not defined"));
-            return;
-          }
-          if (!this.promisifiedCallback) {
-            if (this.callback.length >= 3) {
-              debug2("Converting legacy callback function to promise");
-              this.promisifiedCallback = promisify_1.default(this.callback);
-            } else {
-              this.promisifiedCallback = this.callback;
-            }
-          }
-          if (typeof timeoutMs === "number" && timeoutMs > 0) {
-            timeoutId = setTimeout(ontimeout, timeoutMs);
-          }
-          if ("port" in opts && typeof opts.port !== "number") {
-            opts.port = Number(opts.port);
-          }
-          try {
-            debug2("Resolving socket for %o request: %o", opts.protocol, `${req.method} ${req.path}`);
-            Promise.resolve(this.promisifiedCallback(req, opts)).then(onsocket, callbackError);
-          } catch (err) {
-            Promise.reject(err).catch(callbackError);
+          if (typeof options.protocol === "string") {
+            return options.protocol === "https:";
           }
         }
-        freeSocket(socket, opts) {
-          debug2("Freeing socket %o %o", socket.constructor.name, opts);
-          socket.destroy();
+        const { stack } = new Error();
+        if (typeof stack !== "string")
+          return false;
+        return stack.split("\n").some((l) => l.indexOf("(https.js:") !== -1 || l.indexOf("node:https:") !== -1);
+      }
+      // In order to support async signatures in `connect()` and Node's native
+      // connection pooling in `http.Agent`, the array of sockets for each origin
+      // has to be updated synchronously. This is so the length of the array is
+      // accurate when `addRequest()` is next called. We achieve this by creating a
+      // fake socket and adding it to `sockets[origin]` and incrementing
+      // `totalSocketCount`.
+      incrementSockets(name) {
+        if (this.maxSockets === Infinity && this.maxTotalSockets === Infinity) {
+          return null;
         }
-        destroy() {
-          debug2("Destroying agent %o", this.constructor.name);
+        if (!this.sockets[name]) {
+          this.sockets[name] = [];
+        }
+        const fakeSocket = new net.Socket({ writable: false });
+        this.sockets[name].push(fakeSocket);
+        this.totalSocketCount++;
+        return fakeSocket;
+      }
+      decrementSockets(name, socket) {
+        if (!this.sockets[name] || socket === null) {
+          return;
+        }
+        const sockets = this.sockets[name];
+        const index = sockets.indexOf(socket);
+        if (index !== -1) {
+          sockets.splice(index, 1);
+          this.totalSocketCount--;
+          if (sockets.length === 0) {
+            delete this.sockets[name];
+          }
         }
       }
-      createAgent2.Agent = Agent;
-      createAgent2.prototype = createAgent2.Agent.prototype;
-    })(createAgent || (createAgent = {}));
-    module.exports = createAgent;
+      // In order to properly update the socket pool, we need to call `getName()` on
+      // the core `https.Agent` if it is a secureEndpoint.
+      getName(options) {
+        const secureEndpoint = this.isSecureEndpoint(options);
+        if (secureEndpoint) {
+          return https_1.Agent.prototype.getName.call(this, options);
+        }
+        return super.getName(options);
+      }
+      createSocket(req, options, cb) {
+        const connectOpts = {
+          ...options,
+          secureEndpoint: this.isSecureEndpoint(options)
+        };
+        const name = this.getName(connectOpts);
+        const fakeSocket = this.incrementSockets(name);
+        Promise.resolve().then(() => this.connect(req, connectOpts)).then((socket) => {
+          this.decrementSockets(name, fakeSocket);
+          if (socket instanceof http.Agent) {
+            try {
+              return socket.addRequest(req, connectOpts);
+            } catch (err) {
+              return cb(err);
+            }
+          }
+          this[INTERNAL].currentSocket = socket;
+          super.createSocket(req, options, cb);
+        }, (err) => {
+          this.decrementSockets(name, fakeSocket);
+          cb(err);
+        });
+      }
+      createConnection() {
+        const socket = this[INTERNAL].currentSocket;
+        this[INTERNAL].currentSocket = void 0;
+        if (!socket) {
+          throw new Error("No socket was returned in the `connect()` function");
+        }
+        return socket;
+      }
+      get defaultPort() {
+        return this[INTERNAL].defaultPort ?? (this.protocol === "https:" ? 443 : 80);
+      }
+      set defaultPort(v) {
+        if (this[INTERNAL]) {
+          this[INTERNAL].defaultPort = v;
+        }
+      }
+      get protocol() {
+        return this[INTERNAL].protocol ?? (this.isSecureEndpoint() ? "https:" : "http:");
+      }
+      set protocol(v) {
+        if (this[INTERNAL]) {
+          this[INTERNAL].protocol = v;
+        }
+      }
+    };
+    exports.Agent = Agent;
   }
 });
 
@@ -29853,8 +31956,9 @@ var require_parse_proxy_response = __commonJS({
       return mod && mod.__esModule ? mod : { "default": mod };
     };
     Object.defineProperty(exports, "__esModule", { value: true });
+    exports.parseProxyResponse = void 0;
     var debug_1 = __importDefault(require_src());
-    var debug2 = debug_1.default("https-proxy-agent:parse-proxy-response");
+    var debug2 = (0, debug_1.default)("https-proxy-agent:parse-proxy-response");
     function parseProxyResponse(socket) {
       return new Promise((resolve, reject) => {
         let buffersLength = 0;
@@ -29869,14 +31973,12 @@ var require_parse_proxy_response = __commonJS({
         function cleanup() {
           socket.removeListener("end", onend);
           socket.removeListener("error", onerror);
-          socket.removeListener("close", onclose);
           socket.removeListener("readable", read);
         }
-        function onclose(err) {
-          debug2("onclose had error %o", err);
-        }
         function onend() {
+          cleanup();
           debug2("onend");
+          reject(new Error("Proxy connection ended before receiving CONNECT response"));
         }
         function onerror(err) {
           cleanup();
@@ -29893,170 +31995,191 @@ var require_parse_proxy_response = __commonJS({
             read();
             return;
           }
-          const firstLine = buffered.toString("ascii", 0, buffered.indexOf("\r\n"));
-          const statusCode = +firstLine.split(" ")[1];
-          debug2("got proxy server response: %o", firstLine);
+          const headerParts = buffered.slice(0, endOfHeaders).toString("ascii").split("\r\n");
+          const firstLine = headerParts.shift();
+          if (!firstLine) {
+            socket.destroy();
+            return reject(new Error("No header received from proxy CONNECT response"));
+          }
+          const firstLineParts = firstLine.split(" ");
+          const statusCode = +firstLineParts[1];
+          const statusText = firstLineParts.slice(2).join(" ");
+          const headers = {};
+          for (const header of headerParts) {
+            if (!header)
+              continue;
+            const firstColon = header.indexOf(":");
+            if (firstColon === -1) {
+              socket.destroy();
+              return reject(new Error(`Invalid header from proxy CONNECT response: "${header}"`));
+            }
+            const key = header.slice(0, firstColon).toLowerCase();
+            const value = header.slice(firstColon + 1).trimStart();
+            const current = headers[key];
+            if (typeof current === "string") {
+              headers[key] = [current, value];
+            } else if (Array.isArray(current)) {
+              current.push(value);
+            } else {
+              headers[key] = value;
+            }
+          }
+          debug2("got proxy server response: %o %o", firstLine, headers);
+          cleanup();
           resolve({
-            statusCode,
+            connect: {
+              statusCode,
+              statusText,
+              headers
+            },
             buffered
           });
         }
         socket.on("error", onerror);
-        socket.on("close", onclose);
         socket.on("end", onend);
         read();
       });
     }
-    exports.default = parseProxyResponse;
+    exports.parseProxyResponse = parseProxyResponse;
   }
 });
 
-// node_modules/https-proxy-agent/dist/agent.js
-var require_agent2 = __commonJS({
-  "node_modules/https-proxy-agent/dist/agent.js"(exports) {
+// node_modules/https-proxy-agent/dist/index.js
+var require_dist3 = __commonJS({
+  "node_modules/https-proxy-agent/dist/index.js"(exports) {
     "use strict";
-    var __awaiter2 = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
-      function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve) {
-          resolve(value);
-        });
+    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      var desc = Object.getOwnPropertyDescriptor(m, k);
+      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+        desc = { enumerable: true, get: function() {
+          return m[k];
+        } };
       }
-      return new (P || (P = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
+      Object.defineProperty(o, k2, desc);
+    }) : (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      o[k2] = m[k];
+    }));
+    var __setModuleDefault = exports && exports.__setModuleDefault || (Object.create ? (function(o, v) {
+      Object.defineProperty(o, "default", { enumerable: true, value: v });
+    }) : function(o, v) {
+      o["default"] = v;
+    });
+    var __importStar = exports && exports.__importStar || function(mod) {
+      if (mod && mod.__esModule) return mod;
+      var result = {};
+      if (mod != null) {
+        for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+      }
+      __setModuleDefault(result, mod);
+      return result;
     };
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
     };
     Object.defineProperty(exports, "__esModule", { value: true });
-    var net_1 = __importDefault(__require("net"));
-    var tls_1 = __importDefault(__require("tls"));
-    var url_1 = __importDefault(__require("url"));
+    exports.HttpsProxyAgent = void 0;
+    var net = __importStar(__require("net"));
+    var tls = __importStar(__require("tls"));
     var assert_1 = __importDefault(__require("assert"));
     var debug_1 = __importDefault(require_src());
-    var agent_base_1 = require_src2();
-    var parse_proxy_response_1 = __importDefault(require_parse_proxy_response());
-    var debug2 = debug_1.default("https-proxy-agent:agent");
+    var agent_base_1 = require_dist2();
+    var url_1 = __require("url");
+    var parse_proxy_response_1 = require_parse_proxy_response();
+    var debug2 = (0, debug_1.default)("https-proxy-agent");
+    var setServernameFromNonIpHost = (options) => {
+      if (options.servername === void 0 && options.host && !net.isIP(options.host)) {
+        return {
+          ...options,
+          servername: options.host
+        };
+      }
+      return options;
+    };
     var HttpsProxyAgent = class extends agent_base_1.Agent {
-      constructor(_opts) {
-        let opts;
-        if (typeof _opts === "string") {
-          opts = url_1.default.parse(_opts);
-        } else {
-          opts = _opts;
-        }
-        if (!opts) {
-          throw new Error("an HTTP(S) proxy server `host` and `port` must be specified!");
-        }
-        debug2("creating new HttpsProxyAgent instance: %o", opts);
+      constructor(proxy, opts) {
         super(opts);
-        const proxy = Object.assign({}, opts);
-        this.secureProxy = opts.secureProxy || isHTTPS(proxy.protocol);
-        proxy.host = proxy.hostname || proxy.host;
-        if (typeof proxy.port === "string") {
-          proxy.port = parseInt(proxy.port, 10);
-        }
-        if (!proxy.port && proxy.host) {
-          proxy.port = this.secureProxy ? 443 : 80;
-        }
-        if (this.secureProxy && !("ALPNProtocols" in proxy)) {
-          proxy.ALPNProtocols = ["http 1.1"];
-        }
-        if (proxy.host && proxy.path) {
-          delete proxy.path;
-          delete proxy.pathname;
-        }
-        this.proxy = proxy;
+        this.options = { path: void 0 };
+        this.proxy = typeof proxy === "string" ? new url_1.URL(proxy) : proxy;
+        this.proxyHeaders = opts?.headers ?? {};
+        debug2("Creating new HttpsProxyAgent instance: %o", this.proxy.href);
+        const host = (this.proxy.hostname || this.proxy.host).replace(/^\[|\]$/g, "");
+        const port = this.proxy.port ? parseInt(this.proxy.port, 10) : this.proxy.protocol === "https:" ? 443 : 80;
+        this.connectOpts = {
+          // Attempt to negotiate http/1.1 for proxy servers that support http/2
+          ALPNProtocols: ["http/1.1"],
+          ...opts ? omit(opts, "headers") : null,
+          host,
+          port
+        };
       }
       /**
        * Called when the node-core HTTP client library is creating a
        * new HTTP request.
-       *
-       * @api protected
        */
-      callback(req, opts) {
-        return __awaiter2(this, void 0, void 0, function* () {
-          const { proxy, secureProxy } = this;
-          let socket;
-          if (secureProxy) {
-            debug2("Creating `tls.Socket`: %o", proxy);
-            socket = tls_1.default.connect(proxy);
-          } else {
-            debug2("Creating `net.Socket`: %o", proxy);
-            socket = net_1.default.connect(proxy);
-          }
-          const headers = Object.assign({}, proxy.headers);
-          const hostname = `${opts.host}:${opts.port}`;
-          let payload = `CONNECT ${hostname} HTTP/1.1\r
+      async connect(req, opts) {
+        const { proxy } = this;
+        if (!opts.host) {
+          throw new TypeError('No "host" provided');
+        }
+        let socket;
+        if (proxy.protocol === "https:") {
+          debug2("Creating `tls.Socket`: %o", this.connectOpts);
+          socket = tls.connect(setServernameFromNonIpHost(this.connectOpts));
+        } else {
+          debug2("Creating `net.Socket`: %o", this.connectOpts);
+          socket = net.connect(this.connectOpts);
+        }
+        const headers = typeof this.proxyHeaders === "function" ? this.proxyHeaders() : { ...this.proxyHeaders };
+        const host = net.isIPv6(opts.host) ? `[${opts.host}]` : opts.host;
+        let payload = `CONNECT ${host}:${opts.port} HTTP/1.1\r
 `;
-          if (proxy.auth) {
-            headers["Proxy-Authorization"] = `Basic ${Buffer.from(proxy.auth).toString("base64")}`;
-          }
-          let { host, port, secureEndpoint } = opts;
-          if (!isDefaultPort(port, secureEndpoint)) {
-            host += `:${port}`;
-          }
-          headers.Host = host;
-          headers.Connection = "close";
-          for (const name of Object.keys(headers)) {
-            payload += `${name}: ${headers[name]}\r
+        if (proxy.username || proxy.password) {
+          const auth = `${decodeURIComponent(proxy.username)}:${decodeURIComponent(proxy.password)}`;
+          headers["Proxy-Authorization"] = `Basic ${Buffer.from(auth).toString("base64")}`;
+        }
+        headers.Host = `${host}:${opts.port}`;
+        if (!headers["Proxy-Connection"]) {
+          headers["Proxy-Connection"] = this.keepAlive ? "Keep-Alive" : "close";
+        }
+        for (const name of Object.keys(headers)) {
+          payload += `${name}: ${headers[name]}\r
 `;
-          }
-          const proxyResponsePromise = parse_proxy_response_1.default(socket);
-          socket.write(`${payload}\r
+        }
+        const proxyResponsePromise = (0, parse_proxy_response_1.parseProxyResponse)(socket);
+        socket.write(`${payload}\r
 `);
-          const { statusCode, buffered } = yield proxyResponsePromise;
-          if (statusCode === 200) {
-            req.once("socket", resume);
-            if (opts.secureEndpoint) {
-              debug2("Upgrading socket connection to TLS");
-              const servername = opts.servername || opts.host;
-              return tls_1.default.connect(Object.assign(Object.assign({}, omit(opts, "host", "hostname", "path", "port")), {
-                socket,
-                servername
-              }));
-            }
-            return socket;
+        const { connect, buffered } = await proxyResponsePromise;
+        req.emit("proxyConnect", connect);
+        this.emit("proxyConnect", connect, req);
+        if (connect.statusCode === 200) {
+          req.once("socket", resume);
+          if (opts.secureEndpoint) {
+            debug2("Upgrading socket connection to TLS");
+            return tls.connect({
+              ...omit(setServernameFromNonIpHost(opts), "host", "path", "port"),
+              socket
+            });
           }
-          socket.destroy();
-          const fakeSocket = new net_1.default.Socket({ writable: false });
-          fakeSocket.readable = true;
-          req.once("socket", (s) => {
-            debug2("replaying proxy buffer for failed request");
-            assert_1.default(s.listenerCount("data") > 0);
-            s.push(buffered);
-            s.push(null);
-          });
-          return fakeSocket;
+          return socket;
+        }
+        socket.destroy();
+        const fakeSocket = new net.Socket({ writable: false });
+        fakeSocket.readable = true;
+        req.once("socket", (s) => {
+          debug2("Replaying proxy buffer for failed request");
+          (0, assert_1.default)(s.listenerCount("data") > 0);
+          s.push(buffered);
+          s.push(null);
         });
+        return fakeSocket;
       }
     };
-    exports.default = HttpsProxyAgent;
+    HttpsProxyAgent.protocols = ["http", "https"];
+    exports.HttpsProxyAgent = HttpsProxyAgent;
     function resume(socket) {
       socket.resume();
-    }
-    function isDefaultPort(port, secure) {
-      return Boolean(!secure && port === 80 || secure && port === 443);
-    }
-    function isHTTPS(protocol) {
-      return typeof protocol === "string" ? /^https:?$/i.test(protocol) : false;
     }
     function omit(obj, ...keys) {
       const ret = {};
@@ -30068,25 +32191,6 @@ var require_agent2 = __commonJS({
       }
       return ret;
     }
-  }
-});
-
-// node_modules/https-proxy-agent/dist/index.js
-var require_dist3 = __commonJS({
-  "node_modules/https-proxy-agent/dist/index.js"(exports, module) {
-    "use strict";
-    var __importDefault = exports && exports.__importDefault || function(mod) {
-      return mod && mod.__esModule ? mod : { "default": mod };
-    };
-    var agent_1 = __importDefault(require_agent2());
-    function createHttpsProxyAgent(opts) {
-      return new agent_1.default(opts);
-    }
-    (function(createHttpsProxyAgent2) {
-      createHttpsProxyAgent2.HttpsProxyAgent = agent_1.default;
-      createHttpsProxyAgent2.prototype = agent_1.default.prototype;
-    })(createHttpsProxyAgent || (createHttpsProxyAgent = {}));
-    module.exports = createHttpsProxyAgent;
   }
 });
 
@@ -30194,6 +32298,15 @@ var require_eventsource2 = __commonJS({
         return buf[index] === charCode;
       });
     }
+    function once(cb) {
+      let called = false;
+      return (...params) => {
+        if (!called) {
+          called = true;
+          cb(...params);
+        }
+      };
+    }
     function EventSource(url, eventSourceInitDict) {
       var readyState = EventSource.CONNECTING;
       var config = eventSourceInitDict || {};
@@ -30224,6 +32337,7 @@ var require_eventsource2 = __commonJS({
         config.jitterRatio ? retryDelay.defaultJitter(config.jitterRatio) : null
       );
       var streamOriginUrl = new URL2(url).origin;
+      let reconnectTimer;
       function makeRequestUrlAndOptions() {
         var actualUrl = url;
         var options = { headers: {} };
@@ -30287,7 +32401,7 @@ var require_eventsource2 = __commonJS({
         if (readyState === EventSource.CLOSED) {
           return;
         }
-        var errorEvent = error2 ? new Event2("error", error2) : new Event2("end");
+        var errorEvent = error2 ? new Event2("error", error2) : new Event2("end", { message: "the request completed unexpectedly" });
         var shouldRetry = (config.errorFilter || defaultErrorFilter)(errorEvent);
         if (shouldRetry) {
           readyState = EventSource.CONNECTING;
@@ -30309,18 +32423,24 @@ var require_eventsource2 = __commonJS({
         var event = new Event2("retrying");
         event.delayMillis = delay;
         _emit(event);
-        setTimeout(function() {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = setTimeout(function() {
           if (readyState !== EventSource.CONNECTING) return;
           connect();
         }, delay);
       }
+      function destroyRequest() {
+        if (req.destroy) req.destroy();
+        if (req.xhr && req.xhr.abort) req.xhr.abort();
+      }
       function connect() {
         var urlAndOptions = makeRequestUrlAndOptions();
         var isSecure = urlAndOptions.options.protocol === "https:" || urlAndOptions.url && urlAndOptions.url.startsWith("https:");
+        const failOnce = once(failed);
         var callback = function(res) {
           if (res.statusCode === 301 || res.statusCode === 307) {
             if (!res.headers.location) {
-              failed({ status: res.statusCode, message: res.statusMessage });
+              failOnce({ status: res.statusCode, headers: res.headers, message: res.statusMessage });
               return;
             }
             if (res.statusCode === 307) reconnectUrl = url;
@@ -30329,7 +32449,7 @@ var require_eventsource2 = __commonJS({
             return;
           }
           if (res.statusCode !== 200) {
-            failed({ status: res.statusCode, message: res.statusMessage });
+            failOnce({ status: res.statusCode, headers: res.headers, message: res.statusMessage });
             return;
           }
           data = "";
@@ -30339,14 +32459,14 @@ var require_eventsource2 = __commonJS({
           res.on("close", function() {
             res.removeAllListeners("close");
             res.removeAllListeners("end");
-            failed();
+            failOnce();
           });
           res.on("end", function() {
             res.removeAllListeners("close");
             res.removeAllListeners("end");
-            failed();
+            failOnce();
           });
-          _emit(new Event2("open"));
+          _emit(new Event2("open", { headers: res.headers }));
           var isFirst = true;
           var buf;
           var startingPos = 0;
@@ -30424,10 +32544,11 @@ var require_eventsource2 = __commonJS({
           req.write(config.body);
         }
         req.on("error", function(err) {
-          failed({ message: err.message });
+          failOnce({ message: err.message });
         });
         req.on("timeout", function() {
-          failed({ message: "Read timeout, received no data in " + config.readTimeoutMillis + "ms, assuming connection is dead" });
+          failOnce({ message: "Read timeout, received no data in " + config.readTimeoutMillis + "ms, assuming connection is dead" });
+          destroyRequest();
         });
         if (req.setNoDelay) req.setNoDelay(true);
         req.end();
@@ -30439,10 +32560,10 @@ var require_eventsource2 = __commonJS({
         }
       }
       this._close = function() {
+        clearTimeout(reconnectTimer);
         if (readyState === EventSource.CLOSED) return;
         readyState = EventSource.CLOSED;
-        if (req.abort) req.abort();
-        if (req.xhr && req.xhr.abort) req.xhr.abort();
+        destroyRequest();
         _emit(new Event2("closed"));
       };
       function receivedEvent(event) {
@@ -30603,10 +32724,10 @@ var require_HeaderWrapper = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     var HeaderWrapper = class {
       constructor(headers) {
-        this.headers = headers;
+        this._headers = headers;
       }
-      headerVal(name) {
-        const val = this.headers[name];
+      _headerVal(name) {
+        const val = this._headers[name];
         if (val === void 0 || val === null) {
           return null;
         }
@@ -30616,10 +32737,10 @@ var require_HeaderWrapper = __commonJS({
         return val;
       }
       get(name) {
-        return this.headerVal(name);
+        return this._headerVal(name);
       }
       keys() {
-        return Object.keys(this.headers);
+        return Object.keys(this._headers);
       }
       // We want to use generators here for the simplicity of maintaining
       // this interface. Also they aren't expected to be high frequency usage.
@@ -30640,7 +32761,7 @@ var require_HeaderWrapper = __commonJS({
         }
       }
       has(name) {
-        return Object.prototype.hasOwnProperty.call(this.headers, name);
+        return Object.prototype.hasOwnProperty.call(this._headers, name);
       }
     };
     exports.default = HeaderWrapper;
@@ -30652,30 +32773,55 @@ var require_NodeResponse = __commonJS({
   "node_modules/@launchdarkly/node-server-sdk/dist/src/platform/NodeResponse.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
+    var stream_1 = __require("stream");
+    var zlib = __require("zlib");
     var HeaderWrapper_1 = require_HeaderWrapper();
     var NodeResponse = class {
       constructor(res) {
-        this.body = [];
+        this.chunks = [];
+        this.memoryStream = new stream_1.Writable({
+          decodeStrings: true,
+          write: (chunk, _enc, next) => {
+            this.chunks.push(chunk);
+            next();
+          }
+        });
+        this.listened = false;
         this.headers = new HeaderWrapper_1.default(res.headers);
         this.status = res.statusCode || 0;
         this.incomingMessage = res;
         this.promise = new Promise((resolve, reject) => {
-          res.on("data", (chunk) => {
-            this.body.push(chunk);
-          });
-          res.on("error", (err) => {
-            reject(err);
-          });
-          res.on("end", () => {
-            resolve(Buffer.concat(this.body).toString());
-          });
+          const pipelineCallback = (err) => {
+            if (err) {
+              this.rejection = err;
+              if (this.listened) {
+                reject(err);
+              }
+            }
+            return resolve(Buffer.concat(this.chunks).toString());
+          };
+          switch (res.headers["content-encoding"]) {
+            case "gzip":
+              (0, stream_1.pipeline)(res, zlib.createGunzip(), this.memoryStream, pipelineCallback);
+              break;
+            default:
+              (0, stream_1.pipeline)(res, this.memoryStream, pipelineCallback);
+              break;
+          }
         });
       }
-      text() {
+      async _wrappedWait() {
+        this.listened = true;
+        if (this.rejection) {
+          throw this.rejection;
+        }
         return this.promise;
       }
+      text() {
+        return this._wrappedWait();
+      }
       async json() {
-        const stringValue = await this.promise;
+        const stringValue = await this._wrappedWait();
         return JSON.parse(stringValue);
       }
     };
@@ -30690,9 +32836,13 @@ var require_NodeRequests = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     var http = __require("http");
     var https = __require("https");
-    var createHttpsProxyAgent = require_dist3();
+    var https_proxy_agent_1 = require_dist3();
     var launchdarkly_eventsource_1 = require_eventsource2();
+    var url_1 = __require("url");
+    var util_1 = __require("util");
+    var zlib = __require("zlib");
     var NodeResponse_1 = require_NodeResponse();
+    var gzip = (0, util_1.promisify)(zlib.gzip);
     function processTlsOptions(tlsOptions) {
       const options = {
         ca: tlsOptions.ca,
@@ -30719,11 +32869,16 @@ var require_NodeRequests = __commonJS({
     }
     function processProxyOptions(proxyOptions, additional = {}) {
       var _a;
-      const protocol = ((_a = proxyOptions.scheme) === null || _a === void 0 ? void 0 : _a.startsWith("https")) ? "https:" : "http";
-      const parsedOptions = Object.assign({ port: proxyOptions.port, host: proxyOptions.host, protocol }, additional);
+      const proxyUrl = (0, url_1.format)({
+        protocol: ((_a = proxyOptions.scheme) === null || _a === void 0 ? void 0 : _a.startsWith("https")) ? "https:" : "http:",
+        slashes: true,
+        hostname: proxyOptions.host,
+        port: proxyOptions.port
+      });
+      const parsedOptions = Object.assign({}, additional);
       if (proxyOptions.auth) {
         parsedOptions.headers = {
-          "Proxy-Authorization": `Basic ${Buffer.from(proxyOptions.auth).toString("base64")}}`
+          "Proxy-Authorization": `Basic ${Buffer.from(proxyOptions.auth).toString("base64")}`
         };
       }
       Object.keys(parsedOptions).forEach((key) => {
@@ -30731,7 +32886,7 @@ var require_NodeRequests = __commonJS({
           delete parsedOptions[key];
         }
       });
-      return createHttpsProxyAgent(parsedOptions);
+      return new https_proxy_agent_1.HttpsProxyAgent(proxyUrl, parsedOptions);
     }
     function createAgent(tlsOptions, proxyOptions, logger) {
       var _a;
@@ -30750,42 +32905,72 @@ var require_NodeRequests = __commonJS({
       }
       return void 0;
     }
-    var NodeRequests = class {
-      constructor(tlsOptions, proxyOptions, logger) {
-        this.hasProxy = false;
-        this.hasProxyAuth = false;
-        this.agent = createAgent(tlsOptions, proxyOptions, logger);
-        this.hasProxy = !!proxyOptions;
-        this.hasProxyAuth = !!(proxyOptions === null || proxyOptions === void 0 ? void 0 : proxyOptions.auth);
+    function resolveAgent(tlsOptions, proxyOptions, proxyAgent, logger) {
+      if (proxyAgent) {
+        if (proxyOptions || tlsOptions) {
+          logger === null || logger === void 0 ? void 0 : logger.warn("Both proxyAgent and proxyOptions/tlsParams were provided; using proxyAgent and ignoring proxyOptions/tlsParams.");
+        }
+        return proxyAgent;
       }
-      fetch(url, options = {}) {
+      return createAgent(tlsOptions, proxyOptions, logger);
+    }
+    var NodeRequests = class {
+      constructor(tlsOptions, proxyOptions, proxyAgent, logger, enableEventCompression) {
+        this._hasProxy = false;
+        this._hasProxyAuth = false;
+        this._enableBodyCompression = false;
+        this._agent = resolveAgent(tlsOptions, proxyOptions, proxyAgent, logger);
+        this._hasProxy = !!proxyOptions || !!proxyAgent;
+        this._hasProxyAuth = !!(proxyOptions === null || proxyOptions === void 0 ? void 0 : proxyOptions.auth) || !!proxyAgent;
+        this._enableBodyCompression = !!enableEventCompression;
+      }
+      async fetch(url, options = {}) {
+        var _a, _b;
         const isSecure = url.startsWith("https://");
         const impl = isSecure ? https : http;
+        const headers = Object.assign({}, options.headers);
+        let bodyData = options.body;
+        if (((_a = options.method) === null || _a === void 0 ? void 0 : _a.toLowerCase()) === "get") {
+          headers["accept-encoding"] = "gzip";
+        } else if (this._enableBodyCompression && !!options.compressBodyIfPossible && ((_b = options.method) === null || _b === void 0 ? void 0 : _b.toLowerCase()) === "post" && options.body) {
+          headers["content-encoding"] = "gzip";
+          bodyData = await gzip(Buffer.from(options.body, "utf8"));
+        }
         return new Promise((resolve, reject) => {
           const req = impl.request(url, {
             timeout: options.timeout,
-            headers: options.headers,
+            headers,
             method: options.method,
-            agent: this.agent
+            agent: this._agent
           }, (res) => resolve(new NodeResponse_1.default(res)));
-          if (options.body) {
-            req.write(options.body);
+          if (bodyData) {
+            req.write(bodyData);
           }
           req.on("error", (err) => {
             reject(err);
+          });
+          req.on("timeout", () => {
+            req.destroy(new Error("Request timed out"));
           });
           req.end();
         });
       }
       createEventSource(url, eventSourceInitDict) {
-        const expandedOptions = Object.assign(Object.assign({}, eventSourceInitDict), { agent: this.agent, tlsParams: this.tlsOptions });
+        const expandedOptions = Object.assign(Object.assign({}, eventSourceInitDict), { agent: this._agent, tlsParams: this._tlsOptions, maxBackoffMillis: 30 * 1e3, jitterRatio: 0.5 });
         return new launchdarkly_eventsource_1.EventSource(url, expandedOptions);
       }
+      getEventSourceCapabilities() {
+        return {
+          readTimeout: true,
+          headers: true,
+          customMethod: true
+        };
+      }
       usingProxy() {
-        return this.hasProxy;
+        return this._hasProxy;
       }
       usingProxyAuth() {
-        return this.hasProxyAuth;
+        return this._hasProxyAuth;
       }
     };
     exports.default = NodeRequests;
@@ -30803,10 +32988,10 @@ var require_NodePlatform = __commonJS({
     var NodeRequests_1 = require_NodeRequests();
     var NodePlatform = class {
       constructor(options) {
-        this.info = new NodeInfo_1.default();
         this.fileSystem = new NodeFilesystem_1.default();
         this.crypto = new NodeCrypto_1.default();
-        this.requests = new NodeRequests_1.default(options.tlsParams, options.proxyOptions, options.logger);
+        this.info = new NodeInfo_1.default(options);
+        this.requests = new NodeRequests_1.default(options.tlsParams, options.proxyOptions, options.proxyAgent, options.logger, options.enableEventCompression);
       }
     };
     exports.default = NodePlatform;
@@ -30820,12 +33005,9 @@ var require_LDClientNode = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     var events_1 = __require("events");
     var util_1 = __require("util");
-    var js_server_sdk_common_1 = require_dist2();
+    var js_server_sdk_common_1 = require_dist();
     var BigSegmentsStoreStatusProviderNode_1 = require_BigSegmentsStoreStatusProviderNode();
-    var Emits_1 = require_Emits();
     var NodePlatform_1 = require_NodePlatform();
-    var ClientEmitter = class extends events_1.EventEmitter {
-    };
     var LDClientNode = class extends js_server_sdk_common_1.LDClientImpl {
       constructor(sdkKey, options) {
         const fallbackLogger = new js_server_sdk_common_1.BasicLogger({
@@ -30834,12 +33016,28 @@ var require_LDClientNode = __commonJS({
           destination: console.error,
           formatter: util_1.format
         });
-        const emitter = new ClientEmitter();
         const logger = options.logger ? new js_server_sdk_common_1.SafeLogger(options.logger, fallbackLogger) : fallbackLogger;
-        super(sdkKey, new NodePlatform_1.default(Object.assign(Object.assign({}, options), { logger })), Object.assign(Object.assign({}, options), { logger }), {
+        const emitter = new events_1.EventEmitter();
+        const pluginValidator = js_server_sdk_common_1.TypeValidators.createTypeArray("LDPlugin", {});
+        const plugins = [];
+        if (options.plugins) {
+          if (pluginValidator.is(options.plugins)) {
+            plugins.push(...options.plugins);
+          } else {
+            logger.warn("Could not validate plugins.");
+          }
+        }
+        const baseOptions = Object.assign(Object.assign({}, options), { logger });
+        delete baseOptions.plugins;
+        delete baseOptions.proxyAgent;
+        const platform2 = new NodePlatform_1.default(Object.assign(Object.assign({}, options), { logger }));
+        const instanceId = platform2.crypto.randomUUID();
+        super(sdkKey, platform2, baseOptions, {
           onError: (err) => {
             if (emitter.listenerCount("error")) {
               emitter.emit("error", err);
+            } else {
+              logger.error(err.message);
             }
           },
           onFailed: (err) => {
@@ -30853,17 +33051,78 @@ var require_LDClientNode = __commonJS({
             emitter.emit(`update:${key}`, { key });
           },
           hasEventListeners: () => emitter.eventNames().some((name) => name === "update" || typeof name === "string" && name.startsWith("update:"))
+        }, {
+          getImplementationHooks: (environmentMetadata) => js_server_sdk_common_1.internal.safeGetHooks(logger, environmentMetadata, plugins),
+          instanceId
         });
         this.emitter = emitter;
         this.bigSegmentStoreStatusProvider = new BigSegmentsStoreStatusProviderNode_1.default(this.bigSegmentStatusProviderInternal);
+        js_server_sdk_common_1.internal.safeRegisterPlugins(logger, this.environmentMetadata, this, plugins);
+      }
+      // #region: EventEmitter
+      on(eventName, listener) {
+        this.emitter.on(eventName, listener);
+        return this;
+      }
+      addListener(eventName, listener) {
+        this.emitter.addListener(eventName, listener);
+        return this;
+      }
+      once(eventName, listener) {
+        this.emitter.once(eventName, listener);
+        return this;
+      }
+      removeListener(eventName, listener) {
+        this.emitter.removeListener(eventName, listener);
+        return this;
+      }
+      off(eventName, listener) {
+        this.emitter.off(eventName, listener);
+        return this;
+      }
+      removeAllListeners(event) {
+        this.emitter.removeAllListeners(event);
+        return this;
+      }
+      setMaxListeners(n) {
+        this.emitter.setMaxListeners(n);
+        return this;
+      }
+      getMaxListeners() {
+        return this.emitter.getMaxListeners();
+      }
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
+      listeners(eventName) {
+        return this.emitter.listeners(eventName);
+      }
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
+      rawListeners(eventName) {
+        return this.emitter.rawListeners(eventName);
+      }
+      emit(eventName, ...args) {
+        return this.emitter.emit(eventName, args);
+      }
+      listenerCount(eventName) {
+        return this.emitter.listenerCount(eventName);
+      }
+      prependListener(eventName, listener) {
+        this.emitter.prependListener(eventName, listener);
+        return this;
+      }
+      prependOnceListener(eventName, listener) {
+        this.emitter.prependOnceListener(eventName, listener);
+        return this;
+      }
+      eventNames() {
+        return this.emitter.eventNames();
       }
     };
-    exports.default = (0, Emits_1.Emits)(LDClientNode);
+    exports.default = LDClientNode;
   }
 });
 
 // node_modules/@launchdarkly/node-server-sdk/dist/src/index.js
-var require_src3 = __commonJS({
+var require_src2 = __commonJS({
   "node_modules/@launchdarkly/node-server-sdk/dist/src/index.js"(exports) {
     "use strict";
     var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
@@ -30884,9 +33143,9 @@ var require_src3 = __commonJS({
     };
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.basicLogger = exports.init = void 0;
-    var js_server_sdk_common_1 = require_dist2();
+    var js_server_sdk_common_1 = require_dist();
     var LDClientNode_1 = require_LDClientNode();
-    __exportStar(require_dist2(), exports);
+    __exportStar(require_dist(), exports);
     function init2(sdkKey, options = {}) {
       return new LDClientNode_1.default(sdkKey, options);
     }
@@ -31417,7 +33676,7 @@ function endGroup() {
 }
 
 // src/client.js
-var LaunchDarkly = __toESM(require_src3(), 1);
+var LaunchDarkly = __toESM(require_src2(), 1);
 var LDClient = class {
   constructor(sdkKey, options = {}) {
     debug(`Client options: ${JSON.stringify(options)}`);
