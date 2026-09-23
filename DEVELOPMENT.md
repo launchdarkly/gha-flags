@@ -3,7 +3,7 @@
 ## Getting started
 
 1. Run `npm run verify` locally before committing — it is the same gate CI runs (lint, format, tests, committed bundle, README docs)
-1. Install Node 24 (matches `action.yml`'s `using: node24` and the version CI pins)
+1. Install Node 24.19 or newer (`action.yml` targets `node24`, CI pins 24, and `github-action-readme-generator` requires `>=24.19.0`)
 1. Install dependencies
    ```
    npm i

@@ -2,26 +2,26 @@
 
 GitHub Action for evaluating LaunchDarkly flags in your workflow.
 
-<!-- action-docs-inputs -->
-
 ## Inputs
 
-| parameter    | description                                                                                                                                     | required | default                         |
-| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------- |
-| sdk-key      | Server-side SDK key for environment.                                                                                                            | `true`   |                                 |
-| flags        | Provide a list flag keys and default value in a comma separated format with a newline between each flag you want evaluated. `example-flag,true` | `true`   |                                 |
-| context-key  | The key of the context object used in a feature flag evaluation                                                                                 | `false`  | ld-github-action-flags          |
-| send-events  | Whether to send analytics events back to LaunchDarkly                                                                                           | `false`  | true                            |
-| offline      | Whether to use the LaunchDarkly SDK in offline mode                                                                                             | `false`  | false                           |
-| base-uri     | The base URI for the LaunchDarkly server. Most users should use the default value.                                                              | `false`  | https://app.launchdarkly.com    |
-| stream-uri   | The base URI for the LaunchDarkly streaming server. Most users should use the default value.                                                    | `false`  | https://stream.launchdarkly.com |
-| events-uri   | The base URI for the LaunchDarkly events server. Most users should use the default value.                                                       | `false`  | https://events.launchdarkly.com |
-| proxy-auth   | Allows you to specify basic authentication parameters for an optional HTTP proxy. Usually of the form username:password.                        | `false`  |                                 |
-| proxy-host   | Allows you to specify a host for an optional HTTP proxy. Both the host and port must be specified to enable proxy support.                      | `false`  |                                 |
-| proxy-port   | Allows you to specify a port for an optional HTTP proxy. Both the host and port must be specified to enable proxy support.                      | `false`  |                                 |
-| proxy-scheme | When using an HTTP proxy, specifies whether it is accessed via http or https                                                                    | `false`  |                                 |
+<!-- start inputs -->
 
-<!-- action-docs-inputs -->
+| **Input**                        | **Description**                                                                                                                                            | **Default**                                  | **Required** |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- | ------------ |
+| <b><code>sdk-key</code></b>      | Server-side SDK key for environment.                                                                                                                       |                                              | **true**     |
+| <b><code>flags</code></b>        | Provide a list flag keys and default value in a comma separated format with a newline between each flag you want evaluated. <code>example-flag,true</code> |                                              | **true**     |
+| <b><code>context-key</code></b>  | The key of the context object used in a feature flag evaluation                                                                                            | <code>ld-github-action-flags</code>          | **false**    |
+| <b><code>send-events</code></b>  | Whether to send analytics events back to LaunchDarkly                                                                                                      | <code>true</code>                            | **false**    |
+| <b><code>offline</code></b>      | Whether to use the LaunchDarkly SDK in offline mode                                                                                                        | <code>false</code>                           | **false**    |
+| <b><code>base-uri</code></b>     | The base URI for the LaunchDarkly server. Most users should use the default value.                                                                         | <code>https://app.launchdarkly.com</code>    | **false**    |
+| <b><code>stream-uri</code></b>   | The base URI for the LaunchDarkly streaming server. Most users should use the default value.                                                               | <code>https://stream.launchdarkly.com</code> | **false**    |
+| <b><code>events-uri</code></b>   | The base URI for the LaunchDarkly events server. Most users should use the default value.                                                                  | <code>https://events.launchdarkly.com</code> | **false**    |
+| <b><code>proxy-auth</code></b>   | Allows you to specify basic authentication parameters for an optional HTTP proxy. Usually of the form username:password.                                   |                                              | **false**    |
+| <b><code>proxy-host</code></b>   | Allows you to specify a host for an optional HTTP proxy. Both the host and port must be specified to enable proxy support.                                 |                                              | **false**    |
+| <b><code>proxy-port</code></b>   | Allows you to specify a port for an optional HTTP proxy. Both the host and port must be specified to enable proxy support.                                 |                                              | **false**    |
+| <b><code>proxy-scheme</code></b> | When using an HTTP proxy, specifies whether it is accessed via http or https                                                                               |                                              | **false**    |
+
+<!-- end inputs -->
 
 ## Output
 

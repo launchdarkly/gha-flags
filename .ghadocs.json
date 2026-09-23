@@ -1,0 +1,8 @@
+{
+  "owner": "launchdarkly",
+  "repo": "gha-flags",
+  "paths": {
+    "action": "action.yml",
+    "readme": "README.md"
+  }
+}
