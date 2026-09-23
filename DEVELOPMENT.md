@@ -3,7 +3,7 @@
 ## Getting started
 
 1. Run `npm run verify` locally before committing — it is the same gate CI runs (lint, prettier, tests, committed bundle, README docs)
-1. Install Node 20
+1. Install Node 24 (matches `action.yml`'s `using: node24` and the version CI pins)
 1. Install dependencies
    ```
    npm i
