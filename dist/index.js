@@ -33915,7 +33915,7 @@ function createContext(contextKey, filter, ignoreKey = "") {
   Object.keys(process.env).filter((key) => process.env[key] != "").filter((key) => key !== ignoreKey).filter((key) => key.startsWith(filter.prefix)).forEach((key) => {
     var k = filter.strip ? key.substring(filter.prefix.length) : key;
     ctx[k] = process.env[key];
-    debug(k + '="' + process.env[key]) + '"';
+    debug(k + '="' + process.env[key] + '"');
   });
   ctx["key"] = contextKey;
   return ctx;
