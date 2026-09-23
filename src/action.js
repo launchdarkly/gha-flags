@@ -62,6 +62,7 @@ export const run = async () => {
     ...ldCtx,
   };
 
+  core.info(JSON.stringify(ctx, null, 2));
   core.endGroup();
 
   const options = {

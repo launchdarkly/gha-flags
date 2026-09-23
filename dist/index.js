@@ -20499,8 +20499,8 @@ var require_cjs = __commonJS({
       }
       return a !== a && b !== b;
     }
-    function defaultHeaders(sdkKey, info, tags, includeAuthorizationHeader = true, userAgentHeaderName = "user-agent", instanceId) {
-      const { userAgentBase, version, wrapperName, wrapperVersion } = info.sdkData();
+    function defaultHeaders(sdkKey, info2, tags, includeAuthorizationHeader = true, userAgentHeaderName = "user-agent", instanceId) {
+      const { userAgentBase, version, wrapperName, wrapperVersion } = info2.sdkData();
       const headers = {
         [userAgentHeaderName]: `${userAgentBase ?? "NodeJSClient"}/${version}`
       };
@@ -33748,6 +33748,9 @@ function debug(message) {
 function error(message, properties = {}) {
   issueCommand("error", toCommandProperties(properties), message instanceof Error ? message.toString() : message);
 }
+function info(message) {
+  process.stdout.write(message + os4.EOL);
+}
 function startGroup(name) {
   issue("group", name);
 }
@@ -33876,6 +33879,7 @@ var run = async () => {
     ...githubCtx,
     ...ldCtx
   };
+  info(JSON.stringify(ctx, null, 2));
   endGroup();
   const options = {
     sendEvents,
