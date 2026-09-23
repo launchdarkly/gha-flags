@@ -33769,22 +33769,16 @@ var LDClient = class {
     await this.client.flush();
   }
   async evaluateFlag(flagKey, ctx, defaultValue) {
-    var timeout = null;
-    const timeoutPromise = new Promise((resolve, reject) => {
-      timeout = setTimeout(reject, 5e3);
-    });
     debug(`Evaluating flag ${flagKey}`);
     debug(`with context ${JSON.stringify(ctx)}`);
     try {
-      await Promise.race([timeoutPromise, this.client.waitForInitialization()]);
+      await this.client.waitForInitialization({ timeout: 5 });
       const result = await this.client.variation(flagKey, ctx, defaultValue);
       debug(`Flag ${flagKey} is ${JSON.stringify(result)}`);
       return result;
     } catch (error2) {
       console.error(error2);
       error("Failed to initialize SDK.");
-    } finally {
-      clearTimeout(timeout);
     }
     return void 0;
   }
