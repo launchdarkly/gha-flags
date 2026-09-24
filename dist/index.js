@@ -18966,52 +18966,6 @@ var require_undici = __commonJS({
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/dist/BigSegmentStatusProviderImpl.js
-var require_BigSegmentStatusProviderImpl = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/BigSegmentStatusProviderImpl.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var BigSegmentStoreStatusProviderImpl = class {
-      constructor(_onRequestStatus) {
-        this._onRequestStatus = _onRequestStatus;
-      }
-      /**
-       * Gets the current status of the store, if known.
-       *
-       * @returns a {@link BigSegmentStoreStatus}, or `undefined` if the SDK has not yet queried the
-       *   Big Segment store status
-       */
-      getStatus() {
-        return this._lastStatus;
-      }
-      /**
-       * Gets the current status of the store, querying it if the status has not already been queried.
-       *
-       * @returns a Promise for the status of the store
-       */
-      async requireStatus() {
-        if (!this._lastStatus) {
-          await this._onRequestStatus();
-        }
-        return this._lastStatus;
-      }
-      notify() {
-        var _a;
-        if (this._lastStatus) {
-          (_a = this._listener) === null || _a === void 0 ? void 0 : _a.call(this, this._lastStatus);
-        }
-      }
-      setListener(listener) {
-        this._listener = listener;
-      }
-      setStatus(status) {
-        this._lastStatus = status;
-      }
-    };
-    exports.default = BigSegmentStoreStatusProviderImpl;
-  }
-});
-
 // node_modules/@launchdarkly/js-sdk-common/dist/cjs/index.cjs
 var require_cjs = __commonJS({
   "node_modules/@launchdarkly/js-sdk-common/dist/cjs/index.cjs"(exports) {
@@ -21889,3752 +21843,12 @@ var require_cjs = __commonJS({
   }
 });
 
-// node_modules/@launchdarkly/js-server-sdk-common/dist/api/data/LDFlagsStateOptions.js
-var require_LDFlagsStateOptions = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/data/LDFlagsStateOptions.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/api/data/LDFlagsState.js
-var require_LDFlagsState = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/data/LDFlagsState.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/api/data/LDMigrationStage.js
-var require_LDMigrationStage = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/data/LDMigrationStage.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.IsMigrationStage = exports.LDMigrationStage = void 0;
-    var LDMigrationStage;
-    (function(LDMigrationStage2) {
-      LDMigrationStage2["Off"] = "off";
-      LDMigrationStage2["DualWrite"] = "dualwrite";
-      LDMigrationStage2["Shadow"] = "shadow";
-      LDMigrationStage2["Live"] = "live";
-      LDMigrationStage2["RampDown"] = "rampdown";
-      LDMigrationStage2["Complete"] = "complete";
-    })(LDMigrationStage || (exports.LDMigrationStage = LDMigrationStage = {}));
-    function IsMigrationStage(value) {
-      return Object.values(LDMigrationStage).includes(value);
-    }
-    exports.IsMigrationStage = IsMigrationStage;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/api/data/LDMigrationOpEvent.js
-var require_LDMigrationOpEvent = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/data/LDMigrationOpEvent.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/api/data/LDMigrationVariation.js
-var require_LDMigrationVariation = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/data/LDMigrationVariation.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.LDConsistencyCheck = void 0;
-    var LDConsistencyCheck;
-    (function(LDConsistencyCheck2) {
-      LDConsistencyCheck2[LDConsistencyCheck2["Inconsistent"] = 0] = "Inconsistent";
-      LDConsistencyCheck2[LDConsistencyCheck2["Consistent"] = 1] = "Consistent";
-      LDConsistencyCheck2[LDConsistencyCheck2["NotChecked"] = 2] = "NotChecked";
-    })(LDConsistencyCheck || (exports.LDConsistencyCheck = LDConsistencyCheck = {}));
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/api/data/index.js
-var require_data = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/data/index.js"(exports) {
-    "use strict";
-    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      var desc = Object.getOwnPropertyDescriptor(m, k);
-      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-        desc = { enumerable: true, get: function() {
-          return m[k];
-        } };
-      }
-      Object.defineProperty(o, k2, desc);
-    }) : (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      o[k2] = m[k];
-    }));
-    var __exportStar = exports && exports.__exportStar || function(m, exports2) {
-      for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports2, p)) __createBinding(exports2, m, p);
+// node_modules/semver/internal/debug.js
+var require_debug = __commonJS({
+  "node_modules/semver/internal/debug.js"(exports, module) {
+    var debug2 = typeof process === "object" && process.env && process.env.NODE_DEBUG && /\bsemver\b/i.test(process.env.NODE_DEBUG) ? (...args) => console.error("SEMVER", ...args) : () => {
     };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    __exportStar(require_LDFlagsStateOptions(), exports);
-    __exportStar(require_LDFlagsState(), exports);
-    __exportStar(require_LDMigrationStage(), exports);
-    __exportStar(require_LDMigrationOpEvent(), exports);
-    __exportStar(require_LDMigrationVariation(), exports);
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/api/options/LDBigSegmentsOptions.js
-var require_LDBigSegmentsOptions = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/options/LDBigSegmentsOptions.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/api/options/LDOptions.js
-var require_LDOptions = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/options/LDOptions.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/api/options/LDProxyOptions.js
-var require_LDProxyOptions = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/options/LDProxyOptions.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/api/options/LDTLSOptions.js
-var require_LDTLSOptions = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/options/LDTLSOptions.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/api/options/LDMigrationOptions.js
-var require_LDMigrationOptions = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/options/LDMigrationOptions.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.LDConcurrentExecution = exports.LDSerialExecution = exports.LDExecution = exports.LDExecutionOrdering = void 0;
-    var LDExecutionOrdering;
-    (function(LDExecutionOrdering2) {
-      LDExecutionOrdering2[LDExecutionOrdering2["Fixed"] = 0] = "Fixed";
-      LDExecutionOrdering2[LDExecutionOrdering2["Random"] = 1] = "Random";
-    })(LDExecutionOrdering || (exports.LDExecutionOrdering = LDExecutionOrdering = {}));
-    var LDExecution;
-    (function(LDExecution2) {
-      LDExecution2[LDExecution2["Serial"] = 0] = "Serial";
-      LDExecution2[LDExecution2["Concurrent"] = 1] = "Concurrent";
-    })(LDExecution || (exports.LDExecution = LDExecution = {}));
-    var LDSerialExecution = class {
-      constructor(ordering) {
-        this.ordering = ordering;
-        this.type = LDExecution.Serial;
-      }
-    };
-    exports.LDSerialExecution = LDSerialExecution;
-    var LDConcurrentExecution = class {
-      constructor() {
-        this.type = LDExecution.Concurrent;
-      }
-    };
-    exports.LDConcurrentExecution = LDConcurrentExecution;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/api/options/LDDataSystemOptions.js
-var require_LDDataSystemOptions = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/options/LDDataSystemOptions.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.isCustomOptions = exports.isPollingOnlyOptions = exports.isStreamingOnlyOptions = exports.isStandardOptions = void 0;
-    function isStandardOptions(u) {
-      return u.dataSourceOptionsType === "standard";
-    }
-    exports.isStandardOptions = isStandardOptions;
-    function isStreamingOnlyOptions(u) {
-      return u.dataSourceOptionsType === "streamingOnly";
-    }
-    exports.isStreamingOnlyOptions = isStreamingOnlyOptions;
-    function isPollingOnlyOptions(u) {
-      return u.dataSourceOptionsType === "pollingOnly";
-    }
-    exports.isPollingOnlyOptions = isPollingOnlyOptions;
-    function isCustomOptions(u) {
-      return u.dataSourceOptionsType === "custom";
-    }
-    exports.isCustomOptions = isCustomOptions;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/api/options/index.js
-var require_options = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/options/index.js"(exports) {
-    "use strict";
-    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      var desc = Object.getOwnPropertyDescriptor(m, k);
-      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-        desc = { enumerable: true, get: function() {
-          return m[k];
-        } };
-      }
-      Object.defineProperty(o, k2, desc);
-    }) : (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      o[k2] = m[k];
-    }));
-    var __exportStar = exports && exports.__exportStar || function(m, exports2) {
-      for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports2, p)) __createBinding(exports2, m, p);
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    __exportStar(require_LDBigSegmentsOptions(), exports);
-    __exportStar(require_LDOptions(), exports);
-    __exportStar(require_LDProxyOptions(), exports);
-    __exportStar(require_LDTLSOptions(), exports);
-    __exportStar(require_LDMigrationOptions(), exports);
-    __exportStar(require_LDDataSystemOptions(), exports);
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/api/LDClient.js
-var require_LDClient = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/LDClient.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/api/LDMigration.js
-var require_LDMigration = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/LDMigration.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/api/interfaces/DataKind.js
-var require_DataKind = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/interfaces/DataKind.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/api/subsystems/LDFeatureStore.js
-var require_LDFeatureStore = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/subsystems/LDFeatureStore.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/api/subsystems/LDTransactionalFeatureStore.js
-var require_LDTransactionalFeatureStore = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/subsystems/LDTransactionalFeatureStore.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/api/LDWaitForInitializationOptions.js
-var require_LDWaitForInitializationOptions = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/LDWaitForInitializationOptions.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/api/integrations/FileDataSourceOptions.js
-var require_FileDataSourceOptions = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/integrations/FileDataSourceOptions.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/api/integrations/Hook.js
-var require_Hook = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/integrations/Hook.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/api/integrations/index.js
-var require_integrations = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/integrations/index.js"(exports) {
-    "use strict";
-    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      var desc = Object.getOwnPropertyDescriptor(m, k);
-      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-        desc = { enumerable: true, get: function() {
-          return m[k];
-        } };
-      }
-      Object.defineProperty(o, k2, desc);
-    }) : (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      o[k2] = m[k];
-    }));
-    var __exportStar = exports && exports.__exportStar || function(m, exports2) {
-      for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports2, p)) __createBinding(exports2, m, p);
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    __exportStar(require_FileDataSourceOptions(), exports);
-    __exportStar(require_Hook(), exports);
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/api/interfaces/BigSegmentStore.js
-var require_BigSegmentStore = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/interfaces/BigSegmentStore.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/api/interfaces/BigSegmentStoreMembership.js
-var require_BigSegmentStoreMembership = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/interfaces/BigSegmentStoreMembership.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/api/interfaces/BigSegmentStoreMetadata.js
-var require_BigSegmentStoreMetadata = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/interfaces/BigSegmentStoreMetadata.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/api/interfaces/BigSegmentStoreStatus.js
-var require_BigSegmentStoreStatus = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/interfaces/BigSegmentStoreStatus.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/api/interfaces/DataCollection.js
-var require_DataCollection = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/interfaces/DataCollection.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/api/interfaces/FullDataSet.js
-var require_FullDataSet = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/interfaces/FullDataSet.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/api/interfaces/KeyedItems.js
-var require_KeyedItems = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/interfaces/KeyedItems.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/api/interfaces/VersionedData.js
-var require_VersionedData = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/interfaces/VersionedData.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/api/interfaces/BigSegmentStoreStatusProvider.js
-var require_BigSegmentStoreStatusProvider = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/interfaces/BigSegmentStoreStatusProvider.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/api/interfaces/persistent_store/index.js
-var require_persistent_store = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/interfaces/persistent_store/index.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/api/interfaces/index.js
-var require_interfaces = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/interfaces/index.js"(exports) {
-    "use strict";
-    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      var desc = Object.getOwnPropertyDescriptor(m, k);
-      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-        desc = { enumerable: true, get: function() {
-          return m[k];
-        } };
-      }
-      Object.defineProperty(o, k2, desc);
-    }) : (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      o[k2] = m[k];
-    }));
-    var __exportStar = exports && exports.__exportStar || function(m, exports2) {
-      for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports2, p)) __createBinding(exports2, m, p);
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    __exportStar(require_BigSegmentStore(), exports);
-    __exportStar(require_BigSegmentStoreMembership(), exports);
-    __exportStar(require_BigSegmentStoreMetadata(), exports);
-    __exportStar(require_BigSegmentStoreStatus(), exports);
-    __exportStar(require_DataCollection(), exports);
-    __exportStar(require_DataKind(), exports);
-    __exportStar(require_FullDataSet(), exports);
-    __exportStar(require_KeyedItems(), exports);
-    __exportStar(require_VersionedData(), exports);
-    __exportStar(require_BigSegmentStoreStatusProvider(), exports);
-    __exportStar(require_persistent_store(), exports);
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/api/subsystems/LDDataSourceUpdates.js
-var require_LDDataSourceUpdates = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/subsystems/LDDataSourceUpdates.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/api/subsystems/LDFeatureRequestor.js
-var require_LDFeatureRequestor = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/subsystems/LDFeatureRequestor.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/api/subsystems/LDTransactionalDataSourceUpdates.js
-var require_LDTransactionalDataSourceUpdates = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/subsystems/LDTransactionalDataSourceUpdates.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/api/subsystems/index.js
-var require_subsystems = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/subsystems/index.js"(exports) {
-    "use strict";
-    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      var desc = Object.getOwnPropertyDescriptor(m, k);
-      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-        desc = { enumerable: true, get: function() {
-          return m[k];
-        } };
-      }
-      Object.defineProperty(o, k2, desc);
-    }) : (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      o[k2] = m[k];
-    }));
-    var __exportStar = exports && exports.__exportStar || function(m, exports2) {
-      for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports2, p)) __createBinding(exports2, m, p);
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    __exportStar(require_LDDataSourceUpdates(), exports);
-    __exportStar(require_LDFeatureRequestor(), exports);
-    __exportStar(require_LDFeatureStore(), exports);
-    __exportStar(require_LDTransactionalDataSourceUpdates(), exports);
-    __exportStar(require_LDTransactionalFeatureStore(), exports);
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/api/index.js
-var require_api2 = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/api/index.js"(exports) {
-    "use strict";
-    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      var desc = Object.getOwnPropertyDescriptor(m, k);
-      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-        desc = { enumerable: true, get: function() {
-          return m[k];
-        } };
-      }
-      Object.defineProperty(o, k2, desc);
-    }) : (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      o[k2] = m[k];
-    }));
-    var __exportStar = exports && exports.__exportStar || function(m, exports2) {
-      for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports2, p)) __createBinding(exports2, m, p);
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.subsystems = exports.interfaces = exports.integrations = void 0;
-    __exportStar(require_data(), exports);
-    __exportStar(require_options(), exports);
-    __exportStar(require_LDClient(), exports);
-    __exportStar(require_LDMigration(), exports);
-    __exportStar(require_DataKind(), exports);
-    __exportStar(require_LDFeatureStore(), exports);
-    __exportStar(require_LDTransactionalFeatureStore(), exports);
-    __exportStar(require_LDWaitForInitializationOptions(), exports);
-    exports.integrations = require_integrations();
-    exports.interfaces = require_interfaces();
-    exports.subsystems = require_subsystems();
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/cache/LruCache.js
-var require_LruCache = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/cache/LruCache.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var LruCache = class {
-      constructor(options) {
-        this._keyMap = /* @__PURE__ */ new Map();
-        this._head = 0;
-        this._tail = 0;
-        this._size = 0;
-        const { max } = options;
-        this._max = max;
-        this._values = new Array(max);
-        this._keys = new Array(max);
-        this._next = new Uint32Array(max);
-        this._prev = new Uint32Array(max);
-        if (options.maxAge) {
-          this._lastUpdated = new Array(max).fill(0);
-          this._maxAge = options.maxAge;
-        } else {
-          this._lastUpdated = [];
-          this._maxAge = 0;
-        }
-      }
-      set(key, val) {
-        let index = this._keyMap.get(key);
-        if (index === void 0) {
-          index = this._index();
-          this._keys[index] = key;
-          this._keyMap.set(key, index);
-          this._next[this._tail] = index;
-          this._prev[index] = this._tail;
-          this._tail = index;
-          this._size += 1;
-        } else {
-          this._setTail(index);
-        }
-        this._values[index] = val;
-        if (this._maxAge) {
-          this._lastUpdated[index] = Date.now();
-        }
-      }
-      get(key) {
-        const index = this._keyMap.get(key);
-        if (index !== void 0) {
-          if (this._maxAge) {
-            const lastUpdated = this._lastUpdated[index];
-            if (Date.now() - lastUpdated > this._maxAge) {
-              return void 0;
-            }
-          }
-          this._setTail(index);
-          if (this._maxAge) {
-            this._lastUpdated[index] = Date.now();
-          }
-          return this._values[index];
-        }
-        return void 0;
-      }
-      clear() {
-        this._head = 0;
-        this._tail = 0;
-        this._size = 0;
-        this._values.fill(void 0);
-        this._keys.fill(void 0);
-        this._next.fill(0);
-        this._prev.fill(0);
-        this._keyMap.clear();
-      }
-      _index() {
-        if (this._size === 0) {
-          return this._tail;
-        }
-        if (this._size === this._max) {
-          return this._evict();
-        }
-        return this._size;
-      }
-      _evict() {
-        const { _head: head } = this;
-        const k = this._keys[head];
-        this._head = this._next[head];
-        this._keyMap.delete(k);
-        this._size -= 1;
-        return head;
-      }
-      _link(p, n) {
-        this._prev[n] = p;
-        this._next[p] = n;
-      }
-      _setTail(index) {
-        if (index !== this._tail) {
-          if (index === this._head) {
-            this._head = this._next[index];
-          } else {
-            this._link(this._prev[index], this._next[index]);
-          }
-          this._link(this._tail, index);
-          this._tail = index;
-        }
-      }
-    };
-    exports.default = LruCache;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/BigSegmentsManager.js
-var require_BigSegmentsManager = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/BigSegmentsManager.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var js_sdk_common_1 = require_cjs();
-    var BigSegmentStatusProviderImpl_1 = require_BigSegmentStatusProviderImpl();
-    var LruCache_1 = require_LruCache();
-    var DEFAULT_STALE_AFTER_SECONDS = 120;
-    var DEFAULT_STATUS_POLL_INTERVAL_SECONDS = 5;
-    var DEFAULT_USER_CACHE_SIZE = 1e3;
-    var DEFAULT_USER_CACHE_TIME_SECONDS = 5;
-    var BigSegmentsManager = class {
-      constructor(_store, config, _logger, _crypto) {
-        this._store = _store;
-        this._logger = _logger;
-        this._crypto = _crypto;
-        this.statusProvider = new BigSegmentStatusProviderImpl_1.default(async () => this._pollStoreAndUpdateStatus());
-        this._staleTimeMs = (js_sdk_common_1.TypeValidators.Number.is(config.staleAfter) && config.staleAfter > 0 ? config.staleAfter : DEFAULT_STALE_AFTER_SECONDS) * 1e3;
-        const pollIntervalMs = (js_sdk_common_1.TypeValidators.Number.is(config.statusPollInterval) && config.statusPollInterval > 0 ? config.statusPollInterval : DEFAULT_STATUS_POLL_INTERVAL_SECONDS) * 1e3;
-        this._pollHandle = _store ? setInterval(() => this._pollStoreAndUpdateStatus(), pollIntervalMs) : null;
-        if (_store) {
-          this._cache = new LruCache_1.default({
-            max: config.userCacheSize || DEFAULT_USER_CACHE_SIZE,
-            maxAge: (config.userCacheTime || DEFAULT_USER_CACHE_TIME_SECONDS) * 1e3
-          });
-        }
-      }
-      close() {
-        if (this._pollHandle) {
-          clearInterval(this._pollHandle);
-          this._pollHandle = void 0;
-        }
-        if (this._store) {
-          this._store.close();
-        }
-      }
-      async getUserMembership(userKey) {
-        var _a, _b, _c;
-        if (!this._store) {
-          return void 0;
-        }
-        const memberCache = (_a = this._cache) === null || _a === void 0 ? void 0 : _a.get(userKey);
-        let membership;
-        if (!memberCache) {
-          try {
-            membership = await this._store.getUserMembership(this._hashForUserKey(userKey));
-            const cacheItem = { membership };
-            (_b = this._cache) === null || _b === void 0 ? void 0 : _b.set(userKey, cacheItem);
-          } catch (err) {
-            (_c = this._logger) === null || _c === void 0 ? void 0 : _c.error(`Big Segment store membership query returned error: ${err}`);
-            return [null, "STORE_ERROR"];
-          }
-        } else {
-          membership = memberCache.membership;
-        }
-        if (!this.statusProvider.getStatus()) {
-          await this._pollStoreAndUpdateStatus();
-        }
-        const lastStatus = this.statusProvider.getStatus();
-        if (!lastStatus.available) {
-          return [membership || null, "STORE_ERROR"];
-        }
-        return [membership || null, lastStatus.stale ? "STALE" : "HEALTHY"];
-      }
-      async _pollStoreAndUpdateStatus() {
-        var _a, _b, _c;
-        if (!this._store) {
-          this.statusProvider.setStatus({ available: false, stale: false });
-          return;
-        }
-        (_a = this._logger) === null || _a === void 0 ? void 0 : _a.debug("Querying Big Segment store status");
-        let newStatus;
-        try {
-          const metadata = await this._store.getMetadata();
-          newStatus = {
-            available: true,
-            stale: !metadata || !metadata.lastUpToDate || this._isStale(metadata.lastUpToDate)
-          };
-        } catch (err) {
-          (_b = this._logger) === null || _b === void 0 ? void 0 : _b.error(`Big Segment store status query returned error: ${err}`);
-          newStatus = { available: false, stale: false };
-        }
-        const lastStatus = this.statusProvider.getStatus();
-        if (!lastStatus || lastStatus.available !== newStatus.available || lastStatus.stale !== newStatus.stale) {
-          (_c = this._logger) === null || _c === void 0 ? void 0 : _c.debug("Big Segment store status changed from %s to %s", JSON.stringify(lastStatus), JSON.stringify(newStatus));
-          this.statusProvider.setStatus(newStatus);
-          this.statusProvider.notify();
-        }
-      }
-      _hashForUserKey(userKey) {
-        const hasher = this._crypto.createHash("sha256");
-        hasher.update(userKey);
-        if (!hasher.digest) {
-          throw new Error("Platform must implement digest or asyncDigest");
-        }
-        return hasher.digest("base64");
-      }
-      _isStale(timestamp) {
-        return Date.now() - timestamp >= this._staleTimeMs;
-      }
-    };
-    exports.default = BigSegmentsManager;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/createPluginEnvironmentMetadata.js
-var require_createPluginEnvironmentMetadata = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/createPluginEnvironmentMetadata.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.createPluginEnvironmentMetadata = void 0;
-    function createPluginEnvironmentMetadata(_platform, _sdkKey, config) {
-      const environmentMetadata = {
-        sdk: {
-          name: _platform.info.sdkData().userAgentBase,
-          version: _platform.info.sdkData().version
-        },
-        sdkKey: _sdkKey
-      };
-      if (_platform.info.sdkData().wrapperName) {
-        environmentMetadata.sdk.wrapperName = _platform.info.sdkData().wrapperName;
-      }
-      if (_platform.info.sdkData().wrapperVersion) {
-        environmentMetadata.sdk.wrapperVersion = _platform.info.sdkData().wrapperVersion;
-      }
-      if (config.applicationInfo) {
-        environmentMetadata.application = config.applicationInfo;
-      }
-      return environmentMetadata;
-    }
-    exports.createPluginEnvironmentMetadata = createPluginEnvironmentMetadata;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/createPayloadListenerFDv2.js
-var require_createPayloadListenerFDv2 = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/createPayloadListenerFDv2.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.createPayloadListener = void 0;
-    var namespaceForKind = (kind) => {
-      switch (kind) {
-        case "flag":
-          return "features";
-        case "segment":
-          return "segments";
-        default:
-          return kind;
-      }
-    };
-    var createPayloadListener = (dataSourceUpdates, logger, initializedCallback = () => {
-    }) => (dataContainer) => {
-      const { initMetadata, payload } = dataContainer;
-      if (payload.type === "full") {
-        logger === null || logger === void 0 ? void 0 : logger.debug("Initializing all data");
-      } else if (payload.updates.length > 0) {
-        logger === null || logger === void 0 ? void 0 : logger.debug("Applying updates");
-      } else {
-        logger === null || logger === void 0 ? void 0 : logger.debug("Payload had no updates, ignoring.");
-        return;
-      }
-      const converted = {};
-      payload.updates.forEach((it) => {
-        const namespace = namespaceForKind(it.kind);
-        if (converted[namespace]) {
-          converted[namespace][it.key] = Object.assign(Object.assign({ version: it.version }, it.deleted && { deleted: it.deleted }), it.object);
-        } else {
-          converted[namespace] = {
-            [it.key]: Object.assign(Object.assign({ version: it.version }, it.deleted && { deleted: it.deleted }), it.object)
-          };
-        }
-        if (it.deleted) {
-          logger === null || logger === void 0 ? void 0 : logger.debug(`Deleting ${it.key} in ${it.kind}`);
-        } else {
-          logger === null || logger === void 0 ? void 0 : logger.debug(`Updating ${it.key} in ${it.kind}`);
-        }
-      });
-      dataSourceUpdates.applyChanges(payload.type === "full", converted, () => {
-        if (payload.state !== "") {
-          initializedCallback();
-        }
-      }, initMetadata, payload.state);
-    };
-    exports.createPayloadListener = createPayloadListener;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/store/VersionedDataKinds.js
-var require_VersionedDataKinds = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/store/VersionedDataKinds.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var VersionedDataKinds = class {
-      static getKeyFromPath(kind, path) {
-        return path.startsWith(kind.streamApiPath) ? path.substring(kind.streamApiPath.length) : void 0;
-      }
-    };
-    VersionedDataKinds.Features = {
-      namespace: "features",
-      streamApiPath: "/flags/"
-    };
-    VersionedDataKinds.Segments = {
-      namespace: "segments",
-      streamApiPath: "/segments/"
-    };
-    exports.default = VersionedDataKinds;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/store/serialization.js
-var require_serialization = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/store/serialization.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.deserializeSegment = exports.serializeSegment = exports.deserializeFlag = exports.serializeFlag = exports.deserializeDelete = exports.deserializePatch = exports.deserializePoll = exports.deserializeAll = exports.reviveFullPayload = exports.processSegment = exports.processFlag = exports.replacer = exports.nullReplacer = void 0;
-    var js_sdk_common_1 = require_cjs();
-    var VersionedDataKinds_1 = require_VersionedDataKinds();
-    var TARGET_LIST_ARRAY_CUTOFF = 100;
-    function nullReplacer(target, excludeKeys) {
-      const stack = [];
-      if (target === null || target === void 0) {
-        return;
-      }
-      const filteredEntries = Object.entries(target).filter(([key, _value]) => !(excludeKeys === null || excludeKeys === void 0 ? void 0 : excludeKeys.includes(key)));
-      stack.push(...filteredEntries.map(([key, value]) => ({
-        key,
-        value,
-        parent: target
-      })));
-      while (stack.length) {
-        const item = stack.pop();
-        if (item.value === null && !Array.isArray(item.parent)) {
-          delete item.parent[item.key];
-        } else if (typeof item.value === "object" && item.value !== null) {
-          stack.push(...Object.entries(item.value).map(([key, value]) => ({
-            key,
-            value,
-            parent: item.value
-          })));
-        }
-      }
-    }
-    exports.nullReplacer = nullReplacer;
-    function replacer(key, value) {
-      if (value instanceof js_sdk_common_1.AttributeReference) {
-        return void 0;
-      }
-      if (Array.isArray(value)) {
-        if (value[0] && value[0] instanceof js_sdk_common_1.AttributeReference) {
-          return void 0;
-        }
-      }
-      if (value === null || value === void 0) {
-        return value;
-      }
-      if (value.generated_includedSet) {
-        value.included = [...value.generated_includedSet];
-        delete value.generated_includedSet;
-      }
-      if (value.generated_excludedSet) {
-        value.excluded = [...value.generated_excludedSet];
-        delete value.generated_excludedSet;
-      }
-      if (value.includedContexts) {
-        value.includedContexts.forEach((target) => {
-          if (target.generated_valuesSet) {
-            target.values = [...target.generated_valuesSet];
-          }
-          delete target.generated_valuesSet;
-        });
-      }
-      if (value.excludedContexts) {
-        value.excludedContexts.forEach((target) => {
-          if (target.generated_valuesSet) {
-            target.values = [...target.generated_valuesSet];
-          }
-          delete target.generated_valuesSet;
-        });
-      }
-      return value;
-    }
-    exports.replacer = replacer;
-    function processRollout(rollout) {
-      if (rollout && rollout.bucketBy) {
-        rollout.bucketByAttributeReference = new js_sdk_common_1.AttributeReference(rollout.bucketBy, !rollout.contextKind);
-      }
-    }
-    function processFlag(flag) {
-      var _a;
-      nullReplacer(flag, ["variations"]);
-      if (flag.fallthrough && flag.fallthrough.rollout) {
-        const rollout = flag.fallthrough.rollout;
-        processRollout(rollout);
-      }
-      (_a = flag === null || flag === void 0 ? void 0 : flag.rules) === null || _a === void 0 ? void 0 : _a.forEach((rule) => {
-        var _a2;
-        processRollout(rule.rollout);
-        (_a2 = rule === null || rule === void 0 ? void 0 : rule.clauses) === null || _a2 === void 0 ? void 0 : _a2.forEach((clause) => {
-          if (clause && clause.attribute) {
-            clause.attributeReference = new js_sdk_common_1.AttributeReference(clause.attribute, !clause.contextKind);
-          } else if (clause) {
-            clause.attributeReference = js_sdk_common_1.AttributeReference.InvalidReference;
-          }
-        });
-      });
-    }
-    exports.processFlag = processFlag;
-    function processSegment(segment) {
-      var _a, _b, _c, _d, _e;
-      nullReplacer(segment);
-      if (((_a = segment === null || segment === void 0 ? void 0 : segment.included) === null || _a === void 0 ? void 0 : _a.length) && segment.included.length > TARGET_LIST_ARRAY_CUTOFF) {
-        segment.generated_includedSet = new Set(segment.included);
-        delete segment.included;
-      }
-      if (((_b = segment === null || segment === void 0 ? void 0 : segment.excluded) === null || _b === void 0 ? void 0 : _b.length) && segment.excluded.length > TARGET_LIST_ARRAY_CUTOFF) {
-        segment.generated_excludedSet = new Set(segment.excluded);
-        delete segment.excluded;
-      }
-      if ((_c = segment === null || segment === void 0 ? void 0 : segment.includedContexts) === null || _c === void 0 ? void 0 : _c.length) {
-        segment.includedContexts.forEach((target) => {
-          var _a2;
-          if (((_a2 = target === null || target === void 0 ? void 0 : target.values) === null || _a2 === void 0 ? void 0 : _a2.length) && target.values.length > TARGET_LIST_ARRAY_CUTOFF) {
-            target.generated_valuesSet = new Set(target.values);
-            target.values = [];
-          }
-        });
-      }
-      if ((_d = segment === null || segment === void 0 ? void 0 : segment.excludedContexts) === null || _d === void 0 ? void 0 : _d.length) {
-        segment.excludedContexts.forEach((target) => {
-          var _a2;
-          if (((_a2 = target === null || target === void 0 ? void 0 : target.values) === null || _a2 === void 0 ? void 0 : _a2.length) && target.values.length > TARGET_LIST_ARRAY_CUTOFF) {
-            target.generated_valuesSet = new Set(target.values);
-            target.values = [];
-          }
-        });
-      }
-      (_e = segment === null || segment === void 0 ? void 0 : segment.rules) === null || _e === void 0 ? void 0 : _e.forEach((rule) => {
-        var _a2;
-        if (rule.bucketBy) {
-          rule.bucketByAttributeReference = new js_sdk_common_1.AttributeReference(rule.bucketBy, !rule.rolloutContextKind);
-        }
-        (_a2 = rule === null || rule === void 0 ? void 0 : rule.clauses) === null || _a2 === void 0 ? void 0 : _a2.forEach((clause) => {
-          if (clause && clause.attribute) {
-            clause.attributeReference = new js_sdk_common_1.AttributeReference(clause.attribute, !clause.contextKind);
-          } else if (clause) {
-            clause.attributeReference = js_sdk_common_1.AttributeReference.InvalidReference;
-          }
-        });
-      });
-    }
-    exports.processSegment = processSegment;
-    function tryParse(data) {
-      try {
-        return JSON.parse(data);
-      } catch (_a) {
-        return void 0;
-      }
-    }
-    function reviveFullPayload(payload) {
-      const flagsAndSegments = payload;
-      Object.values((flagsAndSegments === null || flagsAndSegments === void 0 ? void 0 : flagsAndSegments.flags) || []).forEach((flag) => {
-        processFlag(flag);
-      });
-      Object.values((flagsAndSegments === null || flagsAndSegments === void 0 ? void 0 : flagsAndSegments.segments) || []).forEach((segment) => {
-        processSegment(segment);
-      });
-      return flagsAndSegments;
-    }
-    exports.reviveFullPayload = reviveFullPayload;
-    function deserializeAll(data) {
-      const parsed = tryParse(data);
-      if (!parsed) {
-        return void 0;
-      }
-      reviveFullPayload(parsed === null || parsed === void 0 ? void 0 : parsed.data);
-      return parsed;
-    }
-    exports.deserializeAll = deserializeAll;
-    function deserializePoll(data) {
-      const parsed = tryParse(data);
-      if (!parsed) {
-        return void 0;
-      }
-      reviveFullPayload(parsed);
-      return parsed;
-    }
-    exports.deserializePoll = deserializePoll;
-    function deserializePatch(data) {
-      const parsed = tryParse(data);
-      if (!parsed) {
-        return void 0;
-      }
-      if (parsed.path.startsWith(VersionedDataKinds_1.default.Features.streamApiPath)) {
-        processFlag(parsed.data);
-        parsed.kind = VersionedDataKinds_1.default.Features;
-      } else if (parsed.path.startsWith(VersionedDataKinds_1.default.Segments.streamApiPath)) {
-        processSegment(parsed.data);
-        parsed.kind = VersionedDataKinds_1.default.Segments;
-      }
-      return parsed;
-    }
-    exports.deserializePatch = deserializePatch;
-    function deserializeDelete(data) {
-      const parsed = tryParse(data);
-      if (!parsed) {
-        return void 0;
-      }
-      if (parsed.path.startsWith(VersionedDataKinds_1.default.Features.streamApiPath)) {
-        parsed.kind = VersionedDataKinds_1.default.Features;
-      } else if (parsed.path.startsWith(VersionedDataKinds_1.default.Segments.streamApiPath)) {
-        parsed.kind = VersionedDataKinds_1.default.Segments;
-      }
-      return parsed;
-    }
-    exports.deserializeDelete = deserializeDelete;
-    function serializeFlag(flag) {
-      return JSON.stringify(flag, replacer);
-    }
-    exports.serializeFlag = serializeFlag;
-    function deserializeFlag(data) {
-      const parsed = tryParse(data);
-      if (!parsed) {
-        return void 0;
-      }
-      processFlag(parsed);
-      return parsed;
-    }
-    exports.deserializeFlag = deserializeFlag;
-    function serializeSegment(segment) {
-      return JSON.stringify(segment, replacer);
-    }
-    exports.serializeSegment = serializeSegment;
-    function deserializeSegment(data) {
-      const parsed = tryParse(data);
-      if (!parsed) {
-        return void 0;
-      }
-      processSegment(parsed);
-      return parsed;
-    }
-    exports.deserializeSegment = deserializeSegment;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/createStreamListeners.js
-var require_createStreamListeners = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/createStreamListeners.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.createStreamListeners = exports.createDeleteListener = exports.createPatchListener = exports.createPutListener = void 0;
-    var js_sdk_common_1 = require_cjs();
-    var serialization_1 = require_serialization();
-    var VersionedDataKinds_1 = require_VersionedDataKinds();
-    var { initMetadataFromHeaders } = js_sdk_common_1.internal;
-    var createPutListener = (dataSourceUpdates, logger, onPutCompleteHandler = () => {
-    }) => ({
-      deserializeData: serialization_1.deserializeAll,
-      processJson: async ({ data: { flags, segments } }, initHeaders) => {
-        const initData = {
-          [VersionedDataKinds_1.default.Features.namespace]: flags,
-          [VersionedDataKinds_1.default.Segments.namespace]: segments
-        };
-        logger === null || logger === void 0 ? void 0 : logger.debug("Initializing all data");
-        dataSourceUpdates.init(initData, onPutCompleteHandler, initMetadataFromHeaders(initHeaders));
-      }
-    });
-    exports.createPutListener = createPutListener;
-    var createPatchListener = (dataSourceUpdates, logger, onPatchCompleteHandler = () => {
-    }) => ({
-      deserializeData: serialization_1.deserializePatch,
-      processJson: async ({ data, kind, path }) => {
-        if (kind) {
-          const key = VersionedDataKinds_1.default.getKeyFromPath(kind, path);
-          if (key) {
-            logger === null || logger === void 0 ? void 0 : logger.debug(`Updating ${key} in ${kind.namespace}`);
-            dataSourceUpdates.upsert(kind, data, onPatchCompleteHandler);
-          }
-        }
-      }
-    });
-    exports.createPatchListener = createPatchListener;
-    var createDeleteListener = (dataSourceUpdates, logger, onDeleteCompleteHandler = () => {
-    }) => ({
-      deserializeData: serialization_1.deserializeDelete,
-      processJson: async ({ kind, path, version }) => {
-        if (kind) {
-          const key = VersionedDataKinds_1.default.getKeyFromPath(kind, path);
-          if (key) {
-            logger === null || logger === void 0 ? void 0 : logger.debug(`Deleting ${key} in ${kind.namespace}`);
-            dataSourceUpdates.upsert(kind, {
-              key,
-              version,
-              deleted: true
-            }, onDeleteCompleteHandler);
-          }
-        }
-      }
-    });
-    exports.createDeleteListener = createDeleteListener;
-    var createStreamListeners = (dataSourceUpdates, logger, onCompleteHandlers) => {
-      const listeners = /* @__PURE__ */ new Map();
-      listeners.set("put", (0, exports.createPutListener)(dataSourceUpdates, logger, onCompleteHandlers === null || onCompleteHandlers === void 0 ? void 0 : onCompleteHandlers.put));
-      listeners.set("patch", (0, exports.createPatchListener)(dataSourceUpdates, logger, onCompleteHandlers === null || onCompleteHandlers === void 0 ? void 0 : onCompleteHandlers.patch));
-      listeners.set("delete", (0, exports.createDeleteListener)(dataSourceUpdates, logger, onCompleteHandlers === null || onCompleteHandlers === void 0 ? void 0 : onCompleteHandlers.delete));
-      return listeners;
-    };
-    exports.createStreamListeners = createStreamListeners;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/NamespacedDataSet.js
-var require_NamespacedDataSet = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/NamespacedDataSet.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var NamespacedDataSet = class {
-      constructor() {
-        this._itemsByNamespace = {};
-      }
-      get(namespace, key) {
-        var _a;
-        return (_a = this._itemsByNamespace[namespace]) === null || _a === void 0 ? void 0 : _a[key];
-      }
-      set(namespace, key, value) {
-        if (!(namespace in this._itemsByNamespace)) {
-          this._itemsByNamespace[namespace] = {};
-        }
-        this._itemsByNamespace[namespace][key] = value;
-      }
-      remove(namespace, key) {
-        const items = this._itemsByNamespace[namespace];
-        if (items) {
-          delete items[key];
-        }
-      }
-      removeAll() {
-        this._itemsByNamespace = {};
-      }
-      enumerate(callback) {
-        Object.entries(this._itemsByNamespace).forEach(([namespace, values]) => {
-          Object.entries(values).forEach(([key, value]) => {
-            callback(namespace, key, value);
-          });
-        });
-      }
-      mergeFrom(other) {
-        other.enumerate(this.set.bind(this));
-      }
-    };
-    exports.default = NamespacedDataSet;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/DependencyTracker.js
-var require_DependencyTracker = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/DependencyTracker.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var NamespacedDataSet_1 = require_NamespacedDataSet();
-    var DependencyTracker = class {
-      constructor() {
-        this._dependenciesFrom = new NamespacedDataSet_1.default();
-        this._dependenciesTo = new NamespacedDataSet_1.default();
-      }
-      updateDependenciesFrom(namespace, key, newDependencySet) {
-        const oldDependencySet = this._dependenciesFrom.get(namespace, key);
-        oldDependencySet === null || oldDependencySet === void 0 ? void 0 : oldDependencySet.enumerate((depNs, depKey) => {
-          const depsToThisDep = this._dependenciesTo.get(depNs, depKey);
-          depsToThisDep === null || depsToThisDep === void 0 ? void 0 : depsToThisDep.remove(namespace, key);
-        });
-        this._dependenciesFrom.set(namespace, key, newDependencySet);
-        newDependencySet === null || newDependencySet === void 0 ? void 0 : newDependencySet.enumerate((depNs, depKey) => {
-          let depsToThisDep = this._dependenciesTo.get(depNs, depKey);
-          if (!depsToThisDep) {
-            depsToThisDep = new NamespacedDataSet_1.default();
-            this._dependenciesTo.set(depNs, depKey, depsToThisDep);
-          }
-          depsToThisDep.set(namespace, key, true);
-        });
-      }
-      updateModifiedItems(inDependencySet, modifiedNamespace, modifiedKey) {
-        if (!inDependencySet.get(modifiedNamespace, modifiedKey)) {
-          inDependencySet.set(modifiedNamespace, modifiedKey, true);
-          const affectedItems = this._dependenciesTo.get(modifiedNamespace, modifiedKey);
-          affectedItems === null || affectedItems === void 0 ? void 0 : affectedItems.enumerate((namespace, key) => {
-            this.updateModifiedItems(inDependencySet, namespace, key);
-          });
-        }
-      }
-      reset() {
-        this._dependenciesFrom.removeAll();
-        this._dependenciesTo.removeAll();
-      }
-    };
-    exports.default = DependencyTracker;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/DataSourceUpdates.js
-var require_DataSourceUpdates = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/DataSourceUpdates.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.computeDependencies = void 0;
-    var VersionedDataKinds_1 = require_VersionedDataKinds();
-    var DependencyTracker_1 = require_DependencyTracker();
-    var NamespacedDataSet_1 = require_NamespacedDataSet();
-    function computeDependencies(namespace, item) {
-      var _a, _b;
-      const ret = new NamespacedDataSet_1.default();
-      const isFlag = namespace === VersionedDataKinds_1.default.Features.namespace;
-      const isSegment = namespace === VersionedDataKinds_1.default.Segments.namespace;
-      if (isFlag) {
-        const flag = item;
-        (_a = flag === null || flag === void 0 ? void 0 : flag.prerequisites) === null || _a === void 0 ? void 0 : _a.forEach((prereq) => {
-          ret.set(namespace, prereq.key, true);
-        });
-      }
-      if (isFlag || isSegment) {
-        const itemWithRuleClauses = item;
-        (_b = itemWithRuleClauses === null || itemWithRuleClauses === void 0 ? void 0 : itemWithRuleClauses.rules) === null || _b === void 0 ? void 0 : _b.forEach((rule) => {
-          var _a2;
-          (_a2 = rule.clauses) === null || _a2 === void 0 ? void 0 : _a2.forEach((clause) => {
-            if (clause.op === "segmentMatch") {
-              clause.values.forEach((value) => {
-                ret.set(VersionedDataKinds_1.default.Segments.namespace, value, true);
-              });
-            }
-          });
-        });
-      }
-      return ret;
-    }
-    exports.computeDependencies = computeDependencies;
-    var DataSourceUpdates = class {
-      constructor(_featureStore, _hasEventListeners, _onChange) {
-        this._featureStore = _featureStore;
-        this._hasEventListeners = _hasEventListeners;
-        this._onChange = _onChange;
-        this._dependencyTracker = new DependencyTracker_1.default();
-      }
-      init(allData, callback, initMetadata) {
-        const checkForChanges = this._hasEventListeners();
-        const doInit = (oldData) => {
-          this._featureStore.init(allData, () => {
-            Promise.resolve().then(() => {
-              this._dependencyTracker.reset();
-              Object.entries(allData).forEach(([namespace, items]) => {
-                Object.keys(items || {}).forEach((key) => {
-                  const item = items[key];
-                  this._dependencyTracker.updateDependenciesFrom(namespace, key, computeDependencies(namespace, item));
-                });
-              });
-              if (checkForChanges) {
-                const updatedItems = new NamespacedDataSet_1.default();
-                Object.keys(allData).forEach((namespace) => {
-                  const oldDataForKind = (oldData === null || oldData === void 0 ? void 0 : oldData[namespace]) || {};
-                  const newDataForKind = allData[namespace];
-                  const mergedData = Object.assign(Object.assign({}, oldDataForKind), newDataForKind);
-                  Object.keys(mergedData).forEach((key) => {
-                    this.addIfModified(namespace, key, oldDataForKind && oldDataForKind[key], newDataForKind && newDataForKind[key], updatedItems);
-                  });
-                });
-                this.sendChangeEvents(updatedItems);
-              }
-            });
-            callback === null || callback === void 0 ? void 0 : callback();
-          }, initMetadata);
-        };
-        if (checkForChanges) {
-          this._featureStore.all(VersionedDataKinds_1.default.Features, (oldFlags) => {
-            this._featureStore.all(VersionedDataKinds_1.default.Segments, (oldSegments) => {
-              const oldData = {
-                [VersionedDataKinds_1.default.Features.namespace]: oldFlags,
-                [VersionedDataKinds_1.default.Segments.namespace]: oldSegments
-              };
-              doInit(oldData);
-            });
-          });
-        } else {
-          doInit();
-        }
-      }
-      upsert(kind, data, callback) {
-        const { key } = data;
-        const checkForChanges = this._hasEventListeners();
-        const doUpsert = (oldItem) => {
-          this._featureStore.upsert(kind, data, () => {
-            Promise.resolve().then(() => {
-              this._dependencyTracker.updateDependenciesFrom(kind.namespace, key, computeDependencies(kind.namespace, data));
-              if (checkForChanges) {
-                const updatedItems = new NamespacedDataSet_1.default();
-                this.addIfModified(kind.namespace, key, oldItem, data, updatedItems);
-                this.sendChangeEvents(updatedItems);
-              }
-            });
-            callback === null || callback === void 0 ? void 0 : callback();
-          });
-        };
-        if (checkForChanges) {
-          this._featureStore.get(kind, key, doUpsert);
-        } else {
-          doUpsert();
-        }
-      }
-      addIfModified(namespace, key, oldValue, newValue, toDataSet) {
-        if (newValue && oldValue && newValue.version <= oldValue.version) {
-          return;
-        }
-        this._dependencyTracker.updateModifiedItems(toDataSet, namespace, key);
-      }
-      sendChangeEvents(dataSet) {
-        dataSet.enumerate((namespace, key) => {
-          if (namespace === VersionedDataKinds_1.default.Features.namespace) {
-            this._onChange(key);
-          }
-        });
-      }
-    };
-    exports.default = DataSourceUpdates;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/FileLoader.js
-var require_FileLoader = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/FileLoader.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var FileLoader = class {
-      constructor(_filesystem, _paths, _watch, _callback) {
-        this._filesystem = _filesystem;
-        this._paths = _paths;
-        this._watch = _watch;
-        this._callback = _callback;
-        this._watchers = [];
-        this._fileData = {};
-        this._fileTimestamps = {};
-      }
-      /**
-       * Load all the files and start watching them if watching is enabled.
-       */
-      async loadAndWatch() {
-        const promises3 = this._paths.map(async (path) => {
-          const data = await this._filesystem.readFile(path);
-          const timeStamp = await this._filesystem.getFileTimestamp(path);
-          return { data, path, timeStamp };
-        });
-        const results = await Promise.all(promises3);
-        results.forEach((res) => {
-          this._fileData[res.path] = res.data;
-          this._fileTimestamps[res.path] = res.timeStamp;
-        });
-        this._callback(results);
-        if (this._watch) {
-          this._paths.forEach((path) => {
-            const watcher = this._filesystem.watch(path, async (_, updatePath) => {
-              const timeStamp = await this._filesystem.getFileTimestamp(updatePath);
-              if (timeStamp === this._fileTimestamps[updatePath]) {
-                return;
-              }
-              this._fileTimestamps[updatePath] = timeStamp;
-              const data = await this._filesystem.readFile(updatePath);
-              this._fileData[updatePath] = data;
-              this._debounceCallback();
-            });
-            this._watchers.push(watcher);
-          });
-        }
-      }
-      close() {
-        this._watchers.forEach((watcher) => watcher.close());
-      }
-      _debounceCallback() {
-        if (!this._debounceHandle) {
-          this._debounceHandle = setTimeout(() => {
-            this._debounceHandle = void 0;
-            this._callback(Object.entries(this._fileData).reduce((acc, [path, data]) => {
-              acc.push({ path, data });
-              return acc;
-            }, []));
-          }, 10);
-        }
-      }
-    };
-    exports.default = FileLoader;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/FileDataSource.js
-var require_FileDataSource = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/FileDataSource.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.makeFlagWithValue = void 0;
-    var serialization_1 = require_serialization();
-    var VersionedDataKinds_1 = require_VersionedDataKinds();
-    var FileLoader_1 = require_FileLoader();
-    function makeFlagWithValue(key, value, version) {
-      return {
-        key,
-        on: true,
-        fallthrough: { variation: 0 },
-        variations: [value],
-        version
-      };
-    }
-    exports.makeFlagWithValue = makeFlagWithValue;
-    var FileDataSource = class {
-      /**
-       * This is internal because we want instances to only be created with the
-       * factory.
-       * @internal
-       */
-      constructor(options, filesystem, _featureStore, _initSuccessHandler = () => {
-      }, _errorHandler) {
-        var _a;
-        this._featureStore = _featureStore;
-        this._initSuccessHandler = _initSuccessHandler;
-        this._errorHandler = _errorHandler;
-        this._allData = {};
-        this._fileLoader = new FileLoader_1.default(filesystem, options.paths, (_a = options.autoUpdate) !== null && _a !== void 0 ? _a : false, (results) => {
-          var _a2, _b;
-          try {
-            this._processFileData(results);
-          } catch (err) {
-            (_a2 = this._errorHandler) === null || _a2 === void 0 ? void 0 : _a2.call(this, err);
-            (_b = this._logger) === null || _b === void 0 ? void 0 : _b.error(`Error processing files: ${err}`);
-          }
-        });
-        this._logger = options.logger;
-        this._yamlParser = options.yamlParser;
-      }
-      start() {
-        (async () => {
-          var _a;
-          try {
-            await this._fileLoader.loadAndWatch();
-          } catch (err) {
-            (_a = this._errorHandler) === null || _a === void 0 ? void 0 : _a.call(this, err);
-          }
-        })();
-      }
-      stop() {
-        this._fileLoader.close();
-      }
-      close() {
-        this.stop();
-      }
-      _addItem(kind, item) {
-        if (!this._allData[kind.namespace]) {
-          this._allData[kind.namespace] = {};
-        }
-        if (this._allData[kind.namespace][item.key]) {
-          throw new Error(`found duplicate key: "${item.key}"`);
-        } else {
-          this._allData[kind.namespace][item.key] = item;
-        }
-      }
-      _processFileData(fileData) {
-        const oldData = this._allData;
-        this._allData = {};
-        fileData.forEach((fd) => {
-          let parsed;
-          if (fd.path.endsWith(".yml") || fd.path.endsWith(".yaml")) {
-            if (this._yamlParser) {
-              parsed = this._yamlParser(fd.data);
-            } else {
-              throw new Error(`Attempted to parse yaml file (${fd.path}) without parser.`);
-            }
-          } else {
-            parsed = JSON.parse(fd.data);
-          }
-          this._processParsedData(parsed, oldData);
-        });
-        this._featureStore.init(this._allData, () => {
-          this._initSuccessHandler();
-          this._initSuccessHandler = () => {
-          };
-        });
-      }
-      _processParsedData(parsed, oldData) {
-        Object.keys(parsed.flags || {}).forEach((key) => {
-          (0, serialization_1.processFlag)(parsed.flags[key]);
-          this._addItem(VersionedDataKinds_1.default.Features, parsed.flags[key]);
-        });
-        Object.keys(parsed.flagValues || {}).forEach((key) => {
-          var _a, _b;
-          const previousInstance = (_a = oldData[VersionedDataKinds_1.default.Features.namespace]) === null || _a === void 0 ? void 0 : _a[key];
-          let { version } = previousInstance !== null && previousInstance !== void 0 ? previousInstance : { version: 1 };
-          if (previousInstance && JSON.stringify(parsed.flagValues[key]) !== JSON.stringify((_b = previousInstance === null || previousInstance === void 0 ? void 0 : previousInstance.variations) === null || _b === void 0 ? void 0 : _b[0])) {
-            version += 1;
-          }
-          const flag = makeFlagWithValue(key, parsed.flagValues[key], version);
-          (0, serialization_1.processFlag)(flag);
-          this._addItem(VersionedDataKinds_1.default.Features, flag);
-        });
-        Object.keys(parsed.segments || {}).forEach((key) => {
-          (0, serialization_1.processSegment)(parsed.segments[key]);
-          this._addItem(VersionedDataKinds_1.default.Segments, parsed.segments[key]);
-        });
-      }
-    };
-    exports.default = FileDataSource;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/fileDataInitilizerFDv2.js
-var require_fileDataInitilizerFDv2 = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/fileDataInitilizerFDv2.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var js_sdk_common_1 = require_cjs();
-    var serialization_1 = require_serialization();
-    var FileDataSource_1 = require_FileDataSource();
-    var FileLoader_1 = require_FileLoader();
-    var FileDataInitializerFDv2 = class {
-      constructor(options, platform2, logger) {
-        this._validateInputs(options, platform2);
-        this._paths = options.paths;
-        this._logger = logger;
-        this._filesystem = platform2.fileSystem;
-        this._yamlParser = options.yamlParser;
-      }
-      _validateInputs(options, platform2) {
-        if (!options.paths || options.paths.length === 0) {
-          throw new Error("FileDataInitializerFDv2: paths are required");
-        }
-        if (!platform2.fileSystem) {
-          throw new Error("FileDataInitializerFDv2: file system is required");
-        }
-      }
-      start(dataCallback, statusCallback) {
-        statusCallback(js_sdk_common_1.subsystem.DataSourceState.Initializing);
-        const initMetadata = js_sdk_common_1.internal.initMetadataFromHeaders(void 0);
-        const payloadProcessor = new js_sdk_common_1.internal.PayloadProcessor({
-          flag: (flag) => {
-            (0, serialization_1.processFlag)(flag);
-            return flag;
-          },
-          segment: (segment) => {
-            (0, serialization_1.processSegment)(segment);
-            return segment;
-          }
-        }, (errorKind, message) => {
-          statusCallback(js_sdk_common_1.subsystem.DataSourceState.Interrupted, new js_sdk_common_1.LDPollingError(errorKind, message));
-        }, this._logger);
-        const adaptor = js_sdk_common_1.internal.FDv1PayloadAdaptor(payloadProcessor);
-        this._fileLoader = new FileLoader_1.default(
-          this._filesystem,
-          this._paths,
-          false,
-          // autoupdate is always false for initializer
-          (results) => {
-            var _a;
-            try {
-              const parsedData = this._processFileData(results);
-              payloadProcessor.addPayloadListener((payload) => {
-                dataCallback(false, { initMetadata, payload });
-              });
-              statusCallback(js_sdk_common_1.subsystem.DataSourceState.Valid);
-              adaptor.processFullTransfer(parsedData);
-              statusCallback(js_sdk_common_1.subsystem.DataSourceState.Closed);
-            } catch (err) {
-              (_a = this._logger) === null || _a === void 0 ? void 0 : _a.error("File contained invalid data", err);
-              statusCallback(js_sdk_common_1.subsystem.DataSourceState.Closed, new js_sdk_common_1.LDPollingError(js_sdk_common_1.DataSourceErrorKind.InvalidData, "Malformed data in file response"));
-            }
-          }
-        );
-        this._fileLoader.loadAndWatch().catch((err) => {
-          var _a;
-          (_a = this._logger) === null || _a === void 0 ? void 0 : _a.error("Error loading files", err);
-          statusCallback(js_sdk_common_1.subsystem.DataSourceState.Closed, new js_sdk_common_1.LDPollingError(js_sdk_common_1.DataSourceErrorKind.NetworkError, `Failed to load files: ${err instanceof Error ? err.message : String(err)}`));
-        });
-      }
-      _processFileData(results) {
-        const combined = results.reduce((acc, curr) => {
-          var _a, _b, _c;
-          let parsed;
-          if (curr.path.endsWith(".yml") || curr.path.endsWith(".yaml")) {
-            if (this._yamlParser) {
-              parsed = this._yamlParser(curr.data);
-            } else {
-              throw new Error(`Attempted to parse yaml file (${curr.path}) without parser.`);
-            }
-          } else {
-            parsed = JSON.parse(curr.data);
-          }
-          const flagsFromValues = {};
-          Object.entries((_a = parsed.flagValues) !== null && _a !== void 0 ? _a : {}).forEach(([key, value]) => {
-            flagsFromValues[key] = (0, FileDataSource_1.makeFlagWithValue)(key, value, 1);
-          });
-          return {
-            segments: Object.assign(Object.assign({}, acc.segments), (_b = parsed.segments) !== null && _b !== void 0 ? _b : {}),
-            flags: Object.assign(Object.assign(Object.assign({}, acc.flags), (_c = parsed.flags) !== null && _c !== void 0 ? _c : {}), flagsFromValues)
-          };
-        }, {
-          segments: {},
-          flags: {}
-        });
-        return combined;
-      }
-      stop() {
-        if (this._fileLoader) {
-          this._fileLoader.close();
-        }
-      }
-    };
-    exports.default = FileDataInitializerFDv2;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/OneShotInitializerFDv2.js
-var require_OneShotInitializerFDv2 = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/OneShotInitializerFDv2.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var js_sdk_common_1 = require_cjs();
-    var serialization_1 = require_serialization();
-    var OneShotInitializerFDv2 = class {
-      constructor(_requestor, _logger) {
-        this._requestor = _requestor;
-        this._logger = _logger;
-        this._stopped = false;
-      }
-      start(dataCallback, statusCallback) {
-        var _a;
-        statusCallback(js_sdk_common_1.subsystem.DataSourceState.Initializing);
-        (_a = this._logger) === null || _a === void 0 ? void 0 : _a.debug("Performing initialization request to LaunchDarkly for feature flag data.");
-        this._requestor.requestAllData((err, body, headers, fallbackToFDv1) => {
-          var _a2, _b, _c;
-          if (this._stopped) {
-            return;
-          }
-          const emitFallback = () => {
-            var _a3;
-            const status = err === null || err === void 0 ? void 0 : err.status;
-            const message = err ? (0, js_sdk_common_1.httpErrorMessage)(err, "initializer", "falling back to FDv1") : `Response header indicates to fallback to FDv1`;
-            (_a3 = this._logger) === null || _a3 === void 0 ? void 0 : _a3.warn(message);
-            statusCallback(js_sdk_common_1.subsystem.DataSourceState.Closed, new js_sdk_common_1.LDFlagDeliveryFallbackError(js_sdk_common_1.DataSourceErrorKind.ErrorResponse, message, status));
-          };
-          if (err) {
-            if (fallbackToFDv1) {
-              emitFallback();
-              return;
-            }
-            const { status } = err;
-            const message = (0, js_sdk_common_1.httpErrorMessage)(err, "initializer", "initializer does not retry");
-            (_a2 = this._logger) === null || _a2 === void 0 ? void 0 : _a2.error(message);
-            statusCallback(js_sdk_common_1.subsystem.DataSourceState.Closed, new js_sdk_common_1.LDPollingError(js_sdk_common_1.DataSourceErrorKind.ErrorResponse, message, status));
-            return;
-          }
-          if (!body) {
-            if (fallbackToFDv1) {
-              emitFallback();
-              return;
-            }
-            statusCallback(js_sdk_common_1.subsystem.DataSourceState.Closed, new js_sdk_common_1.LDPollingError(js_sdk_common_1.DataSourceErrorKind.InvalidData, "One shot initializer response missing body."));
-            return;
-          }
-          const initMetadata = js_sdk_common_1.internal.initMetadataFromHeaders(headers);
-          try {
-            const parsed = JSON.parse(body);
-            const payloadProcessor = new js_sdk_common_1.internal.PayloadProcessor({
-              flag: (flag) => {
-                (0, serialization_1.processFlag)(flag);
-                return flag;
-              },
-              segment: (segment) => {
-                (0, serialization_1.processSegment)(segment);
-                return segment;
-              }
-            }, (errorKind, message) => {
-              if (fallbackToFDv1) {
-                emitFallback();
-                return;
-              }
-              statusCallback(js_sdk_common_1.subsystem.DataSourceState.Interrupted, new js_sdk_common_1.LDPollingError(errorKind, message));
-            }, this._logger);
-            statusCallback(js_sdk_common_1.subsystem.DataSourceState.Valid);
-            payloadProcessor.addPayloadListener((payload) => {
-              var _a3;
-              const data = {
-                initMetadata,
-                payload
-              };
-              if (fallbackToFDv1) {
-                data.fallbackToFDv1 = true;
-                (_a3 = this._logger) === null || _a3 === void 0 ? void 0 : _a3.warn(`Response header indicates to fallback to FDv1`);
-              }
-              dataCallback(payload.type === "full", data);
-            });
-            payloadProcessor.processEvents(parsed.events);
-            statusCallback(js_sdk_common_1.subsystem.DataSourceState.Closed);
-          } catch (parseError) {
-            (_b = this._logger) === null || _b === void 0 ? void 0 : _b.error("Response contained invalid data");
-            (_c = this._logger) === null || _c === void 0 ? void 0 : _c.debug(`${parseError} - Body follows: ${body}`);
-            if (fallbackToFDv1) {
-              emitFallback();
-              return;
-            }
-            statusCallback(js_sdk_common_1.subsystem.DataSourceState.Closed, new js_sdk_common_1.LDPollingError(js_sdk_common_1.DataSourceErrorKind.InvalidData, "Malformed data in polling response"));
-          }
-        });
-      }
-      stop() {
-        this._stopped = true;
-      }
-    };
-    exports.default = OneShotInitializerFDv2;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/async/promisify.js
-var require_promisify = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/async/promisify.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    function promisify(method) {
-      return new Promise((resolve) => {
-        method((val) => {
-          resolve(val);
-        });
-      });
-    }
-    exports.default = promisify;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/store/AsyncStoreFacade.js
-var require_AsyncStoreFacade = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/store/AsyncStoreFacade.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var promisify_1 = require_promisify();
-    var AsyncStoreFacade = class {
-      constructor(store) {
-        this._store = store;
-      }
-      async get(kind, key) {
-        return (0, promisify_1.default)((cb) => {
-          this._store.get(kind, key, cb);
-        });
-      }
-      async all(kind) {
-        return (0, promisify_1.default)((cb) => {
-          this._store.all(kind, cb);
-        });
-      }
-      async init(allData, initMetadata) {
-        return (0, promisify_1.default)((cb) => {
-          this._store.init(allData, cb, initMetadata);
-        });
-      }
-      async delete(kind, key, version) {
-        return (0, promisify_1.default)((cb) => {
-          this._store.delete(kind, key, version, cb);
-        });
-      }
-      async upsert(kind, data) {
-        return (0, promisify_1.default)((cb) => {
-          this._store.upsert(kind, data, cb);
-        });
-      }
-      async initialized() {
-        return (0, promisify_1.default)((cb) => {
-          this._store.initialized(cb);
-        });
-      }
-      close() {
-        this._store.close();
-      }
-      getInitMetadata() {
-        var _a, _b;
-        return (_b = (_a = this._store).getInitMetaData) === null || _b === void 0 ? void 0 : _b.call(_a);
-      }
-    };
-    exports.default = AsyncStoreFacade;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/store/AsyncTransactionalStoreFacade.js
-var require_AsyncTransactionalStoreFacade = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/store/AsyncTransactionalStoreFacade.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var promisify_1 = require_promisify();
-    var AsyncTransactionalStoreFacade = class {
-      constructor(store) {
-        this._store = store;
-      }
-      async get(kind, key) {
-        return (0, promisify_1.default)((cb) => {
-          this._store.get(kind, key, cb);
-        });
-      }
-      async all(kind) {
-        return (0, promisify_1.default)((cb) => {
-          this._store.all(kind, cb);
-        });
-      }
-      async init(allData, initMetadata) {
-        return (0, promisify_1.default)((cb) => {
-          this._store.init(allData, cb, initMetadata);
-        });
-      }
-      async delete(kind, key, version) {
-        return (0, promisify_1.default)((cb) => {
-          this._store.delete(kind, key, version, cb);
-        });
-      }
-      async upsert(kind, data) {
-        return (0, promisify_1.default)((cb) => {
-          this._store.upsert(kind, data, cb);
-        });
-      }
-      async initialized() {
-        return (0, promisify_1.default)((cb) => {
-          this._store.initialized(cb);
-        });
-      }
-      async applyChanges(basis, data, initMetadata, selector) {
-        return (0, promisify_1.default)((cb) => {
-          this._store.applyChanges(basis, data, cb, initMetadata, selector);
-        });
-      }
-      close() {
-        this._store.close();
-      }
-      getInitMetadata() {
-        var _a, _b;
-        return (_b = (_a = this._store).getInitMetaData) === null || _b === void 0 ? void 0 : _b.call(_a);
-      }
-    };
-    exports.default = AsyncTransactionalStoreFacade;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/cache/TtlCache.js
-var require_TtlCache = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/cache/TtlCache.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    function isStale(record) {
-      return Date.now() > record.expiration;
-    }
-    var TtlCache = class {
-      constructor(_options) {
-        this._options = _options;
-        this._storage = /* @__PURE__ */ new Map();
-        this._checkIntervalHandle = setInterval(() => {
-          this._purgeStale();
-        }, _options.checkInterval * 1e3);
-      }
-      /**
-       * Get a value from the cache.
-       * @param key The key to get a value for.
-       * @returns The value for the key, or undefined if the key was not added, or
-       * if the value has expired.
-       */
-      get(key) {
-        const record = this._storage.get(key);
-        if (record && isStale(record)) {
-          this._storage.delete(key);
-          return void 0;
-        }
-        return record === null || record === void 0 ? void 0 : record.value;
-      }
-      /**
-       * Set an item in the cache. It will expire after the TTL specified
-       * in the cache configuration.
-       * @param key The key for the value.
-       * @param value The value to set.
-       */
-      set(key, value) {
-        this._storage.set(key, {
-          value,
-          expiration: Date.now() + this._options.ttl * 1e3
-        });
-      }
-      /**
-       * Delete the item with the specific key. If the item does not exist,
-       * then there will be no change to the cache.
-       * @param key The key of the value to delete.
-       */
-      delete(key) {
-        this._storage.delete(key);
-      }
-      /**
-       * Clear the items that are in the cache.
-       */
-      clear() {
-        this._storage.clear();
-      }
-      /**
-       * Indicate that you are no longer going to use the cache. The cache will be
-       * cleared and it will stop checking for stale items.
-       */
-      close() {
-        this.clear();
-        if (this._checkIntervalHandle) {
-          clearInterval(this._checkIntervalHandle);
-          this._checkIntervalHandle = null;
-        }
-      }
-      _purgeStale() {
-        this._storage.forEach((record, key) => {
-          if (isStale(record)) {
-            this._storage.delete(key);
-          }
-        });
-      }
-      /**
-       * This is for testing.
-       * @internal
-       */
-      get size() {
-        return this._storage.size;
-      }
-    };
-    exports.default = TtlCache;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/store/persistentStoreKinds.js
-var require_persistentStoreKinds = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/store/persistentStoreKinds.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.persistentStoreKinds = void 0;
-    var serialization_1 = require_serialization();
-    var VersionedDataKinds_1 = require_VersionedDataKinds();
-    exports.persistentStoreKinds = {
-      segments: {
-        namespace: VersionedDataKinds_1.default.Segments.namespace,
-        deserialize: (data) => {
-          const segment = (0, serialization_1.deserializeSegment)(data);
-          if (segment) {
-            return {
-              version: segment.version,
-              item: segment
-            };
-          }
-          return void 0;
-        },
-        serialize: (data) => {
-          const serializedItem = (0, serialization_1.serializeSegment)(data);
-          return {
-            version: data.version,
-            deleted: data.deleted,
-            serializedItem
-          };
-        },
-        priority: 0
-      },
-      features: {
-        namespace: VersionedDataKinds_1.default.Features.namespace,
-        deserialize: (data) => {
-          const flag = (0, serialization_1.deserializeFlag)(data);
-          if (flag) {
-            return {
-              version: flag.version,
-              item: flag
-            };
-          }
-          return void 0;
-        },
-        serialize: (data) => {
-          const serializedItem = (0, serialization_1.serializeFlag)(data);
-          return {
-            version: data.version,
-            deleted: data.deleted,
-            serializedItem
-          };
-        },
-        priority: 1
-      }
-    };
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/store/sortDataSet.js
-var require_sortDataSet = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/store/sortDataSet.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var persistentStoreKinds_1 = require_persistentStoreKinds();
-    function getDependencyKeys(flag) {
-      if (!flag.prerequisites || !flag.prerequisites.length) {
-        return [];
-      }
-      return flag.prerequisites.map((preReq) => preReq.key);
-    }
-    function topologicalSort(kind, itemsMap) {
-      const sortedItems = [];
-      const unvisitedItems = new Set(Object.keys(itemsMap));
-      const visit = (key) => {
-        if (!unvisitedItems.has(key)) {
-          return;
-        }
-        unvisitedItems.delete(key);
-        const item = itemsMap[key];
-        if (kind.namespace === "features") {
-          getDependencyKeys(item).forEach((prereqKey) => {
-            visit(prereqKey);
-          });
-        }
-        sortedItems.push({
-          key,
-          item: kind.serialize(item)
-        });
-      };
-      while (unvisitedItems.size > 0) {
-        const key = unvisitedItems.values().next().value;
-        visit(key);
-      }
-      return sortedItems;
-    }
-    function sortDataSet(dataMap) {
-      const result = [];
-      Object.keys(dataMap).forEach((kindNamespace) => {
-        const kind = persistentStoreKinds_1.persistentStoreKinds[kindNamespace];
-        result.push({ key: kind, item: topologicalSort(kind, dataMap[kindNamespace]) });
-      });
-      result.sort((i1, i2) => i1.key.priority - i2.key.priority);
-      return result;
-    }
-    exports.default = sortDataSet;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/store/UpdateQueue.js
-var require_UpdateQueue = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/store/UpdateQueue.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var UpdateQueue = class {
-      constructor() {
-        this._queue = [];
-      }
-      enqueue(updateFn, cb) {
-        this._queue.push([updateFn, cb]);
-        if (this._queue.length === 1) {
-          this.executePendingUpdates();
-        }
-      }
-      executePendingUpdates() {
-        if (this._queue.length > 0) {
-          const [fn, cb] = this._queue[0];
-          const newCb = () => {
-            this._queue.shift();
-            if (this._queue.length > 0) {
-              setTimeout(() => this.executePendingUpdates(), 0);
-            }
-            cb === null || cb === void 0 ? void 0 : cb();
-          };
-          fn(newCb);
-        }
-      }
-    };
-    exports.default = UpdateQueue;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/store/PersistentDataStoreWrapper.js
-var require_PersistentDataStoreWrapper = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/store/PersistentDataStoreWrapper.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var TtlCache_1 = require_TtlCache();
-    var persistentStoreKinds_1 = require_persistentStoreKinds();
-    var sortDataSet_1 = require_sortDataSet();
-    var UpdateQueue_1 = require_UpdateQueue();
-    function cacheKey(kind, key) {
-      return `${kind.namespace}:${key}`;
-    }
-    function allForKindCacheKey(kind) {
-      return `$all:${kind.namespace}`;
-    }
-    var initializationCheckedKey = "$checkedInit";
-    var defaultCheckInterval = 600;
-    function itemIfNotDeleted(item) {
-      return !item || item.item.deleted ? null : item.item;
-    }
-    function deletedDescriptor(version) {
-      return {
-        version,
-        item: { version, deleted: true }
-      };
-    }
-    function deserialize(kind, descriptor) {
-      if (descriptor.deleted || !descriptor.serializedItem) {
-        return deletedDescriptor(descriptor.version);
-      }
-      const deserializedItem = kind.deserialize(descriptor.serializedItem);
-      if (deserializedItem === void 0) {
-        return deletedDescriptor(descriptor.version);
-      }
-      if (deserializedItem.version === 0 || deserializedItem.version === descriptor.version || deserializedItem.item === void 0) {
-        return deserializedItem;
-      }
-      return {
-        version: descriptor.version,
-        item: deserializedItem.item
-      };
-    }
-    var PersistentDataStoreWrapper = class {
-      constructor(_core, ttl, _logger) {
-        this._core = _core;
-        this._logger = _logger;
-        this._isInitialized = false;
-        this._queue = new UpdateQueue_1.default();
-        if (ttl) {
-          this._itemCache = new TtlCache_1.default({
-            ttl,
-            checkInterval: defaultCheckInterval
-          });
-          this._allItemsCache = new TtlCache_1.default({
-            ttl,
-            checkInterval: defaultCheckInterval
-          });
-        }
-      }
-      init(allData, callback) {
-        this._queue.enqueue((cb) => {
-          const afterStoreInit = () => {
-            this._isInitialized = true;
-            if (this._itemCache) {
-              this._itemCache.clear();
-              this._allItemsCache.clear();
-              Object.keys(allData).forEach((kindNamespace) => {
-                const kind = persistentStoreKinds_1.persistentStoreKinds[kindNamespace];
-                const items = allData[kindNamespace];
-                this._allItemsCache.set(allForKindCacheKey(kind), items);
-                Object.keys(items).forEach((key) => {
-                  const itemForKey = items[key];
-                  const itemDescriptor = {
-                    version: itemForKey.version,
-                    item: itemForKey
-                  };
-                  this._itemCache.set(cacheKey(kind, key), itemDescriptor);
-                });
-              });
-            }
-            cb();
-          };
-          this._core.init((0, sortDataSet_1.default)(allData), afterStoreInit);
-        }, callback);
-      }
-      get(kind, key, callback) {
-        if (this._itemCache) {
-          const item = this._itemCache.get(cacheKey(kind, key));
-          if (item) {
-            callback(itemIfNotDeleted(item));
-            return;
-          }
-        }
-        const persistKind = persistentStoreKinds_1.persistentStoreKinds[kind.namespace];
-        this._core.get(persistKind, key, (descriptor) => {
-          var _a;
-          if (descriptor && descriptor.serializedItem) {
-            const value = deserialize(persistKind, descriptor);
-            (_a = this._itemCache) === null || _a === void 0 ? void 0 : _a.set(cacheKey(kind, key), value);
-            callback(itemIfNotDeleted(value));
-            return;
-          }
-          callback(null);
-        });
-      }
-      initialized(callback) {
-        var _a;
-        if (this._isInitialized) {
-          callback(true);
-        } else if ((_a = this._itemCache) === null || _a === void 0 ? void 0 : _a.get(initializationCheckedKey)) {
-          callback(false);
-        } else {
-          this._core.initialized((storeInitialized) => {
-            var _a2;
-            this._isInitialized = storeInitialized;
-            if (!this._isInitialized) {
-              (_a2 = this._itemCache) === null || _a2 === void 0 ? void 0 : _a2.set(initializationCheckedKey, true);
-            }
-            callback(this._isInitialized);
-          });
-        }
-      }
-      all(kind, callback) {
-        var _a;
-        const items = (_a = this._allItemsCache) === null || _a === void 0 ? void 0 : _a.get(allForKindCacheKey(kind));
-        if (items) {
-          callback(items);
-          return;
-        }
-        const persistKind = persistentStoreKinds_1.persistentStoreKinds[kind.namespace];
-        this._core.getAll(persistKind, (storeItems) => {
-          var _a2;
-          if (!storeItems) {
-            callback({});
-            return;
-          }
-          const filteredItems = {};
-          storeItems.forEach(({ key, item }) => {
-            const deserializedItem = deserialize(persistKind, item);
-            const filteredItem = itemIfNotDeleted(deserializedItem);
-            if (filteredItem) {
-              filteredItems[key] = filteredItem;
-            }
-          });
-          (_a2 = this._allItemsCache) === null || _a2 === void 0 ? void 0 : _a2.set(allForKindCacheKey(kind), filteredItems);
-          callback(filteredItems);
-        });
-      }
-      upsert(kind, data, callback) {
-        this._queue.enqueue((cb) => {
-          if (this._allItemsCache) {
-            this._allItemsCache.clear();
-          }
-          const persistKind = persistentStoreKinds_1.persistentStoreKinds[kind.namespace];
-          this._core.upsert(persistKind, data.key, persistKind.serialize(data), (err, updatedDescriptor) => {
-            var _a, _b, _c;
-            if (err) {
-              (_a = this._logger) === null || _a === void 0 ? void 0 : _a.error(`Persistent store returned error: ${err instanceof Error ? err.message : err}`);
-            }
-            if (!err && updatedDescriptor) {
-              if (updatedDescriptor.serializedItem) {
-                const value = deserialize(persistKind, updatedDescriptor);
-                (_b = this._itemCache) === null || _b === void 0 ? void 0 : _b.set(cacheKey(kind, data.key), value);
-              } else if (updatedDescriptor.deleted) {
-                (_c = this._itemCache) === null || _c === void 0 ? void 0 : _c.set(data.key, {
-                  key: data.key,
-                  version: updatedDescriptor.version,
-                  deleted: true
-                });
-              }
-            }
-            cb();
-          });
-        }, callback);
-      }
-      delete(kind, key, version, callback) {
-        this.upsert(kind, { key, version, deleted: true }, callback);
-      }
-      close() {
-        var _a, _b;
-        (_a = this._itemCache) === null || _a === void 0 ? void 0 : _a.close();
-        (_b = this._allItemsCache) === null || _b === void 0 ? void 0 : _b.close();
-        this._core.close();
-      }
-      getDescription() {
-        return this._core.getDescription();
-      }
-    };
-    exports.default = PersistentDataStoreWrapper;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/store/InMemoryFeatureStore.js
-var require_InMemoryFeatureStore = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/store/InMemoryFeatureStore.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var InMemoryFeatureStore = class {
-      constructor() {
-        this._allData = {};
-        this._initCalled = false;
-      }
-      get(kind, key, callback) {
-        const items = this._allData[kind.namespace];
-        if (items) {
-          if (Object.prototype.hasOwnProperty.call(items, key)) {
-            const item = items[key];
-            if (item && !item.deleted) {
-              return callback === null || callback === void 0 ? void 0 : callback(item);
-            }
-          }
-        }
-        return callback === null || callback === void 0 ? void 0 : callback(null);
-      }
-      all(kind, callback) {
-        var _a;
-        const result = {};
-        const items = (_a = this._allData[kind.namespace]) !== null && _a !== void 0 ? _a : {};
-        Object.entries(items).forEach(([key, item]) => {
-          if (item && !item.deleted) {
-            result[key] = item;
-          }
-        });
-        callback === null || callback === void 0 ? void 0 : callback(result);
-      }
-      init(allData, callback, initMetadata) {
-        this.applyChanges(true, allData, callback, initMetadata);
-      }
-      delete(kind, key, version, callback) {
-        const item = { key, version, deleted: true };
-        this.applyChanges(false, {
-          [kind.namespace]: {
-            [key]: item
-          }
-        }, callback);
-      }
-      upsert(kind, data, callback) {
-        this.applyChanges(false, {
-          [kind.namespace]: {
-            [data.key]: data
-          }
-        }, callback);
-      }
-      applyChanges(basis, data, callback, initMetadata, selector) {
-        if (basis) {
-          this._initCalled = true;
-          this._allData = data;
-          this._initMetadata = initMetadata;
-        } else {
-          const tempData = {};
-          Object.entries(this._allData).forEach(([namespace, items]) => {
-            tempData[namespace] = Object.assign({}, items);
-          });
-          Object.entries(data).forEach(([namespace, items]) => {
-            Object.keys(items || {}).forEach((key) => {
-              let existingItems = tempData[namespace];
-              if (!existingItems) {
-                existingItems = {};
-                tempData[namespace] = existingItems;
-              }
-              const item = items[key];
-              if (Object.hasOwnProperty.call(existingItems, key)) {
-                const old = existingItems[key];
-                if (!old || old.version < item.version) {
-                  existingItems[key] = Object.assign({ key }, item);
-                }
-              } else {
-                existingItems[key] = Object.assign({ key }, item);
-              }
-            });
-          });
-          this._allData = tempData;
-        }
-        this._selector = selector;
-        callback === null || callback === void 0 ? void 0 : callback();
-      }
-      initialized(callback) {
-        return callback === null || callback === void 0 ? void 0 : callback(this._initCalled);
-      }
-      close() {
-      }
-      getDescription() {
-        return "memory";
-      }
-      getInitMetaData() {
-        return this._initMetadata;
-      }
-      getSelector() {
-        return this._selector;
-      }
-    };
-    exports.default = InMemoryFeatureStore;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/store/TransactionalFeatureStore.js
-var require_TransactionalFeatureStore = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/store/TransactionalFeatureStore.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var InMemoryFeatureStore_1 = require_InMemoryFeatureStore();
-    var TransactionalFeatureStore = class {
-      constructor(_nonTransPersistenceStore) {
-        this._nonTransPersistenceStore = _nonTransPersistenceStore;
-        this._activeStore = this._nonTransPersistenceStore;
-        this._memoryStore = new InMemoryFeatureStore_1.default();
-      }
-      get(kind, key, callback) {
-        this._activeStore.get(kind, key, callback);
-      }
-      all(kind, callback) {
-        this._activeStore.all(kind, callback);
-      }
-      init(allData, callback) {
-        this.applyChanges(true, allData, callback);
-      }
-      delete(kind, key, version, callback) {
-        const item = { key, version, deleted: true };
-        this.applyChanges(false, {
-          [kind.namespace]: {
-            [key]: item
-          }
-        }, callback);
-      }
-      upsert(kind, data, callback) {
-        this.applyChanges(false, {
-          [kind.namespace]: {
-            [data.key]: data
-          }
-        }, callback);
-      }
-      applyChanges(basis, data, callback, initMetadata, selector) {
-        this._memoryStore.applyChanges(basis, data, () => {
-          if (basis) {
-            this._activeStore = this._memoryStore;
-            this._nonTransPersistenceStore.init(data, callback);
-          } else {
-            const params = [];
-            Object.entries(data).forEach(([namespace, items]) => {
-              Object.keys(items || {}).forEach((key) => {
-                params.push({ dataKind: { namespace }, item: Object.assign({ key }, items[key]) });
-              });
-            });
-            params.reduce((previousPromise, nextParams) => previousPromise.then(() => new Promise((resolve) => {
-              this._nonTransPersistenceStore.upsert(nextParams.dataKind, nextParams.item, resolve);
-            })), Promise.resolve()).then(callback);
-          }
-        }, initMetadata, selector);
-      }
-      initialized(callback) {
-        this._activeStore.initialized(callback);
-      }
-      close() {
-        this._nonTransPersistenceStore.close();
-        this._memoryStore.close();
-      }
-      getDescription() {
-        return "transactional persistent store";
-      }
-      // applyChanges always writes here first, so the memory store has the latest
-      // metadata/selector even while _activeStore still points at the persistence
-      // store; the plain LDFeatureStore contract has no equivalent to read them from
-      getInitMetaData() {
-        var _a, _b;
-        return (_b = (_a = this._memoryStore).getInitMetaData) === null || _b === void 0 ? void 0 : _b.call(_a);
-      }
-      getSelector() {
-        var _a, _b;
-        return (_b = (_a = this._memoryStore).getSelector) === null || _b === void 0 ? void 0 : _b.call(_a);
-      }
-    };
-    exports.default = TransactionalFeatureStore;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/store/index.js
-var require_store = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/store/index.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.reviveFullPayload = exports.deserializePoll = exports.TransactionalFeatureStore = exports.PersistentDataStoreWrapper = exports.AsyncTransactionalStoreFacade = exports.AsyncStoreFacade = void 0;
-    var AsyncStoreFacade_1 = require_AsyncStoreFacade();
-    exports.AsyncStoreFacade = AsyncStoreFacade_1.default;
-    var AsyncTransactionalStoreFacade_1 = require_AsyncTransactionalStoreFacade();
-    exports.AsyncTransactionalStoreFacade = AsyncTransactionalStoreFacade_1.default;
-    var PersistentDataStoreWrapper_1 = require_PersistentDataStoreWrapper();
-    exports.PersistentDataStoreWrapper = PersistentDataStoreWrapper_1.default;
-    var serialization_1 = require_serialization();
-    Object.defineProperty(exports, "deserializePoll", { enumerable: true, get: function() {
-      return serialization_1.deserializePoll;
-    } });
-    Object.defineProperty(exports, "reviveFullPayload", { enumerable: true, get: function() {
-      return serialization_1.reviveFullPayload;
-    } });
-    var TransactionalFeatureStore_1 = require_TransactionalFeatureStore();
-    exports.TransactionalFeatureStore = TransactionalFeatureStore_1.default;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/PollingProcessor.js
-var require_PollingProcessor = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/PollingProcessor.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var js_sdk_common_1 = require_cjs();
-    var store_1 = require_store();
-    var VersionedDataKinds_1 = require_VersionedDataKinds();
-    var { initMetadataFromHeaders } = js_sdk_common_1.internal;
-    var PollingProcessor = class {
-      constructor(_requestor, _pollInterval, _featureStore, _logger, _initSuccessHandler = () => {
-      }, _errorHandler) {
-        this._requestor = _requestor;
-        this._pollInterval = _pollInterval;
-        this._featureStore = _featureStore;
-        this._logger = _logger;
-        this._initSuccessHandler = _initSuccessHandler;
-        this._errorHandler = _errorHandler;
-        this._stopped = false;
-      }
-      _poll() {
-        var _a;
-        if (this._stopped) {
-          return;
-        }
-        const reportJsonError = (data) => {
-          var _a2, _b, _c;
-          (_a2 = this._logger) === null || _a2 === void 0 ? void 0 : _a2.error("Polling received invalid data");
-          (_b = this._logger) === null || _b === void 0 ? void 0 : _b.debug(`Invalid JSON follows: ${data}`);
-          (_c = this._errorHandler) === null || _c === void 0 ? void 0 : _c.call(this, new js_sdk_common_1.LDPollingError(js_sdk_common_1.DataSourceErrorKind.InvalidData, "Malformed JSON data in polling response"));
-        };
-        const startTime = Date.now();
-        (_a = this._logger) === null || _a === void 0 ? void 0 : _a.debug("Polling LaunchDarkly for feature flag updates");
-        this._requestor.requestAllData((err, body, headers) => {
-          var _a2, _b, _c, _d;
-          const elapsed = Date.now() - startTime;
-          const sleepFor = Math.max(this._pollInterval * 1e3 - elapsed, 0);
-          (_a2 = this._logger) === null || _a2 === void 0 ? void 0 : _a2.debug("Elapsed: %d ms, sleeping for %d ms", elapsed, sleepFor);
-          if (err) {
-            const { status } = err;
-            if (status && !(0, js_sdk_common_1.isHttpRecoverable)(status)) {
-              const message = (0, js_sdk_common_1.httpErrorMessage)(err, "polling request");
-              (_b = this._logger) === null || _b === void 0 ? void 0 : _b.error(message);
-              (_c = this._errorHandler) === null || _c === void 0 ? void 0 : _c.call(this, new js_sdk_common_1.LDPollingError(js_sdk_common_1.DataSourceErrorKind.ErrorResponse, message, status));
-              return;
-            }
-            (_d = this._logger) === null || _d === void 0 ? void 0 : _d.warn((0, js_sdk_common_1.httpErrorMessage)(err, "polling request", "will retry"));
-          } else if (body) {
-            const parsed = (0, store_1.deserializePoll)(body);
-            if (!parsed) {
-              reportJsonError(body);
-            } else {
-              const initData = {
-                [VersionedDataKinds_1.default.Features.namespace]: parsed.flags,
-                [VersionedDataKinds_1.default.Segments.namespace]: parsed.segments
-              };
-              this._featureStore.init(initData, () => {
-                this._initSuccessHandler();
-                this._timeoutHandle = setTimeout(() => {
-                  this._poll();
-                }, sleepFor);
-              }, initMetadataFromHeaders(headers));
-              return;
-            }
-          }
-          this._timeoutHandle = setTimeout(() => {
-            this._poll();
-          }, sleepFor);
-        });
-      }
-      start() {
-        this._poll();
-      }
-      stop() {
-        if (this._timeoutHandle) {
-          clearTimeout(this._timeoutHandle);
-          this._timeoutHandle = void 0;
-        }
-        this._stopped = true;
-      }
-      close() {
-        this.stop();
-      }
-    };
-    exports.default = PollingProcessor;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/PollingProcessorFDv2.js
-var require_PollingProcessorFDv2 = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/PollingProcessorFDv2.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var js_sdk_common_1 = require_cjs();
-    var serialization_1 = require_serialization();
-    function selectorAsQueryParams(selector) {
-      if (!selector) {
-        return [];
-      }
-      return [
-        {
-          key: "basis",
-          value: selector
-        }
-      ];
-    }
-    function processFDv1FlagsAndSegments(payloadProcessor, data) {
-      const adaptor = js_sdk_common_1.internal.FDv1PayloadAdaptor(payloadProcessor);
-      adaptor.useSelector("FDv1Fallback").processFullTransfer(data);
-    }
-    var PollingProcessorFDv2 = class {
-      /**
-       * @param _requestor to fetch flags
-       * @param _pollInterval in seconds controlling how frequently polling request is made
-       * @param _logger for logging
-       * @param _processResponseAsFDv1 defaults to false, but if set to true, this data source will process
-       * the response body as FDv1 and convert it into a FDv2 payload.
-       */
-      constructor(_requestor, _pollInterval = 30, _logger, _processResponseAsFDv1 = false) {
-        this._requestor = _requestor;
-        this._pollInterval = _pollInterval;
-        this._logger = _logger;
-        this._processResponseAsFDv1 = _processResponseAsFDv1;
-        this._stopped = false;
-      }
-      _poll(dataCallback, statusCallback, selectorGetter) {
-        var _a;
-        if (this._stopped) {
-          return;
-        }
-        const startTime = Date.now();
-        (_a = this._logger) === null || _a === void 0 ? void 0 : _a.debug("Polling LaunchDarkly for feature flag updates");
-        this._requestor.requestAllData((err, body, headers, fallbackToFDv1) => {
-          var _a2, _b, _c, _d, _e, _f;
-          if (this._stopped) {
-            return;
-          }
-          const elapsed = Date.now() - startTime;
-          const sleepFor = Math.max(this._pollInterval * 1e3 - elapsed, 0);
-          const emitFallback = () => {
-            var _a3;
-            const fallbackErr = err instanceof js_sdk_common_1.LDFlagDeliveryFallbackError ? err : new js_sdk_common_1.LDFlagDeliveryFallbackError(js_sdk_common_1.DataSourceErrorKind.ErrorResponse, err ? (0, js_sdk_common_1.httpErrorMessage)(err, "polling request", "falling back to FDv1") : `Response header indicates to fallback to FDv1`, err === null || err === void 0 ? void 0 : err.status);
-            (_a3 = this._logger) === null || _a3 === void 0 ? void 0 : _a3.warn(fallbackErr.message);
-            statusCallback(js_sdk_common_1.subsystem.DataSourceState.Closed, fallbackErr);
-          };
-          (_a2 = this._logger) === null || _a2 === void 0 ? void 0 : _a2.debug("Elapsed: %d ms, sleeping for %d ms", elapsed, sleepFor);
-          if (err) {
-            if (fallbackToFDv1 || err instanceof js_sdk_common_1.LDFlagDeliveryFallbackError) {
-              emitFallback();
-              return;
-            }
-            const { status } = err;
-            if (status && !(0, js_sdk_common_1.isHttpRecoverable)(status)) {
-              const message2 = (0, js_sdk_common_1.httpErrorMessage)(err, "polling request");
-              (_b = this._logger) === null || _b === void 0 ? void 0 : _b.error(message2);
-              statusCallback(js_sdk_common_1.subsystem.DataSourceState.Closed, new js_sdk_common_1.LDPollingError(js_sdk_common_1.DataSourceErrorKind.ErrorResponse, message2, status, false));
-              return;
-            }
-            const message = (0, js_sdk_common_1.httpErrorMessage)(err, "polling request", "will retry");
-            statusCallback(js_sdk_common_1.subsystem.DataSourceState.Interrupted, new js_sdk_common_1.LDPollingError(js_sdk_common_1.DataSourceErrorKind.ErrorResponse, message, status));
-            (_c = this._logger) === null || _c === void 0 ? void 0 : _c.warn(message);
-            this._timeoutHandle = setTimeout(() => {
-              this._poll(dataCallback, statusCallback, selectorGetter);
-            }, sleepFor);
-            return;
-          }
-          const initMetadata = js_sdk_common_1.internal.initMetadataFromHeaders(headers);
-          if (body) {
-            try {
-              const payloadProcessor = new js_sdk_common_1.internal.PayloadProcessor({
-                flag: (flag) => {
-                  (0, serialization_1.processFlag)(flag);
-                  return flag;
-                },
-                segment: (segment) => {
-                  (0, serialization_1.processSegment)(segment);
-                  return segment;
-                }
-              }, (errorKind, message) => {
-                if (fallbackToFDv1) {
-                  emitFallback();
-                  return;
-                }
-                statusCallback(js_sdk_common_1.subsystem.DataSourceState.Interrupted, new js_sdk_common_1.LDPollingError(errorKind, message));
-              }, this._logger);
-              payloadProcessor.addPayloadListener((payload) => {
-                var _a3;
-                const data = {
-                  initMetadata,
-                  payload
-                };
-                if (fallbackToFDv1) {
-                  data.fallbackToFDv1 = true;
-                  (_a3 = this._logger) === null || _a3 === void 0 ? void 0 : _a3.warn(`Response header indicates to fallback to FDv1`);
-                }
-                dataCallback(payload.type === "full", data);
-              });
-              (_d = this._logger) === null || _d === void 0 ? void 0 : _d.debug(`Got body: ${body}`);
-              if (!this._processResponseAsFDv1) {
-                const parsed = JSON.parse(body);
-                payloadProcessor.processEvents(parsed.events);
-              } else {
-                const parsed = JSON.parse(body);
-                processFDv1FlagsAndSegments(payloadProcessor, parsed);
-              }
-              if (fallbackToFDv1) {
-                return;
-              }
-              statusCallback(js_sdk_common_1.subsystem.DataSourceState.Valid);
-            } catch (_g) {
-              (_e = this._logger) === null || _e === void 0 ? void 0 : _e.error("Response contained invalid data");
-              (_f = this._logger) === null || _f === void 0 ? void 0 : _f.debug(`${err} - Body follows: ${body}`);
-              if (fallbackToFDv1) {
-                emitFallback();
-                return;
-              }
-              statusCallback(js_sdk_common_1.subsystem.DataSourceState.Interrupted, new js_sdk_common_1.LDPollingError(js_sdk_common_1.DataSourceErrorKind.InvalidData, "Malformed data in polling response"));
-            }
-          } else if (fallbackToFDv1) {
-            emitFallback();
-            return;
-          }
-          this._timeoutHandle = setTimeout(() => {
-            this._poll(dataCallback, statusCallback, selectorGetter);
-          }, sleepFor);
-        }, selectorAsQueryParams(selectorGetter === null || selectorGetter === void 0 ? void 0 : selectorGetter()));
-      }
-      start(dataCallback, statusCallback, selectorGetter) {
-        this._statusCallback = statusCallback;
-        statusCallback(js_sdk_common_1.subsystem.DataSourceState.Initializing);
-        this._poll(dataCallback, statusCallback, selectorGetter);
-      }
-      stop() {
-        var _a;
-        if (this._timeoutHandle) {
-          clearTimeout(this._timeoutHandle);
-          this._timeoutHandle = void 0;
-        }
-        (_a = this._statusCallback) === null || _a === void 0 ? void 0 : _a.call(this, js_sdk_common_1.subsystem.DataSourceState.Closed);
-        this._stopped = true;
-        this._statusCallback = void 0;
-      }
-    };
-    exports.default = PollingProcessorFDv2;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/Requestor.js
-var require_Requestor = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/Requestor.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var js_sdk_common_1 = require_cjs();
-    var Requestor = class {
-      constructor(config, _requests, baseHeaders, _path = "/sdk/latest-all", _logger, serviceEndpointsOverride) {
-        this._requests = _requests;
-        this._path = _path;
-        this._logger = _logger;
-        this._eTagCache = {};
-        this._headers = Object.assign({}, baseHeaders);
-        this._serviceEndpoints = serviceEndpointsOverride !== null && serviceEndpointsOverride !== void 0 ? serviceEndpointsOverride : config.serviceEndpoints;
-        this._timeoutMs = config.timeout * 1e3;
-      }
-      /**
-       * Perform a request and utilize the ETag cache. The ETags are cached in the
-       * requestor instance.
-       */
-      async _requestWithETagCache(requestUrl, options) {
-        const cacheEntry = this._eTagCache[requestUrl];
-        const cachedETag = cacheEntry === null || cacheEntry === void 0 ? void 0 : cacheEntry.etag;
-        const updatedOptions = cachedETag ? Object.assign(Object.assign({}, options), { headers: Object.assign(Object.assign({}, options.headers), { "if-none-match": cachedETag }) }) : options;
-        const res = await this._requests.fetch(requestUrl, updatedOptions);
-        if (res.status === 304 && cacheEntry) {
-          return { res, body: cacheEntry.body };
-        }
-        const etag = res.headers.get("etag");
-        const body = await res.text();
-        if (etag) {
-          this._eTagCache[requestUrl] = { etag, body };
-        }
-        return { res, body };
-      }
-      async requestAllData(cb, queryParams = []) {
-        var _a, _b;
-        const options = {
-          method: "GET",
-          headers: this._headers,
-          timeout: this._timeoutMs
-        };
-        const uri = (0, js_sdk_common_1.getPollingUri)(this._serviceEndpoints, this._path, queryParams);
-        (_a = this._logger) === null || _a === void 0 ? void 0 : _a.debug(`Requestor making request to uri: ${uri}`);
-        try {
-          const { res, body } = await this._requestWithETagCache(uri, options);
-          (_b = this._logger) === null || _b === void 0 ? void 0 : _b.debug(`Requestor got (possibly cached) body: ${JSON.stringify(body)}`);
-          const fallbackToFDv1 = res.headers.get(`x-ld-fd-fallback`) === `true`;
-          const responseHeaders = Object.fromEntries(res.headers.entries());
-          if (res.status !== 200 && res.status !== 304) {
-            const err = fallbackToFDv1 ? new js_sdk_common_1.LDFlagDeliveryFallbackError(js_sdk_common_1.DataSourceErrorKind.ErrorResponse, `Response header indicates to fallback to FDv1.`, res.status) : new js_sdk_common_1.LDPollingError(js_sdk_common_1.DataSourceErrorKind.ErrorResponse, `Unexpected status code: ${res.status}`, res.status);
-            return cb(err, void 0, responseHeaders, fallbackToFDv1);
-          }
-          return cb(void 0, res.status === 304 ? null : body, responseHeaders, fallbackToFDv1);
-        } catch (err) {
-          return cb(err, void 0, void 0, false);
-        }
-      }
-    };
-    exports.default = Requestor;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/StreamingProcessor.js
-var require_StreamingProcessor = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/StreamingProcessor.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var js_sdk_common_1 = require_cjs();
-    var reportJsonError = (type, data, logger, errorHandler) => {
-      logger === null || logger === void 0 ? void 0 : logger.error(`Stream received invalid data in "${type}" message`);
-      logger === null || logger === void 0 ? void 0 : logger.debug(`Invalid JSON follows: ${data}`);
-      errorHandler === null || errorHandler === void 0 ? void 0 : errorHandler(new js_sdk_common_1.LDStreamingError(js_sdk_common_1.DataSourceErrorKind.InvalidData, "Malformed JSON data in event stream"));
-    };
-    var StreamingProcessor = class {
-      constructor(clientContext, streamUriPath, parameters, _listeners, baseHeaders, _diagnosticsManager, _errorHandler, _streamInitialReconnectDelay = 1) {
-        this._listeners = _listeners;
-        this._diagnosticsManager = _diagnosticsManager;
-        this._errorHandler = _errorHandler;
-        this._streamInitialReconnectDelay = _streamInitialReconnectDelay;
-        const { basicConfiguration, platform: platform2 } = clientContext;
-        const { logger } = basicConfiguration;
-        const { requests } = platform2;
-        this._headers = Object.assign({}, baseHeaders);
-        this._logger = logger;
-        this._requests = requests;
-        this._streamUri = (0, js_sdk_common_1.getStreamingUri)(basicConfiguration.serviceEndpoints, streamUriPath, parameters);
-      }
-      _logConnectionStarted() {
-        this._connectionAttemptStartTime = Date.now();
-      }
-      _logConnectionResult(success) {
-        if (this._connectionAttemptStartTime && this._diagnosticsManager) {
-          this._diagnosticsManager.recordStreamInit(this._connectionAttemptStartTime, !success, Date.now() - this._connectionAttemptStartTime);
-        }
-        this._connectionAttemptStartTime = void 0;
-      }
-      /**
-       * This is a wrapper around the passed errorHandler which adds additional
-       * diagnostics and logging logic.
-       *
-       * @param err The error to be logged and handled.
-       * @return boolean whether to retry the connection.
-       *
-       * @private
-       */
-      _retryAndHandleError(err) {
-        var _a, _b, _c;
-        if (!(0, js_sdk_common_1.shouldRetry)(err)) {
-          this._logConnectionResult(false);
-          (_a = this._errorHandler) === null || _a === void 0 ? void 0 : _a.call(this, new js_sdk_common_1.LDStreamingError(js_sdk_common_1.DataSourceErrorKind.ErrorResponse, err.message, err.status));
-          (_b = this._logger) === null || _b === void 0 ? void 0 : _b.error((0, js_sdk_common_1.httpErrorMessage)(err, "streaming request"));
-          return false;
-        }
-        (_c = this._logger) === null || _c === void 0 ? void 0 : _c.warn((0, js_sdk_common_1.httpErrorMessage)(err, "streaming request", "will retry"));
-        this._logConnectionResult(false);
-        this._logConnectionStarted();
-        return true;
-      }
-      start() {
-        this._logConnectionStarted();
-        const eventSource = this._requests.createEventSource(this._streamUri, {
-          headers: this._headers,
-          errorFilter: (error2) => this._retryAndHandleError(error2),
-          initialRetryDelayMillis: 1e3 * this._streamInitialReconnectDelay,
-          readTimeoutMillis: 5 * 60 * 1e3,
-          retryResetIntervalMillis: 60 * 1e3
-        });
-        this._eventSource = eventSource;
-        eventSource.onclose = () => {
-          var _a;
-          (_a = this._logger) === null || _a === void 0 ? void 0 : _a.info("Closed LaunchDarkly stream connection");
-        };
-        eventSource.onerror = () => {
-        };
-        eventSource.onopen = (e) => {
-          var _a;
-          this._initHeaders = e.headers;
-          (_a = this._logger) === null || _a === void 0 ? void 0 : _a.info("Opened LaunchDarkly stream connection");
-        };
-        eventSource.onretrying = (e) => {
-          var _a;
-          (_a = this._logger) === null || _a === void 0 ? void 0 : _a.info(`Will retry stream connection in ${e.delayMillis} milliseconds`);
-        };
-        this._listeners.forEach(({ deserializeData, processJson }, eventName) => {
-          eventSource.addEventListener(eventName, (event) => {
-            var _a, _b;
-            (_a = this._logger) === null || _a === void 0 ? void 0 : _a.debug(`Received ${eventName} event`);
-            if (event === null || event === void 0 ? void 0 : event.data) {
-              this._logConnectionResult(true);
-              const { data } = event;
-              const dataJson = deserializeData(data);
-              if (!dataJson) {
-                reportJsonError(eventName, data, this._logger, this._errorHandler);
-                return;
-              }
-              processJson(dataJson, this._initHeaders);
-            } else {
-              (_b = this._errorHandler) === null || _b === void 0 ? void 0 : _b.call(this, new js_sdk_common_1.LDStreamingError(js_sdk_common_1.DataSourceErrorKind.Unknown, "Unexpected payload from event stream"));
-            }
-          });
-        });
-      }
-      stop() {
-        var _a;
-        (_a = this._eventSource) === null || _a === void 0 ? void 0 : _a.close();
-        this._eventSource = void 0;
-      }
-      close() {
-        this.stop();
-      }
-    };
-    exports.default = StreamingProcessor;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/StreamingProcessorFDv2.js
-var require_StreamingProcessorFDv2 = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/StreamingProcessorFDv2.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var js_sdk_common_1 = require_cjs();
-    var serialization_1 = require_serialization();
-    var StreamingProcessorFDv2 = class {
-      constructor(clientContext, _streamUriPath, _parameters, baseHeaders, _diagnosticsManager, _streamInitialReconnectDelay = 1, serviceEndpointsOverride) {
-        this._streamUriPath = _streamUriPath;
-        this._parameters = _parameters;
-        this._diagnosticsManager = _diagnosticsManager;
-        this._streamInitialReconnectDelay = _streamInitialReconnectDelay;
-        const { basicConfiguration, platform: platform2 } = clientContext;
-        const { logger, serviceEndpoints } = basicConfiguration;
-        const { requests } = platform2;
-        this._headers = Object.assign({}, baseHeaders);
-        this._serviceEndpoints = serviceEndpointsOverride !== null && serviceEndpointsOverride !== void 0 ? serviceEndpointsOverride : serviceEndpoints;
-        this._logger = logger;
-        this._requests = requests;
-      }
-      _logConnectionAttempt() {
-        this._connectionAttemptStartTime = Date.now();
-      }
-      _logConnectionResult(success) {
-        if (this._connectionAttemptStartTime && this._diagnosticsManager) {
-          this._diagnosticsManager.recordStreamInit(this._connectionAttemptStartTime, !success, Date.now() - this._connectionAttemptStartTime);
-        }
-        this._connectionAttemptStartTime = void 0;
-      }
-      /**
-       * This is a wrapper around the passed errorHandler which adds additional
-       * diagnostics and logging logic.
-       *
-       * @param err The error to be logged and handled.
-       * @return boolean whether to retry the connection.
-       *
-       * @private
-       */
-      _retryAndHandleError(err, statusCallback) {
-        var _a, _b, _c;
-        if (((_a = err.headers) === null || _a === void 0 ? void 0 : _a[`x-ld-fd-fallback`]) === `true`) {
-          const fallbackErr = new js_sdk_common_1.LDFlagDeliveryFallbackError(js_sdk_common_1.DataSourceErrorKind.ErrorResponse, `Response header indicates to fallback to FDv1`, err.status);
-          statusCallback(js_sdk_common_1.subsystem.DataSourceState.Closed, fallbackErr);
-          return false;
-        }
-        if (!(0, js_sdk_common_1.shouldRetry)(err)) {
-          (_b = this._logger) === null || _b === void 0 ? void 0 : _b.error((0, js_sdk_common_1.httpErrorMessage)(err, "streaming request"));
-          this._logConnectionResult(false);
-          statusCallback(js_sdk_common_1.subsystem.DataSourceState.Closed, new js_sdk_common_1.LDStreamingError(js_sdk_common_1.DataSourceErrorKind.ErrorResponse, err.message, err.status, false));
-          return false;
-        }
-        (_c = this._logger) === null || _c === void 0 ? void 0 : _c.warn((0, js_sdk_common_1.httpErrorMessage)(err, "streaming request", "will retry"));
-        this._logConnectionResult(false);
-        this._logConnectionAttempt();
-        statusCallback(js_sdk_common_1.subsystem.DataSourceState.Interrupted);
-        return true;
-      }
-      start(dataCallback, statusCallback, selectorGetter) {
-        var _a;
-        this._logConnectionAttempt();
-        statusCallback(js_sdk_common_1.subsystem.DataSourceState.Initializing);
-        const selector = selectorGetter === null || selectorGetter === void 0 ? void 0 : selectorGetter();
-        const params = selector ? [...this._parameters, { key: "basis", value: selector }] : this._parameters;
-        const uri = (0, js_sdk_common_1.getStreamingUri)(this._serviceEndpoints, this._streamUriPath, params);
-        (_a = this._logger) === null || _a === void 0 ? void 0 : _a.debug(`Streaming processor opening event source to uri: ${uri}`);
-        let fallbackRequested = false;
-        const eventSource = this._requests.createEventSource(uri, {
-          headers: this._headers,
-          errorFilter: (error2) => this._retryAndHandleError(error2, statusCallback),
-          initialRetryDelayMillis: 1e3 * this._streamInitialReconnectDelay,
-          readTimeoutMillis: 5 * 60 * 1e3,
-          retryResetIntervalMillis: 60 * 1e3
-        });
-        this._eventSource = eventSource;
-        const payloadReader = new js_sdk_common_1.internal.PayloadStreamReader(eventSource, {
-          flag: (flag) => {
-            (0, serialization_1.processFlag)(flag);
-            return flag;
-          },
-          segment: (segment) => {
-            (0, serialization_1.processSegment)(segment);
-            return segment;
-          }
-        }, (errorKind, message) => {
-          var _a2;
-          if (fallbackRequested) {
-            const fallbackErr = new js_sdk_common_1.LDFlagDeliveryFallbackError(js_sdk_common_1.DataSourceErrorKind.ErrorResponse, `Response header indicates to fallback to FDv1`);
-            (_a2 = this._logger) === null || _a2 === void 0 ? void 0 : _a2.warn(fallbackErr.message);
-            statusCallback(js_sdk_common_1.subsystem.DataSourceState.Closed, fallbackErr);
-          } else {
-            statusCallback(js_sdk_common_1.subsystem.DataSourceState.Interrupted, new js_sdk_common_1.LDStreamingError(errorKind, message));
-          }
-          this.stop();
-        }, this._logger);
-        payloadReader.addPayloadListener((payload) => {
-          var _a2;
-          this._logConnectionResult(true);
-          const data = {
-            initMetadata: this._initMetadata,
-            payload
-          };
-          if (fallbackRequested) {
-            data.fallbackToFDv1 = true;
-            (_a2 = this._logger) === null || _a2 === void 0 ? void 0 : _a2.warn(`Response header indicates to fallback to FDv1`);
-          }
-          dataCallback(payload.type === "full", data);
-          if (fallbackRequested) {
-            this.stop();
-          }
-        });
-        eventSource.onclose = () => {
-          var _a2;
-          (_a2 = this._logger) === null || _a2 === void 0 ? void 0 : _a2.info("Closed LaunchDarkly stream connection");
-          statusCallback(js_sdk_common_1.subsystem.DataSourceState.Closed);
-        };
-        eventSource.onerror = () => {
-        };
-        eventSource.onopen = (e) => {
-          var _a2, _b;
-          (_a2 = this._logger) === null || _a2 === void 0 ? void 0 : _a2.info("Opened LaunchDarkly stream connection");
-          this._initMetadata = js_sdk_common_1.internal.initMetadataFromHeaders(e.headers);
-          if (((_b = e.headers) === null || _b === void 0 ? void 0 : _b[`x-ld-fd-fallback`]) === `true`) {
-            fallbackRequested = true;
-          }
-          statusCallback(js_sdk_common_1.subsystem.DataSourceState.Valid);
-        };
-        eventSource.onretrying = (e) => {
-          var _a2;
-          (_a2 = this._logger) === null || _a2 === void 0 ? void 0 : _a2.info(`Will retry stream connection in ${e.delayMillis} milliseconds`);
-        };
-      }
-      stop() {
-        var _a;
-        (_a = this._eventSource) === null || _a === void 0 ? void 0 : _a.close();
-        this._eventSource = void 0;
-      }
-      close() {
-        this.stop();
-      }
-    };
-    exports.default = StreamingProcessorFDv2;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/TransactionalDataSourceUpdates.js
-var require_TransactionalDataSourceUpdates = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/data_sources/TransactionalDataSourceUpdates.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var VersionedDataKinds_1 = require_VersionedDataKinds();
-    var DataSourceUpdates_1 = require_DataSourceUpdates();
-    var DependencyTracker_1 = require_DependencyTracker();
-    var NamespacedDataSet_1 = require_NamespacedDataSet();
-    var TransactionalDataSourceUpdates = class {
-      constructor(_featureStore, _hasEventListeners, _onChange) {
-        this._featureStore = _featureStore;
-        this._hasEventListeners = _hasEventListeners;
-        this._onChange = _onChange;
-        this._dependencyTracker = new DependencyTracker_1.default();
-      }
-      init(allData, callback, initMetadata) {
-        this.applyChanges(true, allData, callback, initMetadata);
-      }
-      upsert(kind, data, callback) {
-        this.applyChanges(
-          false,
-          // basis is false for upserts
-          {
-            [kind.namespace]: {
-              [data.key]: data
-            }
-          },
-          callback
-        );
-      }
-      applyChanges(basis, data, callback, initMetadata, selector) {
-        const checkForChanges = this._hasEventListeners();
-        const doApplyChanges = (oldData2) => {
-          this._featureStore.applyChanges(basis, data, () => {
-            Promise.resolve().then(() => {
-              if (basis) {
-                this._dependencyTracker.reset();
-              }
-              Object.entries(data).forEach(([namespace, items]) => {
-                Object.keys(items || {}).forEach((key) => {
-                  const item = items[key];
-                  this._dependencyTracker.updateDependenciesFrom(namespace, key, (0, DataSourceUpdates_1.computeDependencies)(namespace, item));
-                });
-              });
-              if (checkForChanges) {
-                const updatedItems = new NamespacedDataSet_1.default();
-                Object.keys(data).forEach((namespace) => {
-                  const oldDataForKind = oldData2[namespace];
-                  const newDataForKind = data[namespace];
-                  let iterateData;
-                  if (basis) {
-                    iterateData = Object.assign(Object.assign({}, oldDataForKind), newDataForKind);
-                  } else {
-                    iterateData = Object.assign({}, newDataForKind);
-                  }
-                  Object.keys(iterateData).forEach((key) => {
-                    this.addIfModified(namespace, key, oldDataForKind && oldDataForKind[key], newDataForKind && newDataForKind[key], updatedItems);
-                  });
-                });
-                this.sendChangeEvents(updatedItems);
-              }
-            });
-            callback === null || callback === void 0 ? void 0 : callback();
-          }, initMetadata, selector);
-        };
-        let oldData = {};
-        if (checkForChanges) {
-          this._featureStore.all(VersionedDataKinds_1.default.Features, (oldFlags) => {
-            this._featureStore.all(VersionedDataKinds_1.default.Segments, (oldSegments) => {
-              oldData = {
-                [VersionedDataKinds_1.default.Features.namespace]: oldFlags,
-                [VersionedDataKinds_1.default.Segments.namespace]: oldSegments
-              };
-            });
-          });
-        }
-        doApplyChanges(oldData);
-      }
-      addIfModified(namespace, key, oldValue, newValue, toDataSet) {
-        if (newValue && oldValue && newValue.version <= oldValue.version) {
-          return;
-        }
-        this._dependencyTracker.updateModifiedItems(toDataSet, namespace, key);
-      }
-      sendChangeEvents(dataSet) {
-        dataSet.enumerate((namespace, key) => {
-          if (namespace === VersionedDataKinds_1.default.Features.namespace) {
-            this._onChange(key);
-          }
-        });
-      }
-    };
-    exports.default = TransactionalDataSourceUpdates;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/options/Configuration.js
-var require_Configuration = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/options/Configuration.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.defaultValues = exports.DEFAULT_STREAM_RECONNECT_DELAY = exports.DEFAULT_POLL_INTERVAL = void 0;
-    var js_sdk_common_1 = require_cjs();
-    var LDDataSystemOptions_1 = require_LDDataSystemOptions();
-    var InMemoryFeatureStore_1 = require_InMemoryFeatureStore();
-    var TransactionalFeatureStore_1 = require_TransactionalFeatureStore();
-    var validations = {
-      baseUri: js_sdk_common_1.TypeValidators.String,
-      streamUri: js_sdk_common_1.TypeValidators.String,
-      eventsUri: js_sdk_common_1.TypeValidators.String,
-      timeout: js_sdk_common_1.TypeValidators.numberWithMin(1),
-      capacity: js_sdk_common_1.TypeValidators.Number,
-      logger: js_sdk_common_1.TypeValidators.Object,
-      featureStore: js_sdk_common_1.TypeValidators.ObjectOrFactory,
-      dataSystem: js_sdk_common_1.TypeValidators.Object,
-      bigSegments: js_sdk_common_1.TypeValidators.Object,
-      updateProcessor: js_sdk_common_1.TypeValidators.ObjectOrFactory,
-      flushInterval: js_sdk_common_1.TypeValidators.Number,
-      pollInterval: js_sdk_common_1.TypeValidators.numberWithMin(30),
-      proxyOptions: js_sdk_common_1.TypeValidators.Object,
-      offline: js_sdk_common_1.TypeValidators.Boolean,
-      stream: js_sdk_common_1.TypeValidators.Boolean,
-      streamInitialReconnectDelay: js_sdk_common_1.TypeValidators.Number,
-      useLdd: js_sdk_common_1.TypeValidators.Boolean,
-      sendEvents: js_sdk_common_1.TypeValidators.Boolean,
-      allAttributesPrivate: js_sdk_common_1.TypeValidators.Boolean,
-      privateAttributes: js_sdk_common_1.TypeValidators.StringArray,
-      contextKeysCapacity: js_sdk_common_1.TypeValidators.Number,
-      contextKeysFlushInterval: js_sdk_common_1.TypeValidators.Number,
-      tlsParams: js_sdk_common_1.TypeValidators.Object,
-      diagnosticOptOut: js_sdk_common_1.TypeValidators.Boolean,
-      diagnosticRecordingInterval: js_sdk_common_1.TypeValidators.numberWithMin(60),
-      wrapperName: js_sdk_common_1.TypeValidators.String,
-      wrapperVersion: js_sdk_common_1.TypeValidators.String,
-      application: js_sdk_common_1.TypeValidators.Object,
-      payloadFilterKey: js_sdk_common_1.TypeValidators.stringMatchingRegex(/^[a-zA-Z0-9](\w|\.|-)*$/),
-      hooks: js_sdk_common_1.TypeValidators.createTypeArray("Hook[]", {}),
-      enableEventCompression: js_sdk_common_1.TypeValidators.Boolean,
-      dataSourceOptionsType: js_sdk_common_1.TypeValidators.String
-    };
-    exports.DEFAULT_POLL_INTERVAL = 30;
-    exports.DEFAULT_STREAM_RECONNECT_DELAY = 1;
-    var defaultStandardDataSourceOptions = {
-      dataSourceOptionsType: "standard",
-      streamInitialReconnectDelay: exports.DEFAULT_STREAM_RECONNECT_DELAY,
-      pollInterval: exports.DEFAULT_POLL_INTERVAL
-    };
-    var defaultStreamingDataSourceOptions = {
-      dataSourceOptionsType: "streamingOnly",
-      streamInitialReconnectDelay: exports.DEFAULT_STREAM_RECONNECT_DELAY
-    };
-    var defaultPollingDataSourceOptions = {
-      dataSourceOptionsType: "pollingOnly",
-      pollInterval: exports.DEFAULT_POLL_INTERVAL
-    };
-    var defaultDataSystemOptions = {
-      dataSource: defaultStandardDataSourceOptions
-    };
-    exports.defaultValues = {
-      baseUri: "https://sdk.launchdarkly.com",
-      streamUri: "https://stream.launchdarkly.com",
-      eventsUri: js_sdk_common_1.ServiceEndpoints.DEFAULT_EVENTS,
-      stream: true,
-      streamInitialReconnectDelay: exports.DEFAULT_STREAM_RECONNECT_DELAY,
-      sendEvents: true,
-      timeout: 10,
-      capacity: 1e4,
-      flushInterval: 5,
-      pollInterval: exports.DEFAULT_POLL_INTERVAL,
-      offline: false,
-      useLdd: false,
-      allAttributesPrivate: false,
-      privateAttributes: [],
-      contextKeysCapacity: 1e3,
-      contextKeysFlushInterval: 300,
-      diagnosticOptOut: false,
-      diagnosticRecordingInterval: 900,
-      featureStore: () => new InMemoryFeatureStore_1.default(),
-      enableEventCompression: false,
-      dataSystem: defaultDataSystemOptions
-    };
-    function validateTypesAndNames(options, defaults) {
-      const errors = [];
-      const validatedOptions = Object.assign({}, defaults);
-      Object.keys(options).forEach((optionName) => {
-        var _a;
-        const optionValue = options[optionName];
-        const validator = validations[optionName];
-        if (validator) {
-          if (!validator.is(optionValue)) {
-            if (validator.getType() === "boolean") {
-              errors.push(js_sdk_common_1.OptionMessages.wrongOptionTypeBoolean(optionName, typeof optionValue));
-              validatedOptions[optionName] = !!optionValue;
-            } else if (validator instanceof js_sdk_common_1.NumberWithMinimum && js_sdk_common_1.TypeValidators.Number.is(optionValue)) {
-              const { min } = validator;
-              errors.push(js_sdk_common_1.OptionMessages.optionBelowMinimum(optionName, optionValue, min));
-              validatedOptions[optionName] = min;
-            } else {
-              errors.push(js_sdk_common_1.OptionMessages.wrongOptionType(optionName, validator.getType(), typeof optionValue));
-              validatedOptions[optionName] = exports.defaultValues[optionName];
-            }
-          } else {
-            validatedOptions[optionName] = optionValue;
-          }
-        } else {
-          (_a = options.logger) === null || _a === void 0 ? void 0 : _a.warn(js_sdk_common_1.OptionMessages.unknownOption(optionName));
-        }
-      });
-      return { errors, validatedOptions };
-    }
-    function validateEndpoints(options, validatedOptions) {
-      var _a, _b, _c;
-      const { baseUri, streamUri, eventsUri } = options;
-      const streamingEndpointSpecified = streamUri !== void 0 && streamUri !== null;
-      const pollingEndpointSpecified = baseUri !== void 0 && baseUri !== null;
-      const eventEndpointSpecified = eventsUri !== void 0 && eventsUri !== null;
-      if (streamingEndpointSpecified === pollingEndpointSpecified && streamingEndpointSpecified === eventEndpointSpecified) {
-        return;
-      }
-      if (!streamingEndpointSpecified && validatedOptions.stream) {
-        (_a = validatedOptions.logger) === null || _a === void 0 ? void 0 : _a.warn(js_sdk_common_1.OptionMessages.partialEndpoint("streamUri"));
-      }
-      if (!pollingEndpointSpecified) {
-        (_b = validatedOptions.logger) === null || _b === void 0 ? void 0 : _b.warn(js_sdk_common_1.OptionMessages.partialEndpoint("baseUri"));
-      }
-      if (!eventEndpointSpecified && validatedOptions.sendEvents) {
-        (_c = validatedOptions.logger) === null || _c === void 0 ? void 0 : _c.warn(js_sdk_common_1.OptionMessages.partialEndpoint("eventsUri"));
-      }
-    }
-    var fdv1FallbackValidations = {
-      baseUri: js_sdk_common_1.TypeValidators.String,
-      pollInterval: js_sdk_common_1.TypeValidators.numberWithMin(30)
-    };
-    function validateFDv1FallbackOptions(options) {
-      const errors = [];
-      const validatedOptions = {};
-      Object.keys(options).forEach((optionName) => {
-        const optionValue = options[optionName];
-        const validator = fdv1FallbackValidations[optionName];
-        if (!validator) {
-          errors.push(js_sdk_common_1.OptionMessages.unknownOption(`dataSystem.fdv1Fallback.${optionName}`));
-          return;
-        }
-        if (!validator.is(optionValue)) {
-          if (validator instanceof js_sdk_common_1.NumberWithMinimum && js_sdk_common_1.TypeValidators.Number.is(optionValue)) {
-            const { min } = validator;
-            errors.push(js_sdk_common_1.OptionMessages.optionBelowMinimum(`dataSystem.fdv1Fallback.${optionName}`, optionValue, min));
-            validatedOptions[optionName] = min;
-          } else {
-            errors.push(js_sdk_common_1.OptionMessages.wrongOptionType(`dataSystem.fdv1Fallback.${optionName}`, validator.getType(), typeof optionValue));
-          }
-        } else {
-          validatedOptions[optionName] = optionValue;
-        }
-      });
-      return { errors, validatedOptions };
-    }
-    function rejectDataSourceBaseUri(dataSource, validatedDataSource) {
-      if (!Object.prototype.hasOwnProperty.call(dataSource, "baseUri")) {
-        return [];
-      }
-      delete validatedDataSource.baseUri;
-      return [js_sdk_common_1.OptionMessages.unknownOption("dataSystem.dataSource.baseUri")];
-    }
-    function validateDataSystemOptions(options) {
-      const allErrors = [];
-      const validatedOptions = Object.assign({}, options);
-      if (options.persistentStore && !js_sdk_common_1.TypeValidators.ObjectOrFactory.is(options.persistentStore)) {
-        validatedOptions.persistentStore = void 0;
-        allErrors.push(js_sdk_common_1.OptionMessages.wrongOptionType("persistentStore", "LDFeatureStore", typeof options.persistentStore));
-      }
-      if (options.fdv1Fallback !== void 0 && options.fdv1Fallback !== null) {
-        if (js_sdk_common_1.TypeValidators.Object.is(options.fdv1Fallback)) {
-          const { errors: fbErrors, validatedOptions: fbValidated } = validateFDv1FallbackOptions(options.fdv1Fallback);
-          validatedOptions.fdv1Fallback = fbValidated;
-          allErrors.push(...fbErrors);
-        } else {
-          validatedOptions.fdv1Fallback = void 0;
-          allErrors.push(js_sdk_common_1.OptionMessages.wrongOptionType("dataSystem.fdv1Fallback", "FDv1FallbackConfiguration", typeof options.fdv1Fallback));
-        }
-      }
-      if (options.dataSource) {
-        let errors;
-        let validatedDataSourceOptions;
-        if ((0, LDDataSystemOptions_1.isStandardOptions)(options.dataSource)) {
-          ({ errors, validatedOptions: validatedDataSourceOptions } = validateTypesAndNames(options.dataSource, defaultStandardDataSourceOptions));
-          errors.push(...rejectDataSourceBaseUri(options.dataSource, validatedDataSourceOptions));
-        } else if ((0, LDDataSystemOptions_1.isStreamingOnlyOptions)(options.dataSource)) {
-          ({ errors, validatedOptions: validatedDataSourceOptions } = validateTypesAndNames(options.dataSource, defaultStreamingDataSourceOptions));
-          errors.push(...rejectDataSourceBaseUri(options.dataSource, validatedDataSourceOptions));
-        } else if ((0, LDDataSystemOptions_1.isPollingOnlyOptions)(options.dataSource)) {
-          ({ errors, validatedOptions: validatedDataSourceOptions } = validateTypesAndNames(options.dataSource, defaultPollingDataSourceOptions));
-          errors.push(...rejectDataSourceBaseUri(options.dataSource, validatedDataSourceOptions));
-        } else if ((0, LDDataSystemOptions_1.isCustomOptions)(options.dataSource)) {
-          validatedDataSourceOptions = options.dataSource;
-          errors = [];
-        } else {
-          validatedDataSourceOptions = defaultStandardDataSourceOptions;
-          errors = [
-            js_sdk_common_1.OptionMessages.wrongOptionType("dataSource", "DataSourceOptions", typeof options.dataSource)
-          ];
-        }
-        validatedOptions.dataSource = validatedDataSourceOptions;
-        allErrors.push(...errors);
-      } else {
-        validatedOptions.dataSource = defaultStandardDataSourceOptions;
-      }
-      return { errors: allErrors, validatedOptions };
-    }
-    var Configuration = class {
-      constructor(options = {}, internalOptions = {}) {
-        var _a;
-        options = options || {};
-        this.logger = options.logger;
-        const { errors, validatedOptions: topLevelResult } = validateTypesAndNames(options, exports.defaultValues);
-        const validatedOptions = topLevelResult;
-        errors.forEach((error2) => {
-          var _a2;
-          (_a2 = this.logger) === null || _a2 === void 0 ? void 0 : _a2.warn(error2);
-        });
-        validateEndpoints(options, validatedOptions);
-        if (options.dataSystem) {
-          const { errors: dsErrors, validatedOptions: dsResult } = validateDataSystemOptions(options.dataSystem);
-          const validatedDSOptions = dsResult;
-          this.dataSystem = {
-            dataSource: validatedDSOptions.dataSource,
-            useLdd: validatedDSOptions.useLdd,
-            fdv1Fallback: validatedDSOptions.fdv1Fallback,
-            featureStoreFactory: (clientContext) => {
-              const { persistentStore } = validatedDSOptions;
-              let store;
-              if (persistentStore === void 0) {
-                store = new InMemoryFeatureStore_1.default();
-              } else if (js_sdk_common_1.TypeValidators.Function.is(persistentStore)) {
-                store = persistentStore(clientContext);
-              } else {
-                store = persistentStore;
-              }
-              if (js_sdk_common_1.TypeValidators.Function.is(store.applyChanges)) {
-                return store;
-              }
-              return new TransactionalFeatureStore_1.default(store);
-            }
-          };
-          dsErrors.forEach((error2) => {
-            var _a2;
-            (_a2 = this.logger) === null || _a2 === void 0 ? void 0 : _a2.warn(error2);
-          });
-        }
-        this.serviceEndpoints = new js_sdk_common_1.ServiceEndpoints(validatedOptions.streamUri, validatedOptions.baseUri, validatedOptions.eventsUri, internalOptions.analyticsEventPath, internalOptions.diagnosticEventPath, internalOptions.includeAuthorizationHeader, validatedOptions.payloadFilterKey);
-        this.eventsCapacity = validatedOptions.capacity;
-        this.timeout = validatedOptions.timeout;
-        this.bigSegments = validatedOptions.bigSegments;
-        this.flushInterval = validatedOptions.flushInterval;
-        this.pollInterval = validatedOptions.pollInterval;
-        this.proxyOptions = validatedOptions.proxyOptions;
-        this.offline = validatedOptions.offline;
-        this.stream = validatedOptions.stream;
-        this.streamInitialReconnectDelay = validatedOptions.streamInitialReconnectDelay;
-        this.useLdd = validatedOptions.useLdd;
-        this.sendEvents = validatedOptions.sendEvents;
-        this.allAttributesPrivate = validatedOptions.allAttributesPrivate;
-        this.privateAttributes = validatedOptions.privateAttributes;
-        this.contextKeysCapacity = validatedOptions.contextKeysCapacity;
-        this.contextKeysFlushInterval = validatedOptions.contextKeysFlushInterval;
-        this.tlsParams = validatedOptions.tlsParams;
-        this.diagnosticOptOut = validatedOptions.diagnosticOptOut;
-        this.wrapperName = validatedOptions.wrapperName;
-        this.payloadFilterKey = validatedOptions.payloadFilterKey;
-        this.wrapperVersion = validatedOptions.wrapperVersion;
-        this.tags = new js_sdk_common_1.ApplicationTags(validatedOptions);
-        this.diagnosticRecordingInterval = validatedOptions.diagnosticRecordingInterval;
-        if (js_sdk_common_1.TypeValidators.Function.is(validatedOptions.updateProcessor)) {
-          this.updateProcessorFactory = validatedOptions.updateProcessor;
-        } else {
-          this.updateProcessorFactory = () => validatedOptions.updateProcessor;
-        }
-        if (js_sdk_common_1.TypeValidators.Function.is(validatedOptions.featureStore)) {
-          this.featureStoreFactory = validatedOptions.featureStore;
-        } else {
-          this.featureStoreFactory = () => validatedOptions.featureStore;
-        }
-        this.hooks = validatedOptions.hooks;
-        this.enableEventCompression = validatedOptions.enableEventCompression;
-        this.getImplementationHooks = (_a = internalOptions.getImplementationHooks) !== null && _a !== void 0 ? _a : (() => []);
-        this.applicationInfo = validatedOptions.application;
-      }
-    };
-    exports.default = Configuration;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/diagnostics/createDiagnosticsInitConfig.js
-var require_createDiagnosticsInitConfig = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/diagnostics/createDiagnosticsInitConfig.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var js_sdk_common_1 = require_cjs();
-    var api_1 = require_api2();
-    var Configuration_1 = require_Configuration();
-    var createDiagnosticsInitConfig = (config, platform2, featureStore) => {
-      var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
-      let pollingIntervalMillis;
-      if ((_a = config.dataSystem) === null || _a === void 0 ? void 0 : _a.dataSource) {
-        if (((0, api_1.isStandardOptions)(config.dataSystem.dataSource) || (0, api_1.isPollingOnlyOptions)(config.dataSystem.dataSource)) && config.dataSystem.dataSource.pollInterval) {
-          pollingIntervalMillis = (0, js_sdk_common_1.secondsToMillis)(config.dataSystem.dataSource.pollInterval);
-        }
-      } else {
-        pollingIntervalMillis = (0, js_sdk_common_1.secondsToMillis)(config.pollInterval);
-      }
-      let reconnectTimeMillis;
-      if ((_b = config.dataSystem) === null || _b === void 0 ? void 0 : _b.dataSource) {
-        if (((0, api_1.isStandardOptions)(config.dataSystem.dataSource) || (0, api_1.isStreamingOnlyOptions)(config.dataSystem.dataSource)) && config.dataSystem.dataSource.streamInitialReconnectDelay) {
-          reconnectTimeMillis = (0, js_sdk_common_1.secondsToMillis)(config.dataSystem.dataSource.streamInitialReconnectDelay);
-        }
-      } else {
-        reconnectTimeMillis = (0, js_sdk_common_1.secondsToMillis)(config.streamInitialReconnectDelay);
-      }
-      let streamDisabled;
-      if ((_c = config.dataSystem) === null || _c === void 0 ? void 0 : _c.dataSource) {
-        streamDisabled = (0, api_1.isPollingOnlyOptions)((_d = config.dataSystem) === null || _d === void 0 ? void 0 : _d.dataSource);
-      } else {
-        streamDisabled = !config.stream;
-      }
-      return Object.assign(Object.assign(Object.assign({
-        customBaseURI: config.serviceEndpoints.polling !== Configuration_1.defaultValues.baseUri,
-        customStreamURI: config.serviceEndpoints.streaming !== Configuration_1.defaultValues.streamUri,
-        customEventsURI: config.serviceEndpoints.events !== Configuration_1.defaultValues.eventsUri,
-        eventsCapacity: config.eventsCapacity,
-        // Node doesn't distinguish between these two kinds of timeouts. It is unlikely other web
-        // based implementations would be able to either.
-        connectTimeoutMillis: (0, js_sdk_common_1.secondsToMillis)(config.timeout),
-        socketTimeoutMillis: (0, js_sdk_common_1.secondsToMillis)(config.timeout),
-        eventsFlushIntervalMillis: (0, js_sdk_common_1.secondsToMillis)(config.flushInterval)
-      }, pollingIntervalMillis ? { pollingIntervalMillis } : null), reconnectTimeMillis ? { reconnectTimeMillis } : null), { contextKeysFlushIntervalMillis: (0, js_sdk_common_1.secondsToMillis)(config.contextKeysFlushInterval), diagnosticRecordingIntervalMillis: (0, js_sdk_common_1.secondsToMillis)(config.diagnosticRecordingInterval), streamingDisabled: streamDisabled, usingRelayDaemon: (_f = (_e = config.dataSystem) === null || _e === void 0 ? void 0 : _e.useLdd) !== null && _f !== void 0 ? _f : config.useLdd, offline: config.offline, allAttributesPrivate: config.allAttributesPrivate, contextKeysCapacity: config.contextKeysCapacity, usingProxy: !!((_h = (_g = platform2.requests).usingProxy) === null || _h === void 0 ? void 0 : _h.call(_g)), usingProxyAuthenticator: !!((_k = (_j = platform2.requests).usingProxyAuth) === null || _k === void 0 ? void 0 : _k.call(_j)), dataStoreType: (_m = (_l = featureStore.getDescription) === null || _l === void 0 ? void 0 : _l.call(featureStore)) !== null && _m !== void 0 ? _m : "memory" });
-    };
-    exports.default = createDiagnosticsInitConfig;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/evaluation/collection.js
-var require_collection = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/evaluation/collection.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.allAsync = exports.firstSeriesAsync = exports.allSeriesAsync = exports.firstResult = void 0;
-    function firstResult(collection, operator) {
-      let res;
-      collection === null || collection === void 0 ? void 0 : collection.some((item, index) => {
-        res = operator(item, index);
-        return !!res;
-      });
-      return res;
-    }
-    exports.firstResult = firstResult;
-    var ITERATION_RECURSION_LIMIT = 50;
-    function seriesAsync(collection, check, all, index, cb) {
-      if (!collection) {
-        cb(false);
-        return;
-      }
-      if (index < (collection === null || collection === void 0 ? void 0 : collection.length)) {
-        check(collection[index], index, (res) => {
-          if (all) {
-            if (!res) {
-              cb(false);
-              return;
-            }
-          } else if (res) {
-            cb(true);
-            return;
-          }
-          if (collection.length > ITERATION_RECURSION_LIMIT) {
-            Promise.resolve().then(() => {
-              seriesAsync(collection, check, all, index + 1, cb);
-            });
-          } else {
-            seriesAsync(collection, check, all, index + 1, cb);
-          }
-        });
-      } else {
-        cb(all);
-      }
-    }
-    function allSeriesAsync(collection, check, cb) {
-      seriesAsync(collection, check, true, 0, cb);
-    }
-    exports.allSeriesAsync = allSeriesAsync;
-    function firstSeriesAsync(collection, check, cb) {
-      seriesAsync(collection, check, false, 0, cb);
-    }
-    exports.firstSeriesAsync = firstSeriesAsync;
-    function allAsync(collection, check, cb) {
-      if (!collection) {
-        cb(false);
-        return;
-      }
-      Promise.all(collection === null || collection === void 0 ? void 0 : collection.map((item) => new Promise((resolve) => {
-        check(item, resolve);
-      }))).then((results) => {
-        cb(results.every((success) => success));
-      });
-    }
-    exports.allAsync = allAsync;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/evaluation/Reasons.js
-var require_Reasons = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/evaluation/Reasons.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var Reasons = class {
-      static prerequisiteFailed(prerequisiteKey) {
-        return { kind: "PREREQUISITE_FAILED", prerequisiteKey };
-      }
-      static ruleMatch(ruleId, ruleIndex) {
-        return { kind: "RULE_MATCH", ruleId, ruleIndex };
-      }
-    };
-    Reasons.Fallthrough = { kind: "FALLTHROUGH" };
-    Reasons.Off = { kind: "OFF" };
-    Reasons.TargetMatch = { kind: "TARGET_MATCH" };
-    exports.default = Reasons;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/evaluation/EvalResult.js
-var require_EvalResult = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/evaluation/EvalResult.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var Reasons_1 = require_Reasons();
-    var EvalResult = class _EvalResult {
-      constructor(isError, detail, message) {
-        this.isError = isError;
-        this.detail = detail;
-        this.message = message;
-        this.isError = isError;
-        this.detail = detail;
-        this.message = message;
-      }
-      get isOff() {
-        return this.detail.reason.kind === Reasons_1.default.Off.kind;
-      }
-      setDefault(def) {
-        this.detail.value = def;
-      }
-      static forError(errorKind, message, def) {
-        return new _EvalResult(true, {
-          value: def !== null && def !== void 0 ? def : null,
-          variationIndex: null,
-          reason: { kind: "ERROR", errorKind }
-        }, message);
-      }
-      static forSuccess(value, reason, variationIndex) {
-        return new _EvalResult(false, {
-          value,
-          variationIndex: variationIndex === void 0 ? null : variationIndex,
-          reason
-        });
-      }
-    };
-    exports.default = EvalResult;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/evaluation/Bucketer.js
-var require_Bucketer = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/evaluation/Bucketer.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    function valueForBucketing(value) {
-      if (typeof value === "string") {
-        return value;
-      }
-      if (Number.isInteger(value)) {
-        return String(value);
-      }
-      return null;
-    }
-    var Bucketer = class {
-      constructor(crypto2) {
-        this._crypto = crypto2;
-      }
-      _sha1Hex(value) {
-        const hash = this._crypto.createHash("sha1");
-        hash.update(value);
-        if (!hash.digest) {
-          throw new Error("Platform must implement digest or asyncDigest");
-        }
-        return hash.digest("hex");
-      }
-      /**
-       * Bucket the provided context using the provided parameters.
-       * @param context The context to bucket. Can be a 'multi' kind context, but
-       * the bucketing will be by a specific contained kind.
-       * @param key A key to use in hashing. Typically the flag key or the segment key.
-       * @param attr The attribute to use for bucketing.
-       * @param salt A salt to use in hashing.
-       * @param kindForRollout The kind to use for bucketing.
-       * @param seed A seed to use in hashing.
-       *
-       * @returns A tuple where the first value is the bucket, and the second value indicates if there
-       * was a context for the value specified by `kindForRollout`. If there was not a context for the
-       * specified kind, then the `inExperiment` attribute should be `false`.
-       */
-      bucket(context, key, attr, salt, kindForRollout = "user", seed) {
-        const value = context.valueForKind(attr, kindForRollout);
-        const bucketableValue = valueForBucketing(value);
-        if (bucketableValue === null) {
-          const hadContext = context.kinds.indexOf(kindForRollout) >= 0;
-          return [0, hadContext];
-        }
-        const prefix = seed ? Number(seed) : `${key}.${salt}`;
-        const hashKey = `${prefix}.${bucketableValue}`;
-        const hashVal = parseInt(this._sha1Hex(hashKey).substring(0, 15), 16);
-        return [hashVal / 1152921504606847e3, true];
-      }
-    };
-    exports.default = Bucketer;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/evaluation/variations.js
-var require_variations = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/evaluation/variations.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.getBucketBy = exports.getOffVariation = exports.getVariation = void 0;
-    var js_sdk_common_1 = require_cjs();
-    var EvalResult_1 = require_EvalResult();
-    var { ErrorKinds } = js_sdk_common_1.internal;
-    var KEY_ATTR_REF = new js_sdk_common_1.AttributeReference("key");
-    function getVariation(flag, index, reason) {
-      if (js_sdk_common_1.TypeValidators.Number.is(index) && index >= 0 && index < flag.variations.length) {
-        return EvalResult_1.default.forSuccess(flag.variations[index], reason, index);
-      }
-      return EvalResult_1.default.forError(ErrorKinds.MalformedFlag, "Invalid variation index in flag");
-    }
-    exports.getVariation = getVariation;
-    function getOffVariation(flag, reason) {
-      if (!js_sdk_common_1.TypeValidators.Number.is(flag.offVariation)) {
-        return EvalResult_1.default.forSuccess(null, reason);
-      }
-      return getVariation(flag, flag.offVariation, reason);
-    }
-    exports.getOffVariation = getOffVariation;
-    function getBucketBy(isExperiment, bucketByAttributeReference) {
-      var _a;
-      return (_a = isExperiment ? void 0 : bucketByAttributeReference) !== null && _a !== void 0 ? _a : KEY_ATTR_REF;
-    }
-    exports.getBucketBy = getBucketBy;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/evaluation/evalTargets.js
-var require_evalTargets = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/evaluation/evalTargets.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var js_sdk_common_1 = require_cjs();
-    var collection_1 = require_collection();
-    var Reasons_1 = require_Reasons();
-    var variations_1 = require_variations();
-    function evalTarget(flag, target, context) {
-      const contextKey = context.key(target.contextKind);
-      if (contextKey !== void 0) {
-        const found = target.values.indexOf(contextKey) >= 0;
-        if (found) {
-          return (0, variations_1.getVariation)(flag, target.variation, Reasons_1.default.TargetMatch);
-        }
-      }
-      return void 0;
-    }
-    function evalTargets(flag, context) {
-      var _a;
-      if (!((_a = flag.contextTargets) === null || _a === void 0 ? void 0 : _a.length)) {
-        return (0, collection_1.firstResult)(flag.targets, (target) => evalTarget(flag, target, context));
-      }
-      return (0, collection_1.firstResult)(flag.contextTargets, (target) => {
-        if (!target.contextKind || target.contextKind === js_sdk_common_1.Context.UserKind) {
-          const userTarget = (flag.targets || []).find((ut) => ut.variation === target.variation);
-          if (userTarget) {
-            return evalTarget(flag, userTarget, context);
-          }
-          return void 0;
-        }
-        return evalTarget(flag, target, context);
-      });
-    }
-    exports.default = evalTargets;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/evaluation/makeBigSegmentRef.js
-var require_makeBigSegmentRef = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/evaluation/makeBigSegmentRef.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    function makeBigSegmentRef(segment) {
-      return `${segment.key}.g${segment.generation}`;
-    }
-    exports.default = makeBigSegmentRef;
+    module.exports = debug2;
   }
 });
 
@@ -25666,15 +21880,6 @@ var require_constants6 = __commonJS({
       FLAG_INCLUDE_PRERELEASE: 1,
       FLAG_LOOSE: 2
     };
-  }
-});
-
-// node_modules/semver/internal/debug.js
-var require_debug = __commonJS({
-  "node_modules/semver/internal/debug.js"(exports, module) {
-    var debug2 = typeof process === "object" && process.env && process.env.NODE_DEBUG && /\bsemver\b/i.test(process.env.NODE_DEBUG) ? (...args) => console.error("SEMVER", ...args) : () => {
-    };
-    module.exports = debug2;
   }
 });
 
@@ -26066,2025 +22271,3308 @@ var require_parse2 = __commonJS({
   }
 });
 
-// node_modules/semver/functions/valid.js
-var require_valid = __commonJS({
-  "node_modules/semver/functions/valid.js"(exports, module) {
-    var parse = require_parse2();
-    var valid = (version, options) => {
-      const v = parse(version, options);
-      return v ? v.version : null;
-    };
-    module.exports = valid;
-  }
-});
-
-// node_modules/semver/functions/clean.js
-var require_clean = __commonJS({
-  "node_modules/semver/functions/clean.js"(exports, module) {
-    var parse = require_parse2();
-    var clean = (version, options) => {
-      const s = parse(version.trim().replace(/^[=v]+/, ""), options);
-      return s ? s.version : null;
-    };
-    module.exports = clean;
-  }
-});
-
-// node_modules/semver/functions/inc.js
-var require_inc = __commonJS({
-  "node_modules/semver/functions/inc.js"(exports, module) {
-    var SemVer = require_semver();
-    var inc = (version, release, options, identifier, identifierBase) => {
-      if (typeof options === "string") {
-        identifierBase = identifier;
-        identifier = options;
-        options = void 0;
-      }
-      try {
-        return new SemVer(
-          version instanceof SemVer ? version.version : version,
-          options
-        ).inc(release, identifier, identifierBase).version;
-      } catch (er) {
-        return null;
-      }
-    };
-    module.exports = inc;
-  }
-});
-
-// node_modules/semver/functions/diff.js
-var require_diff = __commonJS({
-  "node_modules/semver/functions/diff.js"(exports, module) {
-    var parse = require_parse2();
-    var diff = (version1, version2) => {
-      const v1 = parse(version1, null, true);
-      const v2 = parse(version2, null, true);
-      const comparison = v1.compare(v2);
-      if (comparison === 0) {
-        return null;
-      }
-      const v1Higher = comparison > 0;
-      const highVersion = v1Higher ? v1 : v2;
-      const lowVersion = v1Higher ? v2 : v1;
-      const highHasPre = !!highVersion.prerelease.length;
-      const lowHasPre = !!lowVersion.prerelease.length;
-      if (lowHasPre && !highHasPre) {
-        if (!lowVersion.patch && !lowVersion.minor) {
-          return "major";
-        }
-        if (highVersion.patch) {
-          return "patch";
-        }
-        if (highVersion.minor) {
-          return "minor";
-        }
-        return "major";
-      }
-      const prefix = highHasPre ? "pre" : "";
-      if (v1.major !== v2.major) {
-        return prefix + "major";
-      }
-      if (v1.minor !== v2.minor) {
-        return prefix + "minor";
-      }
-      if (v1.patch !== v2.patch) {
-        return prefix + "patch";
-      }
-      return "prerelease";
-    };
-    module.exports = diff;
-  }
-});
-
-// node_modules/semver/functions/major.js
-var require_major = __commonJS({
-  "node_modules/semver/functions/major.js"(exports, module) {
-    var SemVer = require_semver();
-    var major = (a, loose) => new SemVer(a, loose).major;
-    module.exports = major;
-  }
-});
-
-// node_modules/semver/functions/minor.js
-var require_minor = __commonJS({
-  "node_modules/semver/functions/minor.js"(exports, module) {
-    var SemVer = require_semver();
-    var minor = (a, loose) => new SemVer(a, loose).minor;
-    module.exports = minor;
-  }
-});
-
-// node_modules/semver/functions/patch.js
-var require_patch = __commonJS({
-  "node_modules/semver/functions/patch.js"(exports, module) {
-    var SemVer = require_semver();
-    var patch = (a, loose) => new SemVer(a, loose).patch;
-    module.exports = patch;
-  }
-});
-
-// node_modules/semver/functions/prerelease.js
-var require_prerelease = __commonJS({
-  "node_modules/semver/functions/prerelease.js"(exports, module) {
-    var parse = require_parse2();
-    var prerelease = (version, options) => {
-      const parsed = parse(version, options);
-      return parsed && parsed.prerelease.length ? parsed.prerelease : null;
-    };
-    module.exports = prerelease;
-  }
-});
-
-// node_modules/semver/functions/compare.js
-var require_compare = __commonJS({
-  "node_modules/semver/functions/compare.js"(exports, module) {
-    var SemVer = require_semver();
-    var compare = (a, b, loose) => new SemVer(a, loose).compare(new SemVer(b, loose));
-    module.exports = compare;
-  }
-});
-
-// node_modules/semver/functions/rcompare.js
-var require_rcompare = __commonJS({
-  "node_modules/semver/functions/rcompare.js"(exports, module) {
-    var compare = require_compare();
-    var rcompare = (a, b, loose) => compare(b, a, loose);
-    module.exports = rcompare;
-  }
-});
-
-// node_modules/semver/functions/compare-loose.js
-var require_compare_loose = __commonJS({
-  "node_modules/semver/functions/compare-loose.js"(exports, module) {
-    var compare = require_compare();
-    var compareLoose = (a, b) => compare(a, b, true);
-    module.exports = compareLoose;
-  }
-});
-
-// node_modules/semver/functions/compare-build.js
-var require_compare_build = __commonJS({
-  "node_modules/semver/functions/compare-build.js"(exports, module) {
-    var SemVer = require_semver();
-    var compareBuild = (a, b, loose) => {
-      const versionA = new SemVer(a, loose);
-      const versionB = new SemVer(b, loose);
-      return versionA.compare(versionB) || versionA.compareBuild(versionB);
-    };
-    module.exports = compareBuild;
-  }
-});
-
-// node_modules/semver/functions/sort.js
-var require_sort = __commonJS({
-  "node_modules/semver/functions/sort.js"(exports, module) {
-    var compareBuild = require_compare_build();
-    var sort = (list, loose) => list.sort((a, b) => compareBuild(a, b, loose));
-    module.exports = sort;
-  }
-});
-
-// node_modules/semver/functions/rsort.js
-var require_rsort = __commonJS({
-  "node_modules/semver/functions/rsort.js"(exports, module) {
-    var compareBuild = require_compare_build();
-    var rsort = (list, loose) => list.sort((a, b) => compareBuild(b, a, loose));
-    module.exports = rsort;
-  }
-});
-
-// node_modules/semver/functions/gt.js
-var require_gt = __commonJS({
-  "node_modules/semver/functions/gt.js"(exports, module) {
-    var compare = require_compare();
-    var gt = (a, b, loose) => compare(a, b, loose) > 0;
-    module.exports = gt;
-  }
-});
-
-// node_modules/semver/functions/lt.js
-var require_lt = __commonJS({
-  "node_modules/semver/functions/lt.js"(exports, module) {
-    var compare = require_compare();
-    var lt = (a, b, loose) => compare(a, b, loose) < 0;
-    module.exports = lt;
-  }
-});
-
-// node_modules/semver/functions/eq.js
-var require_eq = __commonJS({
-  "node_modules/semver/functions/eq.js"(exports, module) {
-    var compare = require_compare();
-    var eq = (a, b, loose) => compare(a, b, loose) === 0;
-    module.exports = eq;
-  }
-});
-
-// node_modules/semver/functions/neq.js
-var require_neq = __commonJS({
-  "node_modules/semver/functions/neq.js"(exports, module) {
-    var compare = require_compare();
-    var neq = (a, b, loose) => compare(a, b, loose) !== 0;
-    module.exports = neq;
-  }
-});
-
-// node_modules/semver/functions/gte.js
-var require_gte = __commonJS({
-  "node_modules/semver/functions/gte.js"(exports, module) {
-    var compare = require_compare();
-    var gte = (a, b, loose) => compare(a, b, loose) >= 0;
-    module.exports = gte;
-  }
-});
-
-// node_modules/semver/functions/lte.js
-var require_lte = __commonJS({
-  "node_modules/semver/functions/lte.js"(exports, module) {
-    var compare = require_compare();
-    var lte = (a, b, loose) => compare(a, b, loose) <= 0;
-    module.exports = lte;
-  }
-});
-
-// node_modules/semver/functions/cmp.js
-var require_cmp = __commonJS({
-  "node_modules/semver/functions/cmp.js"(exports, module) {
-    var eq = require_eq();
-    var neq = require_neq();
-    var gt = require_gt();
-    var gte = require_gte();
-    var lt = require_lt();
-    var lte = require_lte();
-    var cmp = (a, op, b, loose) => {
-      switch (op) {
-        case "===":
-          if (typeof a === "object") {
-            a = a.version;
-          }
-          if (typeof b === "object") {
-            b = b.version;
-          }
-          return a === b;
-        case "!==":
-          if (typeof a === "object") {
-            a = a.version;
-          }
-          if (typeof b === "object") {
-            b = b.version;
-          }
-          return a !== b;
-        case "":
-        case "=":
-        case "==":
-          return eq(a, b, loose);
-        case "!=":
-          return neq(a, b, loose);
-        case ">":
-          return gt(a, b, loose);
-        case ">=":
-          return gte(a, b, loose);
-        case "<":
-          return lt(a, b, loose);
-        case "<=":
-          return lte(a, b, loose);
-        default:
-          throw new TypeError(`Invalid operator: ${op}`);
-      }
-    };
-    module.exports = cmp;
-  }
-});
-
-// node_modules/semver/functions/coerce.js
-var require_coerce = __commonJS({
-  "node_modules/semver/functions/coerce.js"(exports, module) {
-    var SemVer = require_semver();
-    var parse = require_parse2();
-    var { safeRe: re, t } = require_re();
-    var coerce = (version, options) => {
-      if (version instanceof SemVer) {
-        return version;
-      }
-      if (typeof version === "number") {
-        version = String(version);
-      }
-      if (typeof version !== "string") {
-        return null;
-      }
-      options = options || {};
-      let match = null;
-      if (!options.rtl) {
-        match = version.match(re[t.COERCE]);
-      } else {
-        let next;
-        while ((next = re[t.COERCERTL].exec(version)) && (!match || match.index + match[0].length !== version.length)) {
-          if (!match || next.index + next[0].length !== match.index + match[0].length) {
-            match = next;
-          }
-          re[t.COERCERTL].lastIndex = next.index + next[1].length + next[2].length;
-        }
-        re[t.COERCERTL].lastIndex = -1;
-      }
-      if (match === null) {
-        return null;
-      }
-      return parse(`${match[2]}.${match[3] || "0"}.${match[4] || "0"}`, options);
-    };
-    module.exports = coerce;
-  }
-});
-
-// node_modules/yallist/iterator.js
-var require_iterator = __commonJS({
-  "node_modules/yallist/iterator.js"(exports, module) {
+// node_modules/@launchdarkly/js-server-sdk-common/dist/index.cjs
+var require_dist = __commonJS({
+  "node_modules/@launchdarkly/js-server-sdk-common/dist/index.cjs"(exports, module) {
     "use strict";
-    module.exports = function(Yallist) {
-      Yallist.prototype[Symbol.iterator] = function* () {
-        for (let walker = this.head; walker; walker = walker.next) {
-          yield walker.value;
+    var __create2 = Object.create;
+    var __defProp2 = Object.defineProperty;
+    var __defProps = Object.defineProperties;
+    var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
+    var __getOwnPropDescs = Object.getOwnPropertyDescriptors;
+    var __getOwnPropNames2 = Object.getOwnPropertyNames;
+    var __getOwnPropSymbols = Object.getOwnPropertySymbols;
+    var __getProtoOf2 = Object.getPrototypeOf;
+    var __hasOwnProp2 = Object.prototype.hasOwnProperty;
+    var __propIsEnum = Object.prototype.propertyIsEnumerable;
+    var __defNormalProp = (obj, key, value) => key in obj ? __defProp2(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+    var __spreadValues = (a, b) => {
+      for (var prop in b || (b = {}))
+        if (__hasOwnProp2.call(b, prop))
+          __defNormalProp(a, prop, b[prop]);
+      if (__getOwnPropSymbols)
+        for (var prop of __getOwnPropSymbols(b)) {
+          if (__propIsEnum.call(b, prop))
+            __defNormalProp(a, prop, b[prop]);
         }
-      };
+      return a;
     };
-  }
-});
-
-// node_modules/yallist/yallist.js
-var require_yallist = __commonJS({
-  "node_modules/yallist/yallist.js"(exports, module) {
-    "use strict";
-    module.exports = Yallist;
-    Yallist.Node = Node;
-    Yallist.create = Yallist;
-    function Yallist(list) {
-      var self = this;
-      if (!(self instanceof Yallist)) {
-        self = new Yallist();
+    var __spreadProps = (a, b) => __defProps(a, __getOwnPropDescs(b));
+    var __export = (target, all) => {
+      for (var name in all)
+        __defProp2(target, name, { get: all[name], enumerable: true });
+    };
+    var __copyProps2 = (to, from, except, desc) => {
+      if (from && typeof from === "object" || typeof from === "function") {
+        for (let key of __getOwnPropNames2(from))
+          if (!__hasOwnProp2.call(to, key) && key !== except)
+            __defProp2(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc2(from, key)) || desc.enumerable });
       }
-      self.tail = null;
-      self.head = null;
-      self.length = 0;
-      if (list && typeof list.forEach === "function") {
-        list.forEach(function(item) {
-          self.push(item);
-        });
-      } else if (arguments.length > 0) {
-        for (var i = 0, l = arguments.length; i < l; i++) {
-          self.push(arguments[i]);
+      return to;
+    };
+    var __reExport = (target, mod, secondTarget) => (__copyProps2(target, mod, "default"), secondTarget && __copyProps2(secondTarget, mod, "default"));
+    var __toESM2 = (mod, isNodeMode, target) => (target = mod != null ? __create2(__getProtoOf2(mod)) : {}, __copyProps2(
+      // If the importer is in node compatibility mode or this is not an ESM
+      // file that has been converted to a CommonJS file using a Babel-
+      // compatible transform (i.e. "__esModule" has not been set), then set
+      // "default" to the CommonJS "module.exports" for node compatibility.
+      isNodeMode || !mod || !mod.__esModule ? __defProp2(target, "default", { value: mod, enumerable: true }) : target,
+      mod
+    ));
+    var __toCommonJS = (mod) => __copyProps2(__defProp2({}, "__esModule", { value: true }), mod);
+    var src_exports = {};
+    __export(src_exports, {
+      AsyncStoreFacade: () => AsyncStoreFacade,
+      AsyncTransactionalStoreFacade: () => AsyncTransactionalStoreFacade,
+      BigSegmentStoreStatusProviderImpl: () => BigSegmentStoreStatusProviderImpl,
+      FileDataSourceFactory: () => FileDataSourceFactory,
+      IsMigrationStage: () => IsMigrationStage,
+      LDClientImpl: () => LDClientImpl,
+      LDConcurrentExecution: () => LDConcurrentExecution,
+      LDConsistencyCheck: () => LDConsistencyCheck,
+      LDExecution: () => LDExecution,
+      LDExecutionOrdering: () => LDExecutionOrdering,
+      LDMigrationError: () => LDMigrationError,
+      LDMigrationStage: () => LDMigrationStage,
+      LDMigrationSuccess: () => LDMigrationSuccess,
+      LDSerialExecution: () => LDSerialExecution,
+      NullEventSource: () => NullEventSource,
+      PersistentDataStoreWrapper: () => PersistentDataStoreWrapper,
+      TestData: () => TestData,
+      TestDataFlagBuilder: () => TestDataFlagBuilder,
+      TestDataRuleBuilder: () => TestDataRuleBuilder,
+      TransactionalFeatureStore: () => TransactionalFeatureStore,
+      createMigration: () => createMigration,
+      deserializePoll: () => deserializePoll,
+      integrations: () => integrations_exports,
+      interfaces: () => interfaces_exports,
+      internalServer: () => internal_exports,
+      isCustomOptions: () => isCustomOptions,
+      isPollingOnlyOptions: () => isPollingOnlyOptions,
+      isStandardOptions: () => isStandardOptions,
+      isStreamingOnlyOptions: () => isStreamingOnlyOptions,
+      platform: () => platform2,
+      reviveFullPayload: () => reviveFullPayload,
+      subsystems: () => subsystems_exports
+    });
+    module.exports = __toCommonJS(src_exports);
+    var BigSegmentStoreStatusProviderImpl = class {
+      constructor(_onRequestStatus) {
+        this._onRequestStatus = _onRequestStatus;
+      }
+      /**
+       * Gets the current status of the store, if known.
+       *
+       * @returns a {@link BigSegmentStoreStatus}, or `undefined` if the SDK has not yet queried the
+       *   Big Segment store status
+       */
+      getStatus() {
+        return this._lastStatus;
+      }
+      /**
+       * Gets the current status of the store, querying it if the status has not already been queried.
+       *
+       * @returns a Promise for the status of the store
+       */
+      async requireStatus() {
+        if (!this._lastStatus) {
+          await this._onRequestStatus();
+        }
+        return this._lastStatus;
+      }
+      notify() {
+        var _a;
+        if (this._lastStatus) {
+          (_a = this._listener) == null ? void 0 : _a.call(this, this._lastStatus);
         }
       }
-      return self;
+      setListener(listener) {
+        this._listener = listener;
+      }
+      setStatus(status) {
+        this._lastStatus = status;
+      }
+    };
+    var import_js_sdk_common20 = require_cjs();
+    var LDMigrationStage = /* @__PURE__ */ ((LDMigrationStage3) => {
+      LDMigrationStage3["Off"] = "off";
+      LDMigrationStage3["DualWrite"] = "dualwrite";
+      LDMigrationStage3["Shadow"] = "shadow";
+      LDMigrationStage3["Live"] = "live";
+      LDMigrationStage3["RampDown"] = "rampdown";
+      LDMigrationStage3["Complete"] = "complete";
+      return LDMigrationStage3;
+    })(LDMigrationStage || {});
+    function IsMigrationStage(value) {
+      return Object.values(LDMigrationStage).includes(value);
     }
-    Yallist.prototype.removeNode = function(node) {
-      if (node.list !== this) {
-        throw new Error("removing node which does not belong to this list");
-      }
-      var next = node.next;
-      var prev = node.prev;
-      if (next) {
-        next.prev = prev;
-      }
-      if (prev) {
-        prev.next = next;
-      }
-      if (node === this.head) {
-        this.head = next;
-      }
-      if (node === this.tail) {
-        this.tail = prev;
-      }
-      node.list.length--;
-      node.next = null;
-      node.prev = null;
-      node.list = null;
-      return next;
-    };
-    Yallist.prototype.unshiftNode = function(node) {
-      if (node === this.head) {
-        return;
-      }
-      if (node.list) {
-        node.list.removeNode(node);
-      }
-      var head = this.head;
-      node.list = this;
-      node.next = head;
-      if (head) {
-        head.prev = node;
-      }
-      this.head = node;
-      if (!this.tail) {
-        this.tail = node;
-      }
-      this.length++;
-    };
-    Yallist.prototype.pushNode = function(node) {
-      if (node === this.tail) {
-        return;
-      }
-      if (node.list) {
-        node.list.removeNode(node);
-      }
-      var tail = this.tail;
-      node.list = this;
-      node.prev = tail;
-      if (tail) {
-        tail.next = node;
-      }
-      this.tail = node;
-      if (!this.head) {
-        this.head = node;
-      }
-      this.length++;
-    };
-    Yallist.prototype.push = function() {
-      for (var i = 0, l = arguments.length; i < l; i++) {
-        push(this, arguments[i]);
-      }
-      return this.length;
-    };
-    Yallist.prototype.unshift = function() {
-      for (var i = 0, l = arguments.length; i < l; i++) {
-        unshift(this, arguments[i]);
-      }
-      return this.length;
-    };
-    Yallist.prototype.pop = function() {
-      if (!this.tail) {
-        return void 0;
-      }
-      var res = this.tail.value;
-      this.tail = this.tail.prev;
-      if (this.tail) {
-        this.tail.next = null;
-      } else {
-        this.head = null;
-      }
-      this.length--;
-      return res;
-    };
-    Yallist.prototype.shift = function() {
-      if (!this.head) {
-        return void 0;
-      }
-      var res = this.head.value;
-      this.head = this.head.next;
-      if (this.head) {
-        this.head.prev = null;
-      } else {
-        this.tail = null;
-      }
-      this.length--;
-      return res;
-    };
-    Yallist.prototype.forEach = function(fn, thisp) {
-      thisp = thisp || this;
-      for (var walker = this.head, i = 0; walker !== null; i++) {
-        fn.call(thisp, walker.value, i, this);
-        walker = walker.next;
+    var LDConsistencyCheck = /* @__PURE__ */ ((LDConsistencyCheck2) => {
+      LDConsistencyCheck2[LDConsistencyCheck2["Inconsistent"] = 0] = "Inconsistent";
+      LDConsistencyCheck2[LDConsistencyCheck2["Consistent"] = 1] = "Consistent";
+      LDConsistencyCheck2[LDConsistencyCheck2["NotChecked"] = 2] = "NotChecked";
+      return LDConsistencyCheck2;
+    })(LDConsistencyCheck || {});
+    var LDExecutionOrdering = /* @__PURE__ */ ((LDExecutionOrdering2) => {
+      LDExecutionOrdering2[LDExecutionOrdering2["Fixed"] = 0] = "Fixed";
+      LDExecutionOrdering2[LDExecutionOrdering2["Random"] = 1] = "Random";
+      return LDExecutionOrdering2;
+    })(LDExecutionOrdering || {});
+    var LDExecution = /* @__PURE__ */ ((LDExecution2) => {
+      LDExecution2[LDExecution2["Serial"] = 0] = "Serial";
+      LDExecution2[LDExecution2["Concurrent"] = 1] = "Concurrent";
+      return LDExecution2;
+    })(LDExecution || {});
+    var LDSerialExecution = class {
+      constructor(ordering) {
+        this.ordering = ordering;
+        this.type = 0;
       }
     };
-    Yallist.prototype.forEachReverse = function(fn, thisp) {
-      thisp = thisp || this;
-      for (var walker = this.tail, i = this.length - 1; walker !== null; i--) {
-        fn.call(thisp, walker.value, i, this);
-        walker = walker.prev;
+    var LDConcurrentExecution = class {
+      constructor() {
+        this.type = 1;
       }
     };
-    Yallist.prototype.get = function(n) {
-      for (var i = 0, walker = this.head; walker !== null && i < n; i++) {
-        walker = walker.next;
-      }
-      if (i === n && walker !== null) {
-        return walker.value;
-      }
-    };
-    Yallist.prototype.getReverse = function(n) {
-      for (var i = 0, walker = this.tail; walker !== null && i < n; i++) {
-        walker = walker.prev;
-      }
-      if (i === n && walker !== null) {
-        return walker.value;
-      }
-    };
-    Yallist.prototype.map = function(fn, thisp) {
-      thisp = thisp || this;
-      var res = new Yallist();
-      for (var walker = this.head; walker !== null; ) {
-        res.push(fn.call(thisp, walker.value, this));
-        walker = walker.next;
-      }
-      return res;
-    };
-    Yallist.prototype.mapReverse = function(fn, thisp) {
-      thisp = thisp || this;
-      var res = new Yallist();
-      for (var walker = this.tail; walker !== null; ) {
-        res.push(fn.call(thisp, walker.value, this));
-        walker = walker.prev;
-      }
-      return res;
-    };
-    Yallist.prototype.reduce = function(fn, initial) {
-      var acc;
-      var walker = this.head;
-      if (arguments.length > 1) {
-        acc = initial;
-      } else if (this.head) {
-        walker = this.head.next;
-        acc = this.head.value;
-      } else {
-        throw new TypeError("Reduce of empty list with no initial value");
-      }
-      for (var i = 0; walker !== null; i++) {
-        acc = fn(acc, walker.value, i);
-        walker = walker.next;
-      }
-      return acc;
-    };
-    Yallist.prototype.reduceReverse = function(fn, initial) {
-      var acc;
-      var walker = this.tail;
-      if (arguments.length > 1) {
-        acc = initial;
-      } else if (this.tail) {
-        walker = this.tail.prev;
-        acc = this.tail.value;
-      } else {
-        throw new TypeError("Reduce of empty list with no initial value");
-      }
-      for (var i = this.length - 1; walker !== null; i--) {
-        acc = fn(acc, walker.value, i);
-        walker = walker.prev;
-      }
-      return acc;
-    };
-    Yallist.prototype.toArray = function() {
-      var arr = new Array(this.length);
-      for (var i = 0, walker = this.head; walker !== null; i++) {
-        arr[i] = walker.value;
-        walker = walker.next;
-      }
-      return arr;
-    };
-    Yallist.prototype.toArrayReverse = function() {
-      var arr = new Array(this.length);
-      for (var i = 0, walker = this.tail; walker !== null; i++) {
-        arr[i] = walker.value;
-        walker = walker.prev;
-      }
-      return arr;
-    };
-    Yallist.prototype.slice = function(from, to) {
-      to = to || this.length;
-      if (to < 0) {
-        to += this.length;
-      }
-      from = from || 0;
-      if (from < 0) {
-        from += this.length;
-      }
-      var ret = new Yallist();
-      if (to < from || to < 0) {
-        return ret;
-      }
-      if (from < 0) {
-        from = 0;
-      }
-      if (to > this.length) {
-        to = this.length;
-      }
-      for (var i = 0, walker = this.head; walker !== null && i < from; i++) {
-        walker = walker.next;
-      }
-      for (; walker !== null && i < to; i++, walker = walker.next) {
-        ret.push(walker.value);
-      }
-      return ret;
-    };
-    Yallist.prototype.sliceReverse = function(from, to) {
-      to = to || this.length;
-      if (to < 0) {
-        to += this.length;
-      }
-      from = from || 0;
-      if (from < 0) {
-        from += this.length;
-      }
-      var ret = new Yallist();
-      if (to < from || to < 0) {
-        return ret;
-      }
-      if (from < 0) {
-        from = 0;
-      }
-      if (to > this.length) {
-        to = this.length;
-      }
-      for (var i = this.length, walker = this.tail; walker !== null && i > to; i--) {
-        walker = walker.prev;
-      }
-      for (; walker !== null && i > from; i--, walker = walker.prev) {
-        ret.push(walker.value);
-      }
-      return ret;
-    };
-    Yallist.prototype.splice = function(start, deleteCount, ...nodes) {
-      if (start > this.length) {
-        start = this.length - 1;
-      }
-      if (start < 0) {
-        start = this.length + start;
-      }
-      for (var i = 0, walker = this.head; walker !== null && i < start; i++) {
-        walker = walker.next;
-      }
-      var ret = [];
-      for (var i = 0; walker && i < deleteCount; i++) {
-        ret.push(walker.value);
-        walker = this.removeNode(walker);
-      }
-      if (walker === null) {
-        walker = this.tail;
-      }
-      if (walker !== this.head && walker !== this.tail) {
-        walker = walker.prev;
-      }
-      for (var i = 0; i < nodes.length; i++) {
-        walker = insert(this, walker, nodes[i]);
-      }
-      return ret;
-    };
-    Yallist.prototype.reverse = function() {
-      var head = this.head;
-      var tail = this.tail;
-      for (var walker = head; walker !== null; walker = walker.prev) {
-        var p = walker.prev;
-        walker.prev = walker.next;
-        walker.next = p;
-      }
-      this.head = tail;
-      this.tail = head;
-      return this;
-    };
-    function insert(self, node, value) {
-      var inserted = node === self.head ? new Node(value, null, node, self) : new Node(value, node, node.next, self);
-      if (inserted.next === null) {
-        self.tail = inserted;
-      }
-      if (inserted.prev === null) {
-        self.head = inserted;
-      }
-      self.length++;
-      return inserted;
+    function isStandardOptions(u) {
+      return u.dataSourceOptionsType === "standard";
     }
-    function push(self, item) {
-      self.tail = new Node(item, self.tail, null, self);
-      if (!self.head) {
-        self.head = self.tail;
-      }
-      self.length++;
+    function isStreamingOnlyOptions(u) {
+      return u.dataSourceOptionsType === "streamingOnly";
     }
-    function unshift(self, item) {
-      self.head = new Node(item, null, self.head, self);
-      if (!self.tail) {
-        self.tail = self.head;
-      }
-      self.length++;
+    function isPollingOnlyOptions(u) {
+      return u.dataSourceOptionsType === "pollingOnly";
     }
-    function Node(value, prev, next, list) {
-      if (!(this instanceof Node)) {
-        return new Node(value, prev, next, list);
-      }
-      this.list = list;
-      this.value = value;
-      if (prev) {
-        prev.next = this;
-        this.prev = prev;
-      } else {
-        this.prev = null;
-      }
-      if (next) {
-        next.prev = this;
-        this.next = next;
-      } else {
-        this.next = null;
-      }
+    function isCustomOptions(u) {
+      return u.dataSourceOptionsType === "custom";
     }
-    try {
-      require_iterator()(Yallist);
-    } catch (er) {
-    }
-  }
-});
-
-// node_modules/lru-cache/index.js
-var require_lru_cache = __commonJS({
-  "node_modules/lru-cache/index.js"(exports, module) {
-    "use strict";
-    var Yallist = require_yallist();
-    var MAX = /* @__PURE__ */ Symbol("max");
-    var LENGTH = /* @__PURE__ */ Symbol("length");
-    var LENGTH_CALCULATOR = /* @__PURE__ */ Symbol("lengthCalculator");
-    var ALLOW_STALE = /* @__PURE__ */ Symbol("allowStale");
-    var MAX_AGE = /* @__PURE__ */ Symbol("maxAge");
-    var DISPOSE = /* @__PURE__ */ Symbol("dispose");
-    var NO_DISPOSE_ON_SET = /* @__PURE__ */ Symbol("noDisposeOnSet");
-    var LRU_LIST = /* @__PURE__ */ Symbol("lruList");
-    var CACHE = /* @__PURE__ */ Symbol("cache");
-    var UPDATE_AGE_ON_GET = /* @__PURE__ */ Symbol("updateAgeOnGet");
-    var naiveLength = () => 1;
-    var LRUCache = class {
+    var interfaces_exports = {};
+    var subsystems_exports = {};
+    var import_js_sdk_common = require_cjs();
+    var LruCache = class {
       constructor(options) {
-        if (typeof options === "number")
-          options = { max: options };
-        if (!options)
-          options = {};
-        if (options.max && (typeof options.max !== "number" || options.max < 0))
-          throw new TypeError("max must be a non-negative number");
-        const max = this[MAX] = options.max || Infinity;
-        const lc = options.length || naiveLength;
-        this[LENGTH_CALCULATOR] = typeof lc !== "function" ? naiveLength : lc;
-        this[ALLOW_STALE] = options.stale || false;
-        if (options.maxAge && typeof options.maxAge !== "number")
-          throw new TypeError("maxAge must be a number");
-        this[MAX_AGE] = options.maxAge || 0;
-        this[DISPOSE] = options.dispose;
-        this[NO_DISPOSE_ON_SET] = options.noDisposeOnSet || false;
-        this[UPDATE_AGE_ON_GET] = options.updateAgeOnGet || false;
-        this.reset();
-      }
-      // resize the cache when the max changes.
-      set max(mL) {
-        if (typeof mL !== "number" || mL < 0)
-          throw new TypeError("max must be a non-negative number");
-        this[MAX] = mL || Infinity;
-        trim(this);
-      }
-      get max() {
-        return this[MAX];
-      }
-      set allowStale(allowStale) {
-        this[ALLOW_STALE] = !!allowStale;
-      }
-      get allowStale() {
-        return this[ALLOW_STALE];
-      }
-      set maxAge(mA) {
-        if (typeof mA !== "number")
-          throw new TypeError("maxAge must be a non-negative number");
-        this[MAX_AGE] = mA;
-        trim(this);
-      }
-      get maxAge() {
-        return this[MAX_AGE];
-      }
-      // resize the cache when the lengthCalculator changes.
-      set lengthCalculator(lC) {
-        if (typeof lC !== "function")
-          lC = naiveLength;
-        if (lC !== this[LENGTH_CALCULATOR]) {
-          this[LENGTH_CALCULATOR] = lC;
-          this[LENGTH] = 0;
-          this[LRU_LIST].forEach((hit) => {
-            hit.length = this[LENGTH_CALCULATOR](hit.value, hit.key);
-            this[LENGTH] += hit.length;
-          });
-        }
-        trim(this);
-      }
-      get lengthCalculator() {
-        return this[LENGTH_CALCULATOR];
-      }
-      get length() {
-        return this[LENGTH];
-      }
-      get itemCount() {
-        return this[LRU_LIST].length;
-      }
-      rforEach(fn, thisp) {
-        thisp = thisp || this;
-        for (let walker = this[LRU_LIST].tail; walker !== null; ) {
-          const prev = walker.prev;
-          forEachStep(this, fn, walker, thisp);
-          walker = prev;
+        this._keyMap = /* @__PURE__ */ new Map();
+        this._head = 0;
+        this._tail = 0;
+        this._size = 0;
+        const { max } = options;
+        this._max = max;
+        this._values = new Array(max);
+        this._keys = new Array(max);
+        this._next = new Uint32Array(max);
+        this._prev = new Uint32Array(max);
+        if (options.maxAge) {
+          this._lastUpdated = new Array(max).fill(0);
+          this._maxAge = options.maxAge;
+        } else {
+          this._lastUpdated = [];
+          this._maxAge = 0;
         }
       }
-      forEach(fn, thisp) {
-        thisp = thisp || this;
-        for (let walker = this[LRU_LIST].head; walker !== null; ) {
-          const next = walker.next;
-          forEachStep(this, fn, walker, thisp);
-          walker = next;
+      set(key, val) {
+        let index = this._keyMap.get(key);
+        if (index === void 0) {
+          index = this._index();
+          this._keys[index] = key;
+          this._keyMap.set(key, index);
+          this._next[this._tail] = index;
+          this._prev[index] = this._tail;
+          this._tail = index;
+          this._size += 1;
+        } else {
+          this._setTail(index);
         }
-      }
-      keys() {
-        return this[LRU_LIST].toArray().map((k) => k.key);
-      }
-      values() {
-        return this[LRU_LIST].toArray().map((k) => k.value);
-      }
-      reset() {
-        if (this[DISPOSE] && this[LRU_LIST] && this[LRU_LIST].length) {
-          this[LRU_LIST].forEach((hit) => this[DISPOSE](hit.key, hit.value));
+        this._values[index] = val;
+        if (this._maxAge) {
+          this._lastUpdated[index] = Date.now();
         }
-        this[CACHE] = /* @__PURE__ */ new Map();
-        this[LRU_LIST] = new Yallist();
-        this[LENGTH] = 0;
-      }
-      dump() {
-        return this[LRU_LIST].map((hit) => isStale(this, hit) ? false : {
-          k: hit.key,
-          v: hit.value,
-          e: hit.now + (hit.maxAge || 0)
-        }).toArray().filter((h) => h);
-      }
-      dumpLru() {
-        return this[LRU_LIST];
-      }
-      set(key, value, maxAge) {
-        maxAge = maxAge || this[MAX_AGE];
-        if (maxAge && typeof maxAge !== "number")
-          throw new TypeError("maxAge must be a number");
-        const now = maxAge ? Date.now() : 0;
-        const len = this[LENGTH_CALCULATOR](value, key);
-        if (this[CACHE].has(key)) {
-          if (len > this[MAX]) {
-            del(this, this[CACHE].get(key));
-            return false;
-          }
-          const node = this[CACHE].get(key);
-          const item = node.value;
-          if (this[DISPOSE]) {
-            if (!this[NO_DISPOSE_ON_SET])
-              this[DISPOSE](key, item.value);
-          }
-          item.now = now;
-          item.maxAge = maxAge;
-          item.value = value;
-          this[LENGTH] += len - item.length;
-          item.length = len;
-          this.get(key);
-          trim(this);
-          return true;
-        }
-        const hit = new Entry(key, value, len, now, maxAge);
-        if (hit.length > this[MAX]) {
-          if (this[DISPOSE])
-            this[DISPOSE](key, value);
-          return false;
-        }
-        this[LENGTH] += hit.length;
-        this[LRU_LIST].unshift(hit);
-        this[CACHE].set(key, this[LRU_LIST].head);
-        trim(this);
-        return true;
-      }
-      has(key) {
-        if (!this[CACHE].has(key)) return false;
-        const hit = this[CACHE].get(key).value;
-        return !isStale(this, hit);
       }
       get(key) {
-        return get(this, key, true);
-      }
-      peek(key) {
-        return get(this, key, false);
-      }
-      pop() {
-        const node = this[LRU_LIST].tail;
-        if (!node)
-          return null;
-        del(this, node);
-        return node.value;
-      }
-      del(key) {
-        del(this, this[CACHE].get(key));
-      }
-      load(arr) {
-        this.reset();
-        const now = Date.now();
-        for (let l = arr.length - 1; l >= 0; l--) {
-          const hit = arr[l];
-          const expiresAt = hit.e || 0;
-          if (expiresAt === 0)
-            this.set(hit.k, hit.v);
-          else {
-            const maxAge = expiresAt - now;
-            if (maxAge > 0) {
-              this.set(hit.k, hit.v, maxAge);
+        const index = this._keyMap.get(key);
+        if (index !== void 0) {
+          if (this._maxAge) {
+            const lastUpdated = this._lastUpdated[index];
+            if (Date.now() - lastUpdated > this._maxAge) {
+              return void 0;
             }
           }
-        }
-      }
-      prune() {
-        this[CACHE].forEach((value, key) => get(this, key, false));
-      }
-    };
-    var get = (self, key, doUse) => {
-      const node = self[CACHE].get(key);
-      if (node) {
-        const hit = node.value;
-        if (isStale(self, hit)) {
-          del(self, node);
-          if (!self[ALLOW_STALE])
-            return void 0;
-        } else {
-          if (doUse) {
-            if (self[UPDATE_AGE_ON_GET])
-              node.value.now = Date.now();
-            self[LRU_LIST].unshiftNode(node);
+          this._setTail(index);
+          if (this._maxAge) {
+            this._lastUpdated[index] = Date.now();
           }
+          return this._values[index];
         }
-        return hit.value;
+        return void 0;
       }
-    };
-    var isStale = (self, hit) => {
-      if (!hit || !hit.maxAge && !self[MAX_AGE])
-        return false;
-      const diff = Date.now() - hit.now;
-      return hit.maxAge ? diff > hit.maxAge : self[MAX_AGE] && diff > self[MAX_AGE];
-    };
-    var trim = (self) => {
-      if (self[LENGTH] > self[MAX]) {
-        for (let walker = self[LRU_LIST].tail; self[LENGTH] > self[MAX] && walker !== null; ) {
-          const prev = walker.prev;
-          del(self, walker);
-          walker = prev;
+      clear() {
+        this._head = 0;
+        this._tail = 0;
+        this._size = 0;
+        this._values.fill(void 0);
+        this._keys.fill(void 0);
+        this._next.fill(0);
+        this._prev.fill(0);
+        this._keyMap.clear();
+      }
+      _index() {
+        if (this._size === 0) {
+          return this._tail;
         }
+        if (this._size === this._max) {
+          return this._evict();
+        }
+        return this._size;
       }
-    };
-    var del = (self, node) => {
-      if (node) {
-        const hit = node.value;
-        if (self[DISPOSE])
-          self[DISPOSE](hit.key, hit.value);
-        self[LENGTH] -= hit.length;
-        self[CACHE].delete(hit.key);
-        self[LRU_LIST].removeNode(node);
+      _evict() {
+        const { _head: head } = this;
+        const k = this._keys[head];
+        this._head = this._next[head];
+        this._keyMap.delete(k);
+        this._size -= 1;
+        return head;
       }
-    };
-    var Entry = class {
-      constructor(key, value, length, now, maxAge) {
-        this.key = key;
-        this.value = value;
-        this.length = length;
-        this.now = now;
-        this.maxAge = maxAge || 0;
+      _link(p, n) {
+        this._prev[n] = p;
+        this._next[p] = n;
       }
-    };
-    var forEachStep = (self, fn, node, thisp) => {
-      let hit = node.value;
-      if (isStale(self, hit)) {
-        del(self, node);
-        if (!self[ALLOW_STALE])
-          hit = void 0;
-      }
-      if (hit)
-        fn.call(thisp, hit.value, hit.key, self);
-    };
-    module.exports = LRUCache;
-  }
-});
-
-// node_modules/semver/classes/range.js
-var require_range = __commonJS({
-  "node_modules/semver/classes/range.js"(exports, module) {
-    var Range = class _Range {
-      constructor(range, options) {
-        options = parseOptions(options);
-        if (range instanceof _Range) {
-          if (range.loose === !!options.loose && range.includePrerelease === !!options.includePrerelease) {
-            return range;
+      _setTail(index) {
+        if (index !== this._tail) {
+          if (index === this._head) {
+            this._head = this._next[index];
           } else {
-            return new _Range(range.raw, options);
+            this._link(this._prev[index], this._next[index]);
           }
+          this._link(this._tail, index);
+          this._tail = index;
         }
-        if (range instanceof Comparator) {
-          this.raw = range.value;
-          this.set = [[range]];
-          this.format();
-          return this;
-        }
-        this.options = options;
-        this.loose = !!options.loose;
-        this.includePrerelease = !!options.includePrerelease;
-        this.raw = range.trim().split(/\s+/).join(" ");
-        this.set = this.raw.split("||").map((r) => this.parseRange(r.trim())).filter((c) => c.length);
-        if (!this.set.length) {
-          throw new TypeError(`Invalid SemVer Range: ${this.raw}`);
-        }
-        if (this.set.length > 1) {
-          const first = this.set[0];
-          this.set = this.set.filter((c) => !isNullSet(c[0]));
-          if (this.set.length === 0) {
-            this.set = [first];
-          } else if (this.set.length > 1) {
-            for (const c of this.set) {
-              if (c.length === 1 && isAny(c[0])) {
-                this.set = [c];
-                break;
-              }
-            }
-          }
-        }
-        this.format();
       }
-      format() {
-        this.range = this.set.map((comps) => comps.join(" ").trim()).join("||").trim();
-        return this.range;
-      }
-      toString() {
-        return this.range;
-      }
-      parseRange(range) {
-        const memoOpts = (this.options.includePrerelease && FLAG_INCLUDE_PRERELEASE) | (this.options.loose && FLAG_LOOSE);
-        const memoKey = memoOpts + ":" + range;
-        const cached = cache.get(memoKey);
-        if (cached) {
-          return cached;
-        }
-        const loose = this.options.loose;
-        const hr = loose ? re[t.HYPHENRANGELOOSE] : re[t.HYPHENRANGE];
-        range = range.replace(hr, hyphenReplace(this.options.includePrerelease));
-        debug2("hyphen replace", range);
-        range = range.replace(re[t.COMPARATORTRIM], comparatorTrimReplace);
-        debug2("comparator trim", range);
-        range = range.replace(re[t.TILDETRIM], tildeTrimReplace);
-        debug2("tilde trim", range);
-        range = range.replace(re[t.CARETTRIM], caretTrimReplace);
-        debug2("caret trim", range);
-        let rangeList = range.split(" ").map((comp) => parseComparator(comp, this.options)).join(" ").split(/\s+/).map((comp) => replaceGTE0(comp, this.options));
-        if (loose) {
-          rangeList = rangeList.filter((comp) => {
-            debug2("loose invalid filter", comp, this.options);
-            return !!comp.match(re[t.COMPARATORLOOSE]);
+    };
+    var DEFAULT_STALE_AFTER_SECONDS = 120;
+    var DEFAULT_STATUS_POLL_INTERVAL_SECONDS = 5;
+    var DEFAULT_USER_CACHE_SIZE = 1e3;
+    var DEFAULT_USER_CACHE_TIME_SECONDS = 5;
+    var BigSegmentsManager = class {
+      constructor(_store, config, _logger, _crypto) {
+        this._store = _store;
+        this._logger = _logger;
+        this._crypto = _crypto;
+        this.statusProvider = new BigSegmentStoreStatusProviderImpl(
+          async () => this._pollStoreAndUpdateStatus()
+        );
+        this._staleTimeMs = (import_js_sdk_common.TypeValidators.Number.is(config.staleAfter) && config.staleAfter > 0 ? config.staleAfter : DEFAULT_STALE_AFTER_SECONDS) * 1e3;
+        const pollIntervalMs = (import_js_sdk_common.TypeValidators.Number.is(config.statusPollInterval) && config.statusPollInterval > 0 ? config.statusPollInterval : DEFAULT_STATUS_POLL_INTERVAL_SECONDS) * 1e3;
+        this._pollHandle = _store ? setInterval(() => this._pollStoreAndUpdateStatus(), pollIntervalMs) : null;
+        if (_store) {
+          this._cache = new LruCache({
+            max: config.userCacheSize || DEFAULT_USER_CACHE_SIZE,
+            maxAge: (config.userCacheTime || DEFAULT_USER_CACHE_TIME_SECONDS) * 1e3
           });
         }
-        debug2("range list", rangeList);
-        const rangeMap = /* @__PURE__ */ new Map();
-        const comparators = rangeList.map((comp) => new Comparator(comp, this.options));
-        for (const comp of comparators) {
-          if (isNullSet(comp)) {
-            return [comp];
-          }
-          rangeMap.set(comp.value, comp);
-        }
-        if (rangeMap.size > 1 && rangeMap.has("")) {
-          rangeMap.delete("");
-        }
-        const result = [...rangeMap.values()];
-        cache.set(memoKey, result);
-        return result;
       }
-      intersects(range, options) {
-        if (!(range instanceof _Range)) {
-          throw new TypeError("a Range is required");
+      close() {
+        if (this._pollHandle) {
+          clearInterval(this._pollHandle);
+          this._pollHandle = void 0;
         }
-        return this.set.some((thisComparators) => {
-          return isSatisfiable(thisComparators, options) && range.set.some((rangeComparators) => {
-            return isSatisfiable(rangeComparators, options) && thisComparators.every((thisComparator) => {
-              return rangeComparators.every((rangeComparator) => {
-                return thisComparator.intersects(rangeComparator, options);
+        if (this._store) {
+          this._store.close();
+        }
+      }
+      async getUserMembership(userKey) {
+        var _a, _b, _c;
+        if (!this._store) {
+          return void 0;
+        }
+        const memberCache = (_a = this._cache) == null ? void 0 : _a.get(userKey);
+        let membership;
+        if (!memberCache) {
+          try {
+            membership = await this._store.getUserMembership(this._hashForUserKey(userKey));
+            const cacheItem = { membership };
+            (_b = this._cache) == null ? void 0 : _b.set(userKey, cacheItem);
+          } catch (err) {
+            (_c = this._logger) == null ? void 0 : _c.error(`Big Segment store membership query returned error: ${err}`);
+            return [null, "STORE_ERROR"];
+          }
+        } else {
+          membership = memberCache.membership;
+        }
+        if (!this.statusProvider.getStatus()) {
+          await this._pollStoreAndUpdateStatus();
+        }
+        const lastStatus = this.statusProvider.getStatus();
+        if (!lastStatus.available) {
+          return [membership || null, "STORE_ERROR"];
+        }
+        return [membership || null, lastStatus.stale ? "STALE" : "HEALTHY"];
+      }
+      async _pollStoreAndUpdateStatus() {
+        var _a, _b, _c;
+        if (!this._store) {
+          this.statusProvider.setStatus({ available: false, stale: false });
+          return;
+        }
+        (_a = this._logger) == null ? void 0 : _a.debug("Querying Big Segment store status");
+        let newStatus;
+        try {
+          const metadata = await this._store.getMetadata();
+          newStatus = {
+            available: true,
+            stale: !metadata || !metadata.lastUpToDate || this._isStale(metadata.lastUpToDate)
+          };
+        } catch (err) {
+          (_b = this._logger) == null ? void 0 : _b.error(`Big Segment store status query returned error: ${err}`);
+          newStatus = { available: false, stale: false };
+        }
+        const lastStatus = this.statusProvider.getStatus();
+        if (!lastStatus || lastStatus.available !== newStatus.available || lastStatus.stale !== newStatus.stale) {
+          (_c = this._logger) == null ? void 0 : _c.debug(
+            "Big Segment store status changed from %s to %s",
+            JSON.stringify(lastStatus),
+            JSON.stringify(newStatus)
+          );
+          this.statusProvider.setStatus(newStatus);
+          this.statusProvider.notify();
+        }
+      }
+      _hashForUserKey(userKey) {
+        const hasher = this._crypto.createHash("sha256");
+        hasher.update(userKey);
+        if (!hasher.digest) {
+          throw new Error("Platform must implement digest or asyncDigest");
+        }
+        return hasher.digest("base64");
+      }
+      _isStale(timestamp) {
+        return Date.now() - timestamp >= this._staleTimeMs;
+      }
+    };
+    function createPluginEnvironmentMetadata(_platform, _sdkKey, config) {
+      const environmentMetadata = {
+        sdk: {
+          name: _platform.info.sdkData().userAgentBase,
+          version: _platform.info.sdkData().version
+        },
+        sdkKey: _sdkKey
+      };
+      if (_platform.info.sdkData().wrapperName) {
+        environmentMetadata.sdk.wrapperName = _platform.info.sdkData().wrapperName;
+      }
+      if (_platform.info.sdkData().wrapperVersion) {
+        environmentMetadata.sdk.wrapperVersion = _platform.info.sdkData().wrapperVersion;
+      }
+      if (config.applicationInfo) {
+        environmentMetadata.application = config.applicationInfo;
+      }
+      return environmentMetadata;
+    }
+    var namespaceForKind = (kind) => {
+      switch (kind) {
+        case "flag":
+          return "features";
+        case "segment":
+          return "segments";
+        default:
+          return kind;
+      }
+    };
+    var createPayloadListener = (dataSourceUpdates, logger, initializedCallback = () => {
+    }) => (dataContainer) => {
+      const { initMetadata, payload } = dataContainer;
+      if (payload.type === "full") {
+        logger == null ? void 0 : logger.debug("Initializing all data");
+      } else if (payload.updates.length > 0) {
+        logger == null ? void 0 : logger.debug("Applying updates");
+      } else {
+        logger == null ? void 0 : logger.debug("Payload had no updates, ignoring.");
+        return;
+      }
+      const converted = {};
+      payload.updates.forEach((it) => {
+        const namespace = namespaceForKind(it.kind);
+        if (converted[namespace]) {
+          converted[namespace][it.key] = __spreadValues(__spreadValues({
+            version: it.version
+          }, it.deleted && { deleted: it.deleted }), it.object);
+        } else {
+          converted[namespace] = {
+            [it.key]: __spreadValues(__spreadValues({
+              version: it.version
+            }, it.deleted && { deleted: it.deleted }), it.object)
+          };
+        }
+        if (it.deleted) {
+          logger == null ? void 0 : logger.debug(`Deleting ${it.key} in ${it.kind}`);
+        } else {
+          logger == null ? void 0 : logger.debug(`Updating ${it.key} in ${it.kind}`);
+        }
+      });
+      dataSourceUpdates.applyChanges(
+        payload.type === "full",
+        converted,
+        () => {
+          if (payload.state !== "") {
+            initializedCallback();
+          }
+        },
+        initMetadata,
+        payload.state
+      );
+    };
+    var import_js_sdk_common3 = require_cjs();
+    var import_js_sdk_common2 = require_cjs();
+    var VersionedDataKinds = class {
+      static getKeyFromPath(kind, path) {
+        return path.startsWith(kind.streamApiPath) ? path.substring(kind.streamApiPath.length) : void 0;
+      }
+    };
+    VersionedDataKinds.Features = {
+      namespace: "features",
+      streamApiPath: "/flags/"
+    };
+    VersionedDataKinds.Segments = {
+      namespace: "segments",
+      streamApiPath: "/segments/"
+    };
+    var TARGET_LIST_ARRAY_CUTOFF = 100;
+    function nullReplacer(target, excludeKeys) {
+      const stack = [];
+      if (target === null || target === void 0) {
+        return;
+      }
+      const filteredEntries = Object.entries(target).filter(
+        ([key, _value]) => !(excludeKeys == null ? void 0 : excludeKeys.includes(key))
+      );
+      stack.push(
+        ...filteredEntries.map(([key, value]) => ({
+          key,
+          value,
+          parent: target
+        }))
+      );
+      while (stack.length) {
+        const item = stack.pop();
+        if (item.value === null && !Array.isArray(item.parent)) {
+          delete item.parent[item.key];
+        } else if (typeof item.value === "object" && item.value !== null) {
+          stack.push(
+            ...Object.entries(item.value).map(([key, value]) => ({
+              key,
+              value,
+              parent: item.value
+            }))
+          );
+        }
+      }
+    }
+    function replacer(key, value) {
+      if (value instanceof import_js_sdk_common2.AttributeReference) {
+        return void 0;
+      }
+      if (Array.isArray(value)) {
+        if (value[0] && value[0] instanceof import_js_sdk_common2.AttributeReference) {
+          return void 0;
+        }
+      }
+      if (value === null || value === void 0) {
+        return value;
+      }
+      if (value.generated_includedSet) {
+        value.included = [...value.generated_includedSet];
+        delete value.generated_includedSet;
+      }
+      if (value.generated_excludedSet) {
+        value.excluded = [...value.generated_excludedSet];
+        delete value.generated_excludedSet;
+      }
+      if (value.includedContexts) {
+        value.includedContexts.forEach((target) => {
+          if (target.generated_valuesSet) {
+            target.values = [...target.generated_valuesSet];
+          }
+          delete target.generated_valuesSet;
+        });
+      }
+      if (value.excludedContexts) {
+        value.excludedContexts.forEach((target) => {
+          if (target.generated_valuesSet) {
+            target.values = [...target.generated_valuesSet];
+          }
+          delete target.generated_valuesSet;
+        });
+      }
+      return value;
+    }
+    function processRollout(rollout) {
+      if (rollout && rollout.bucketBy) {
+        rollout.bucketByAttributeReference = new import_js_sdk_common2.AttributeReference(
+          rollout.bucketBy,
+          !rollout.contextKind
+        );
+      }
+    }
+    function processFlag(flag) {
+      var _a;
+      nullReplacer(flag, ["variations"]);
+      if (flag.fallthrough && flag.fallthrough.rollout) {
+        const rollout = flag.fallthrough.rollout;
+        processRollout(rollout);
+      }
+      (_a = flag == null ? void 0 : flag.rules) == null ? void 0 : _a.forEach((rule) => {
+        var _a2;
+        processRollout(rule.rollout);
+        (_a2 = rule == null ? void 0 : rule.clauses) == null ? void 0 : _a2.forEach((clause) => {
+          if (clause && clause.attribute) {
+            clause.attributeReference = new import_js_sdk_common2.AttributeReference(clause.attribute, !clause.contextKind);
+          } else if (clause) {
+            clause.attributeReference = import_js_sdk_common2.AttributeReference.InvalidReference;
+          }
+        });
+      });
+    }
+    function processSegment(segment) {
+      var _a, _b, _c, _d, _e;
+      nullReplacer(segment);
+      if (((_a = segment == null ? void 0 : segment.included) == null ? void 0 : _a.length) && segment.included.length > TARGET_LIST_ARRAY_CUTOFF) {
+        segment.generated_includedSet = new Set(segment.included);
+        delete segment.included;
+      }
+      if (((_b = segment == null ? void 0 : segment.excluded) == null ? void 0 : _b.length) && segment.excluded.length > TARGET_LIST_ARRAY_CUTOFF) {
+        segment.generated_excludedSet = new Set(segment.excluded);
+        delete segment.excluded;
+      }
+      if ((_c = segment == null ? void 0 : segment.includedContexts) == null ? void 0 : _c.length) {
+        segment.includedContexts.forEach((target) => {
+          var _a2;
+          if (((_a2 = target == null ? void 0 : target.values) == null ? void 0 : _a2.length) && target.values.length > TARGET_LIST_ARRAY_CUTOFF) {
+            target.generated_valuesSet = new Set(target.values);
+            target.values = [];
+          }
+        });
+      }
+      if ((_d = segment == null ? void 0 : segment.excludedContexts) == null ? void 0 : _d.length) {
+        segment.excludedContexts.forEach((target) => {
+          var _a2;
+          if (((_a2 = target == null ? void 0 : target.values) == null ? void 0 : _a2.length) && target.values.length > TARGET_LIST_ARRAY_CUTOFF) {
+            target.generated_valuesSet = new Set(target.values);
+            target.values = [];
+          }
+        });
+      }
+      (_e = segment == null ? void 0 : segment.rules) == null ? void 0 : _e.forEach((rule) => {
+        var _a2;
+        if (rule.bucketBy) {
+          rule.bucketByAttributeReference = new import_js_sdk_common2.AttributeReference(
+            rule.bucketBy,
+            !rule.rolloutContextKind
+          );
+        }
+        (_a2 = rule == null ? void 0 : rule.clauses) == null ? void 0 : _a2.forEach((clause) => {
+          if (clause && clause.attribute) {
+            clause.attributeReference = new import_js_sdk_common2.AttributeReference(clause.attribute, !clause.contextKind);
+          } else if (clause) {
+            clause.attributeReference = import_js_sdk_common2.AttributeReference.InvalidReference;
+          }
+        });
+      });
+    }
+    function tryParse(data) {
+      try {
+        return JSON.parse(data);
+      } catch (e) {
+        return void 0;
+      }
+    }
+    function reviveFullPayload(payload) {
+      const flagsAndSegments = payload;
+      Object.values((flagsAndSegments == null ? void 0 : flagsAndSegments.flags) || []).forEach((flag) => {
+        processFlag(flag);
+      });
+      Object.values((flagsAndSegments == null ? void 0 : flagsAndSegments.segments) || []).forEach((segment) => {
+        processSegment(segment);
+      });
+      return flagsAndSegments;
+    }
+    function deserializeAll(data) {
+      const parsed = tryParse(data);
+      if (!parsed) {
+        return void 0;
+      }
+      reviveFullPayload(parsed == null ? void 0 : parsed.data);
+      return parsed;
+    }
+    function deserializePoll(data) {
+      const parsed = tryParse(data);
+      if (!parsed) {
+        return void 0;
+      }
+      reviveFullPayload(parsed);
+      return parsed;
+    }
+    function deserializePatch(data) {
+      const parsed = tryParse(data);
+      if (!parsed) {
+        return void 0;
+      }
+      if (parsed.path.startsWith(VersionedDataKinds.Features.streamApiPath)) {
+        processFlag(parsed.data);
+        parsed.kind = VersionedDataKinds.Features;
+      } else if (parsed.path.startsWith(VersionedDataKinds.Segments.streamApiPath)) {
+        processSegment(parsed.data);
+        parsed.kind = VersionedDataKinds.Segments;
+      }
+      return parsed;
+    }
+    function deserializeDelete(data) {
+      const parsed = tryParse(data);
+      if (!parsed) {
+        return void 0;
+      }
+      if (parsed.path.startsWith(VersionedDataKinds.Features.streamApiPath)) {
+        parsed.kind = VersionedDataKinds.Features;
+      } else if (parsed.path.startsWith(VersionedDataKinds.Segments.streamApiPath)) {
+        parsed.kind = VersionedDataKinds.Segments;
+      }
+      return parsed;
+    }
+    function serializeFlag(flag) {
+      return JSON.stringify(flag, replacer);
+    }
+    function deserializeFlag(data) {
+      const parsed = tryParse(data);
+      if (!parsed) {
+        return void 0;
+      }
+      processFlag(parsed);
+      return parsed;
+    }
+    function serializeSegment(segment) {
+      return JSON.stringify(segment, replacer);
+    }
+    function deserializeSegment(data) {
+      const parsed = tryParse(data);
+      if (!parsed) {
+        return void 0;
+      }
+      processSegment(parsed);
+      return parsed;
+    }
+    var { initMetadataFromHeaders } = import_js_sdk_common3.internal;
+    var createPutListener = (dataSourceUpdates, logger, onPutCompleteHandler = () => {
+    }) => ({
+      deserializeData: deserializeAll,
+      processJson: async ({ data: { flags, segments } }, initHeaders) => {
+        const initData = {
+          [VersionedDataKinds.Features.namespace]: flags,
+          [VersionedDataKinds.Segments.namespace]: segments
+        };
+        logger == null ? void 0 : logger.debug("Initializing all data");
+        dataSourceUpdates.init(initData, onPutCompleteHandler, initMetadataFromHeaders(initHeaders));
+      }
+    });
+    var createPatchListener = (dataSourceUpdates, logger, onPatchCompleteHandler = () => {
+    }) => ({
+      deserializeData: deserializePatch,
+      processJson: async ({ data, kind, path }) => {
+        if (kind) {
+          const key = VersionedDataKinds.getKeyFromPath(kind, path);
+          if (key) {
+            logger == null ? void 0 : logger.debug(`Updating ${key} in ${kind.namespace}`);
+            dataSourceUpdates.upsert(kind, data, onPatchCompleteHandler);
+          }
+        }
+      }
+    });
+    var createDeleteListener = (dataSourceUpdates, logger, onDeleteCompleteHandler = () => {
+    }) => ({
+      deserializeData: deserializeDelete,
+      processJson: async ({ kind, path, version }) => {
+        if (kind) {
+          const key = VersionedDataKinds.getKeyFromPath(kind, path);
+          if (key) {
+            logger == null ? void 0 : logger.debug(`Deleting ${key} in ${kind.namespace}`);
+            dataSourceUpdates.upsert(
+              kind,
+              {
+                key,
+                version,
+                deleted: true
+              },
+              onDeleteCompleteHandler
+            );
+          }
+        }
+      }
+    });
+    var createStreamListeners = (dataSourceUpdates, logger, onCompleteHandlers) => {
+      const listeners = /* @__PURE__ */ new Map();
+      listeners.set("put", createPutListener(dataSourceUpdates, logger, onCompleteHandlers == null ? void 0 : onCompleteHandlers.put));
+      listeners.set("patch", createPatchListener(dataSourceUpdates, logger, onCompleteHandlers == null ? void 0 : onCompleteHandlers.patch));
+      listeners.set(
+        "delete",
+        createDeleteListener(dataSourceUpdates, logger, onCompleteHandlers == null ? void 0 : onCompleteHandlers.delete)
+      );
+      return listeners;
+    };
+    var NamespacedDataSet = class {
+      constructor() {
+        this._itemsByNamespace = {};
+      }
+      get(namespace, key) {
+        var _a;
+        return (_a = this._itemsByNamespace[namespace]) == null ? void 0 : _a[key];
+      }
+      set(namespace, key, value) {
+        if (!(namespace in this._itemsByNamespace)) {
+          this._itemsByNamespace[namespace] = {};
+        }
+        this._itemsByNamespace[namespace][key] = value;
+      }
+      remove(namespace, key) {
+        const items = this._itemsByNamespace[namespace];
+        if (items) {
+          delete items[key];
+        }
+      }
+      removeAll() {
+        this._itemsByNamespace = {};
+      }
+      enumerate(callback) {
+        Object.entries(this._itemsByNamespace).forEach(([namespace, values]) => {
+          Object.entries(values).forEach(([key, value]) => {
+            callback(namespace, key, value);
+          });
+        });
+      }
+      mergeFrom(other) {
+        other.enumerate(this.set.bind(this));
+      }
+    };
+    var DependencyTracker = class {
+      constructor() {
+        this._dependenciesFrom = new NamespacedDataSet();
+        this._dependenciesTo = new NamespacedDataSet();
+      }
+      updateDependenciesFrom(namespace, key, newDependencySet) {
+        const oldDependencySet = this._dependenciesFrom.get(namespace, key);
+        oldDependencySet == null ? void 0 : oldDependencySet.enumerate((depNs, depKey) => {
+          const depsToThisDep = this._dependenciesTo.get(depNs, depKey);
+          depsToThisDep == null ? void 0 : depsToThisDep.remove(namespace, key);
+        });
+        this._dependenciesFrom.set(namespace, key, newDependencySet);
+        newDependencySet == null ? void 0 : newDependencySet.enumerate((depNs, depKey) => {
+          let depsToThisDep = this._dependenciesTo.get(depNs, depKey);
+          if (!depsToThisDep) {
+            depsToThisDep = new NamespacedDataSet();
+            this._dependenciesTo.set(depNs, depKey, depsToThisDep);
+          }
+          depsToThisDep.set(namespace, key, true);
+        });
+      }
+      updateModifiedItems(inDependencySet, modifiedNamespace, modifiedKey) {
+        if (!inDependencySet.get(modifiedNamespace, modifiedKey)) {
+          inDependencySet.set(modifiedNamespace, modifiedKey, true);
+          const affectedItems = this._dependenciesTo.get(modifiedNamespace, modifiedKey);
+          affectedItems == null ? void 0 : affectedItems.enumerate((namespace, key) => {
+            this.updateModifiedItems(inDependencySet, namespace, key);
+          });
+        }
+      }
+      reset() {
+        this._dependenciesFrom.removeAll();
+        this._dependenciesTo.removeAll();
+      }
+    };
+    function computeDependencies(namespace, item) {
+      var _a, _b;
+      const ret = new NamespacedDataSet();
+      const isFlag = namespace === VersionedDataKinds.Features.namespace;
+      const isSegment = namespace === VersionedDataKinds.Segments.namespace;
+      if (isFlag) {
+        const flag = item;
+        (_a = flag == null ? void 0 : flag.prerequisites) == null ? void 0 : _a.forEach((prereq) => {
+          ret.set(namespace, prereq.key, true);
+        });
+      }
+      if (isFlag || isSegment) {
+        const itemWithRuleClauses = item;
+        (_b = itemWithRuleClauses == null ? void 0 : itemWithRuleClauses.rules) == null ? void 0 : _b.forEach((rule) => {
+          var _a2;
+          (_a2 = rule.clauses) == null ? void 0 : _a2.forEach((clause) => {
+            if (clause.op === "segmentMatch") {
+              clause.values.forEach((value) => {
+                ret.set(VersionedDataKinds.Segments.namespace, value, true);
               });
+            }
+          });
+        });
+      }
+      return ret;
+    }
+    var DataSourceUpdates = class {
+      constructor(_featureStore, _hasEventListeners, _onChange) {
+        this._featureStore = _featureStore;
+        this._hasEventListeners = _hasEventListeners;
+        this._onChange = _onChange;
+        this._dependencyTracker = new DependencyTracker();
+      }
+      init(allData, callback, initMetadata) {
+        const checkForChanges = this._hasEventListeners();
+        const doInit = (oldData) => {
+          this._featureStore.init(
+            allData,
+            () => {
+              Promise.resolve().then(() => {
+                this._dependencyTracker.reset();
+                Object.entries(allData).forEach(([namespace, items]) => {
+                  Object.keys(items || {}).forEach((key) => {
+                    const item = items[key];
+                    this._dependencyTracker.updateDependenciesFrom(
+                      namespace,
+                      key,
+                      computeDependencies(namespace, item)
+                    );
+                  });
+                });
+                if (checkForChanges) {
+                  const updatedItems = new NamespacedDataSet();
+                  Object.keys(allData).forEach((namespace) => {
+                    const oldDataForKind = (oldData == null ? void 0 : oldData[namespace]) || {};
+                    const newDataForKind = allData[namespace];
+                    const mergedData = __spreadValues(__spreadValues({}, oldDataForKind), newDataForKind);
+                    Object.keys(mergedData).forEach((key) => {
+                      this.addIfModified(
+                        namespace,
+                        key,
+                        oldDataForKind && oldDataForKind[key],
+                        newDataForKind && newDataForKind[key],
+                        updatedItems
+                      );
+                    });
+                  });
+                  this.sendChangeEvents(updatedItems);
+                }
+              });
+              callback == null ? void 0 : callback();
+            },
+            initMetadata
+          );
+        };
+        if (checkForChanges) {
+          this._featureStore.all(VersionedDataKinds.Features, (oldFlags) => {
+            this._featureStore.all(VersionedDataKinds.Segments, (oldSegments) => {
+              const oldData = {
+                [VersionedDataKinds.Features.namespace]: oldFlags,
+                [VersionedDataKinds.Segments.namespace]: oldSegments
+              };
+              doInit(oldData);
             });
           });
+        } else {
+          doInit();
+        }
+      }
+      upsert(kind, data, callback) {
+        const { key } = data;
+        const checkForChanges = this._hasEventListeners();
+        const doUpsert = (oldItem) => {
+          this._featureStore.upsert(kind, data, () => {
+            Promise.resolve().then(() => {
+              this._dependencyTracker.updateDependenciesFrom(
+                kind.namespace,
+                key,
+                computeDependencies(kind.namespace, data)
+              );
+              if (checkForChanges) {
+                const updatedItems = new NamespacedDataSet();
+                this.addIfModified(kind.namespace, key, oldItem, data, updatedItems);
+                this.sendChangeEvents(updatedItems);
+              }
+            });
+            callback == null ? void 0 : callback();
+          });
+        };
+        if (checkForChanges) {
+          this._featureStore.get(kind, key, doUpsert);
+        } else {
+          doUpsert();
+        }
+      }
+      addIfModified(namespace, key, oldValue, newValue, toDataSet) {
+        if (newValue && oldValue && newValue.version <= oldValue.version) {
+          return;
+        }
+        this._dependencyTracker.updateModifiedItems(toDataSet, namespace, key);
+      }
+      sendChangeEvents(dataSet) {
+        dataSet.enumerate((namespace, key) => {
+          if (namespace === VersionedDataKinds.Features.namespace) {
+            this._onChange(key);
+          }
         });
       }
-      // if ANY of the sets match ALL of its comparators, then pass
-      test(version) {
-        if (!version) {
-          return false;
-        }
-        if (typeof version === "string") {
-          try {
-            version = new SemVer(version, this.options);
-          } catch (er) {
-            return false;
-          }
-        }
-        for (let i = 0; i < this.set.length; i++) {
-          if (testSet(this.set[i], version, this.options)) {
-            return true;
-          }
-        }
-        return false;
-      }
     };
-    module.exports = Range;
-    var LRU = require_lru_cache();
-    var cache = new LRU({ max: 1e3 });
-    var parseOptions = require_parse_options();
-    var Comparator = require_comparator();
-    var debug2 = require_debug();
-    var SemVer = require_semver();
-    var {
-      safeRe: re,
-      t,
-      comparatorTrimReplace,
-      tildeTrimReplace,
-      caretTrimReplace
-    } = require_re();
-    var { FLAG_INCLUDE_PRERELEASE, FLAG_LOOSE } = require_constants6();
-    var isNullSet = (c) => c.value === "<0.0.0-0";
-    var isAny = (c) => c.value === "";
-    var isSatisfiable = (comparators, options) => {
-      let result = true;
-      const remainingComparators = comparators.slice();
-      let testComparator = remainingComparators.pop();
-      while (result && remainingComparators.length) {
-        result = remainingComparators.every((otherComparator) => {
-          return testComparator.intersects(otherComparator, options);
+    var import_js_sdk_common4 = require_cjs();
+    var FileLoader = class {
+      constructor(_filesystem, _paths, _watch, _callback) {
+        this._filesystem = _filesystem;
+        this._paths = _paths;
+        this._watch = _watch;
+        this._callback = _callback;
+        this._watchers = [];
+        this._fileData = {};
+        this._fileTimestamps = {};
+      }
+      /**
+       * Load all the files and start watching them if watching is enabled.
+       */
+      async loadAndWatch() {
+        const promises3 = this._paths.map(async (path) => {
+          const data = await this._filesystem.readFile(path);
+          const timeStamp = await this._filesystem.getFileTimestamp(path);
+          return { data, path, timeStamp };
         });
-        testComparator = remainingComparators.pop();
+        const results = await Promise.all(promises3);
+        results.forEach((res) => {
+          this._fileData[res.path] = res.data;
+          this._fileTimestamps[res.path] = res.timeStamp;
+        });
+        this._callback(results);
+        if (this._watch) {
+          this._paths.forEach((path) => {
+            const watcher = this._filesystem.watch(path, async (_, updatePath) => {
+              const timeStamp = await this._filesystem.getFileTimestamp(updatePath);
+              if (timeStamp === this._fileTimestamps[updatePath]) {
+                return;
+              }
+              this._fileTimestamps[updatePath] = timeStamp;
+              const data = await this._filesystem.readFile(updatePath);
+              this._fileData[updatePath] = data;
+              this._debounceCallback();
+            });
+            this._watchers.push(watcher);
+          });
+        }
       }
-      return result;
-    };
-    var parseComparator = (comp, options) => {
-      debug2("comp", comp, options);
-      comp = replaceCarets(comp, options);
-      debug2("caret", comp);
-      comp = replaceTildes(comp, options);
-      debug2("tildes", comp);
-      comp = replaceXRanges(comp, options);
-      debug2("xrange", comp);
-      comp = replaceStars(comp, options);
-      debug2("stars", comp);
-      return comp;
-    };
-    var isX = (id) => !id || id.toLowerCase() === "x" || id === "*";
-    var replaceTildes = (comp, options) => {
-      return comp.trim().split(/\s+/).map((c) => replaceTilde(c, options)).join(" ");
-    };
-    var replaceTilde = (comp, options) => {
-      const r = options.loose ? re[t.TILDELOOSE] : re[t.TILDE];
-      return comp.replace(r, (_, M, m, p, pr) => {
-        debug2("tilde", comp, _, M, m, p, pr);
-        let ret;
-        if (isX(M)) {
-          ret = "";
-        } else if (isX(m)) {
-          ret = `>=${M}.0.0 <${+M + 1}.0.0-0`;
-        } else if (isX(p)) {
-          ret = `>=${M}.${m}.0 <${M}.${+m + 1}.0-0`;
-        } else if (pr) {
-          debug2("replaceTilde pr", pr);
-          ret = `>=${M}.${m}.${p}-${pr} <${M}.${+m + 1}.0-0`;
-        } else {
-          ret = `>=${M}.${m}.${p} <${M}.${+m + 1}.0-0`;
+      close() {
+        this._watchers.forEach((watcher) => watcher.close());
+      }
+      _debounceCallback() {
+        if (!this._debounceHandle) {
+          this._debounceHandle = setTimeout(() => {
+            this._debounceHandle = void 0;
+            this._callback(
+              Object.entries(this._fileData).reduce(
+                (acc, [path, data]) => {
+                  acc.push({ path, data });
+                  return acc;
+                },
+                []
+              )
+            );
+          }, 10);
         }
-        debug2("tilde return", ret);
-        return ret;
-      });
+      }
     };
-    var replaceCarets = (comp, options) => {
-      return comp.trim().split(/\s+/).map((c) => replaceCaret(c, options)).join(" ");
-    };
-    var replaceCaret = (comp, options) => {
-      debug2("caret", comp, options);
-      const r = options.loose ? re[t.CARETLOOSE] : re[t.CARET];
-      const z = options.includePrerelease ? "-0" : "";
-      return comp.replace(r, (_, M, m, p, pr) => {
-        debug2("caret", comp, _, M, m, p, pr);
-        let ret;
-        if (isX(M)) {
-          ret = "";
-        } else if (isX(m)) {
-          ret = `>=${M}.0.0${z} <${+M + 1}.0.0-0`;
-        } else if (isX(p)) {
-          if (M === "0") {
-            ret = `>=${M}.${m}.0${z} <${M}.${+m + 1}.0-0`;
-          } else {
-            ret = `>=${M}.${m}.0${z} <${+M + 1}.0.0-0`;
-          }
-        } else if (pr) {
-          debug2("replaceCaret pr", pr);
-          if (M === "0") {
-            if (m === "0") {
-              ret = `>=${M}.${m}.${p}-${pr} <${M}.${m}.${+p + 1}-0`;
-            } else {
-              ret = `>=${M}.${m}.${p}-${pr} <${M}.${+m + 1}.0-0`;
-            }
-          } else {
-            ret = `>=${M}.${m}.${p}-${pr} <${+M + 1}.0.0-0`;
-          }
-        } else {
-          debug2("no pr");
-          if (M === "0") {
-            if (m === "0") {
-              ret = `>=${M}.${m}.${p}${z} <${M}.${m}.${+p + 1}-0`;
-            } else {
-              ret = `>=${M}.${m}.${p}${z} <${M}.${+m + 1}.0-0`;
-            }
-          } else {
-            ret = `>=${M}.${m}.${p} <${+M + 1}.0.0-0`;
-          }
-        }
-        debug2("caret return", ret);
-        return ret;
-      });
-    };
-    var replaceXRanges = (comp, options) => {
-      debug2("replaceXRanges", comp, options);
-      return comp.split(/\s+/).map((c) => replaceXRange(c, options)).join(" ");
-    };
-    var replaceXRange = (comp, options) => {
-      comp = comp.trim();
-      const r = options.loose ? re[t.XRANGELOOSE] : re[t.XRANGE];
-      return comp.replace(r, (ret, gtlt, M, m, p, pr) => {
-        debug2("xRange", comp, ret, gtlt, M, m, p, pr);
-        const xM = isX(M);
-        const xm = xM || isX(m);
-        const xp = xm || isX(p);
-        const anyX = xp;
-        if (gtlt === "=" && anyX) {
-          gtlt = "";
-        }
-        pr = options.includePrerelease ? "-0" : "";
-        if (xM) {
-          if (gtlt === ">" || gtlt === "<") {
-            ret = "<0.0.0-0";
-          } else {
-            ret = "*";
-          }
-        } else if (gtlt && anyX) {
-          if (xm) {
-            m = 0;
-          }
-          p = 0;
-          if (gtlt === ">") {
-            gtlt = ">=";
-            if (xm) {
-              M = +M + 1;
-              m = 0;
-              p = 0;
-            } else {
-              m = +m + 1;
-              p = 0;
-            }
-          } else if (gtlt === "<=") {
-            gtlt = "<";
-            if (xm) {
-              M = +M + 1;
-            } else {
-              m = +m + 1;
+    function makeFlagWithValue(key, value, version) {
+      return {
+        key,
+        on: true,
+        fallthrough: { variation: 0 },
+        variations: [value],
+        version
+      };
+    }
+    var FileDataSource = class {
+      /**
+       * This is internal because we want instances to only be created with the
+       * factory.
+       * @internal
+       */
+      constructor(options, filesystem, _featureStore, _initSuccessHandler = () => {
+      }, _errorHandler) {
+        this._featureStore = _featureStore;
+        this._initSuccessHandler = _initSuccessHandler;
+        this._errorHandler = _errorHandler;
+        this._allData = {};
+        var _a;
+        this._fileLoader = new FileLoader(
+          filesystem,
+          options.paths,
+          (_a = options.autoUpdate) != null ? _a : false,
+          (results) => {
+            var _a2, _b;
+            try {
+              this._processFileData(results);
+            } catch (err) {
+              (_a2 = this._errorHandler) == null ? void 0 : _a2.call(this, err);
+              (_b = this._logger) == null ? void 0 : _b.error(`Error processing files: ${err}`);
             }
           }
-          if (gtlt === "<") {
-            pr = "-0";
-          }
-          ret = `${gtlt + M}.${m}.${p}${pr}`;
-        } else if (xm) {
-          ret = `>=${M}.0.0${pr} <${+M + 1}.0.0-0`;
-        } else if (xp) {
-          ret = `>=${M}.${m}.0${pr} <${M}.${+m + 1}.0-0`;
-        }
-        debug2("xRange return", ret);
-        return ret;
-      });
-    };
-    var replaceStars = (comp, options) => {
-      debug2("replaceStars", comp, options);
-      return comp.trim().replace(re[t.STAR], "");
-    };
-    var replaceGTE0 = (comp, options) => {
-      debug2("replaceGTE0", comp, options);
-      return comp.trim().replace(re[options.includePrerelease ? t.GTE0PRE : t.GTE0], "");
-    };
-    var hyphenReplace = (incPr) => ($0, from, fM, fm, fp, fpr, fb, to, tM, tm, tp, tpr, tb) => {
-      if (isX(fM)) {
-        from = "";
-      } else if (isX(fm)) {
-        from = `>=${fM}.0.0${incPr ? "-0" : ""}`;
-      } else if (isX(fp)) {
-        from = `>=${fM}.${fm}.0${incPr ? "-0" : ""}`;
-      } else if (fpr) {
-        from = `>=${from}`;
-      } else {
-        from = `>=${from}${incPr ? "-0" : ""}`;
+        );
+        this._logger = options.logger;
+        this._yamlParser = options.yamlParser;
       }
-      if (isX(tM)) {
-        to = "";
-      } else if (isX(tm)) {
-        to = `<${+tM + 1}.0.0-0`;
-      } else if (isX(tp)) {
-        to = `<${tM}.${+tm + 1}.0-0`;
-      } else if (tpr) {
-        to = `<=${tM}.${tm}.${tp}-${tpr}`;
-      } else if (incPr) {
-        to = `<${tM}.${tm}.${+tp + 1}-0`;
-      } else {
-        to = `<=${to}`;
-      }
-      return `${from} ${to}`.trim();
-    };
-    var testSet = (set, version, options) => {
-      for (let i = 0; i < set.length; i++) {
-        if (!set[i].test(version)) {
-          return false;
-        }
-      }
-      if (version.prerelease.length && !options.includePrerelease) {
-        for (let i = 0; i < set.length; i++) {
-          debug2(set[i].semver);
-          if (set[i].semver === Comparator.ANY) {
-            continue;
-          }
-          if (set[i].semver.prerelease.length > 0) {
-            const allowed = set[i].semver;
-            if (allowed.major === version.major && allowed.minor === version.minor && allowed.patch === version.patch) {
-              return true;
-            }
-          }
-        }
-        return false;
-      }
-      return true;
-    };
-  }
-});
-
-// node_modules/semver/classes/comparator.js
-var require_comparator = __commonJS({
-  "node_modules/semver/classes/comparator.js"(exports, module) {
-    var ANY = /* @__PURE__ */ Symbol("SemVer ANY");
-    var Comparator = class _Comparator {
-      static get ANY() {
-        return ANY;
-      }
-      constructor(comp, options) {
-        options = parseOptions(options);
-        if (comp instanceof _Comparator) {
-          if (comp.loose === !!options.loose) {
-            return comp;
-          } else {
-            comp = comp.value;
-          }
-        }
-        comp = comp.trim().split(/\s+/).join(" ");
-        debug2("comparator", comp, options);
-        this.options = options;
-        this.loose = !!options.loose;
-        this.parse(comp);
-        if (this.semver === ANY) {
-          this.value = "";
-        } else {
-          this.value = this.operator + this.semver.version;
-        }
-        debug2("comp", this);
-      }
-      parse(comp) {
-        const r = this.options.loose ? re[t.COMPARATORLOOSE] : re[t.COMPARATOR];
-        const m = comp.match(r);
-        if (!m) {
-          throw new TypeError(`Invalid comparator: ${comp}`);
-        }
-        this.operator = m[1] !== void 0 ? m[1] : "";
-        if (this.operator === "=") {
-          this.operator = "";
-        }
-        if (!m[2]) {
-          this.semver = ANY;
-        } else {
-          this.semver = new SemVer(m[2], this.options.loose);
-        }
-      }
-      toString() {
-        return this.value;
-      }
-      test(version) {
-        debug2("Comparator.test", version, this.options.loose);
-        if (this.semver === ANY || version === ANY) {
-          return true;
-        }
-        if (typeof version === "string") {
+      start() {
+        (async () => {
+          var _a;
           try {
-            version = new SemVer(version, this.options);
-          } catch (er) {
-            return false;
+            await this._fileLoader.loadAndWatch();
+          } catch (err) {
+            (_a = this._errorHandler) == null ? void 0 : _a.call(this, err);
           }
-        }
-        return cmp(version, this.operator, this.semver, this.options);
+        })();
       }
-      intersects(comp, options) {
-        if (!(comp instanceof _Comparator)) {
-          throw new TypeError("a Comparator is required");
+      stop() {
+        this._fileLoader.close();
+      }
+      close() {
+        this.stop();
+      }
+      _addItem(kind, item) {
+        if (!this._allData[kind.namespace]) {
+          this._allData[kind.namespace] = {};
         }
-        if (this.operator === "") {
-          if (this.value === "") {
-            return true;
+        if (this._allData[kind.namespace][item.key]) {
+          throw new Error(`found duplicate key: "${item.key}"`);
+        } else {
+          this._allData[kind.namespace][item.key] = item;
+        }
+      }
+      _processFileData(fileData) {
+        const oldData = this._allData;
+        this._allData = {};
+        fileData.forEach((fd) => {
+          let parsed;
+          if (fd.path.endsWith(".yml") || fd.path.endsWith(".yaml")) {
+            if (this._yamlParser) {
+              parsed = this._yamlParser(fd.data);
+            } else {
+              throw new Error(`Attempted to parse yaml file (${fd.path}) without parser.`);
+            }
+          } else {
+            parsed = JSON.parse(fd.data);
           }
-          return new Range(comp.value, options).test(this.value);
-        } else if (comp.operator === "") {
-          if (comp.value === "") {
-            return true;
+          this._processParsedData(parsed, oldData);
+        });
+        this._featureStore.init(this._allData, () => {
+          this._initSuccessHandler();
+          this._initSuccessHandler = () => {
+          };
+        });
+      }
+      _processParsedData(parsed, oldData) {
+        Object.keys(parsed.flags || {}).forEach((key) => {
+          processFlag(parsed.flags[key]);
+          this._addItem(VersionedDataKinds.Features, parsed.flags[key]);
+        });
+        Object.keys(parsed.flagValues || {}).forEach((key) => {
+          var _a, _b;
+          const previousInstance = (_a = oldData[VersionedDataKinds.Features.namespace]) == null ? void 0 : _a[key];
+          let { version } = previousInstance != null ? previousInstance : { version: 1 };
+          if (previousInstance && JSON.stringify(parsed.flagValues[key]) !== JSON.stringify((_b = previousInstance == null ? void 0 : previousInstance.variations) == null ? void 0 : _b[0])) {
+            version += 1;
           }
-          return new Range(this.value, options).test(comp.semver);
-        }
-        options = parseOptions(options);
-        if (options.includePrerelease && (this.value === "<0.0.0-0" || comp.value === "<0.0.0-0")) {
-          return false;
-        }
-        if (!options.includePrerelease && (this.value.startsWith("<0.0.0") || comp.value.startsWith("<0.0.0"))) {
-          return false;
-        }
-        if (this.operator.startsWith(">") && comp.operator.startsWith(">")) {
-          return true;
-        }
-        if (this.operator.startsWith("<") && comp.operator.startsWith("<")) {
-          return true;
-        }
-        if (this.semver.version === comp.semver.version && this.operator.includes("=") && comp.operator.includes("=")) {
-          return true;
-        }
-        if (cmp(this.semver, "<", comp.semver, options) && this.operator.startsWith(">") && comp.operator.startsWith("<")) {
-          return true;
-        }
-        if (cmp(this.semver, ">", comp.semver, options) && this.operator.startsWith("<") && comp.operator.startsWith(">")) {
-          return true;
-        }
-        return false;
+          const flag = makeFlagWithValue(key, parsed.flagValues[key], version);
+          processFlag(flag);
+          this._addItem(VersionedDataKinds.Features, flag);
+        });
+        Object.keys(parsed.segments || {}).forEach((key) => {
+          processSegment(parsed.segments[key]);
+          this._addItem(VersionedDataKinds.Segments, parsed.segments[key]);
+        });
       }
     };
-    module.exports = Comparator;
-    var parseOptions = require_parse_options();
-    var { safeRe: re, t } = require_re();
-    var cmp = require_cmp();
-    var debug2 = require_debug();
-    var SemVer = require_semver();
-    var Range = require_range();
-  }
-});
-
-// node_modules/semver/functions/satisfies.js
-var require_satisfies = __commonJS({
-  "node_modules/semver/functions/satisfies.js"(exports, module) {
-    var Range = require_range();
-    var satisfies = (version, range, options) => {
-      try {
-        range = new Range(range, options);
-      } catch (er) {
-        return false;
+    var FileDataInitializerFDv2 = class {
+      constructor(options, platform22, logger) {
+        this._validateInputs(options, platform22);
+        this._paths = options.paths;
+        this._logger = logger;
+        this._filesystem = platform22.fileSystem;
+        this._yamlParser = options.yamlParser;
       }
-      return range.test(version);
-    };
-    module.exports = satisfies;
-  }
-});
-
-// node_modules/semver/ranges/to-comparators.js
-var require_to_comparators = __commonJS({
-  "node_modules/semver/ranges/to-comparators.js"(exports, module) {
-    var Range = require_range();
-    var toComparators = (range, options) => new Range(range, options).set.map((comp) => comp.map((c) => c.value).join(" ").trim().split(" "));
-    module.exports = toComparators;
-  }
-});
-
-// node_modules/semver/ranges/max-satisfying.js
-var require_max_satisfying = __commonJS({
-  "node_modules/semver/ranges/max-satisfying.js"(exports, module) {
-    var SemVer = require_semver();
-    var Range = require_range();
-    var maxSatisfying = (versions, range, options) => {
-      let max = null;
-      let maxSV = null;
-      let rangeObj = null;
-      try {
-        rangeObj = new Range(range, options);
-      } catch (er) {
-        return null;
-      }
-      versions.forEach((v) => {
-        if (rangeObj.test(v)) {
-          if (!max || maxSV.compare(v) === -1) {
-            max = v;
-            maxSV = new SemVer(max, options);
-          }
+      _validateInputs(options, platform22) {
+        if (!options.paths || options.paths.length === 0) {
+          throw new Error("FileDataInitializerFDv2: paths are required");
         }
-      });
-      return max;
-    };
-    module.exports = maxSatisfying;
-  }
-});
-
-// node_modules/semver/ranges/min-satisfying.js
-var require_min_satisfying = __commonJS({
-  "node_modules/semver/ranges/min-satisfying.js"(exports, module) {
-    var SemVer = require_semver();
-    var Range = require_range();
-    var minSatisfying = (versions, range, options) => {
-      let min = null;
-      let minSV = null;
-      let rangeObj = null;
-      try {
-        rangeObj = new Range(range, options);
-      } catch (er) {
-        return null;
-      }
-      versions.forEach((v) => {
-        if (rangeObj.test(v)) {
-          if (!min || minSV.compare(v) === 1) {
-            min = v;
-            minSV = new SemVer(min, options);
-          }
+        if (!platform22.fileSystem) {
+          throw new Error("FileDataInitializerFDv2: file system is required");
         }
-      });
-      return min;
-    };
-    module.exports = minSatisfying;
-  }
-});
-
-// node_modules/semver/ranges/min-version.js
-var require_min_version = __commonJS({
-  "node_modules/semver/ranges/min-version.js"(exports, module) {
-    var SemVer = require_semver();
-    var Range = require_range();
-    var gt = require_gt();
-    var minVersion = (range, loose) => {
-      range = new Range(range, loose);
-      let minver = new SemVer("0.0.0");
-      if (range.test(minver)) {
-        return minver;
       }
-      minver = new SemVer("0.0.0-0");
-      if (range.test(minver)) {
-        return minver;
+      start(dataCallback, statusCallback) {
+        statusCallback(import_js_sdk_common4.subsystem.DataSourceState.Initializing);
+        const initMetadata = import_js_sdk_common4.internal.initMetadataFromHeaders(void 0);
+        const payloadProcessor = new import_js_sdk_common4.internal.PayloadProcessor(
+          {
+            flag: (flag) => {
+              processFlag(flag);
+              return flag;
+            },
+            segment: (segment) => {
+              processSegment(segment);
+              return segment;
+            }
+          },
+          (errorKind, message) => {
+            statusCallback(
+              import_js_sdk_common4.subsystem.DataSourceState.Interrupted,
+              new import_js_sdk_common4.LDPollingError(errorKind, message)
+            );
+          },
+          this._logger
+        );
+        const adaptor = import_js_sdk_common4.internal.FDv1PayloadAdaptor(payloadProcessor);
+        this._fileLoader = new FileLoader(
+          this._filesystem,
+          this._paths,
+          false,
+          // autoupdate is always false for initializer
+          (results) => {
+            var _a;
+            try {
+              const parsedData = this._processFileData(results);
+              payloadProcessor.addPayloadListener((payload) => {
+                dataCallback(false, { initMetadata, payload });
+              });
+              statusCallback(import_js_sdk_common4.subsystem.DataSourceState.Valid);
+              adaptor.processFullTransfer(parsedData);
+              statusCallback(import_js_sdk_common4.subsystem.DataSourceState.Closed);
+            } catch (err) {
+              (_a = this._logger) == null ? void 0 : _a.error("File contained invalid data", err);
+              statusCallback(
+                import_js_sdk_common4.subsystem.DataSourceState.Closed,
+                new import_js_sdk_common4.LDPollingError(import_js_sdk_common4.DataSourceErrorKind.InvalidData, "Malformed data in file response")
+              );
+            }
+          }
+        );
+        this._fileLoader.loadAndWatch().catch((err) => {
+          var _a;
+          (_a = this._logger) == null ? void 0 : _a.error("Error loading files", err);
+          statusCallback(
+            import_js_sdk_common4.subsystem.DataSourceState.Closed,
+            new import_js_sdk_common4.LDPollingError(
+              import_js_sdk_common4.DataSourceErrorKind.NetworkError,
+              `Failed to load files: ${err instanceof Error ? err.message : String(err)}`
+            )
+          );
+        });
       }
-      minver = null;
-      for (let i = 0; i < range.set.length; ++i) {
-        const comparators = range.set[i];
-        let setMin = null;
-        comparators.forEach((comparator) => {
-          const compver = new SemVer(comparator.semver.version);
-          switch (comparator.operator) {
-            case ">":
-              if (compver.prerelease.length === 0) {
-                compver.patch++;
+      _processFileData(results) {
+        const combined = results.reduce(
+          (acc, curr) => {
+            var _a, _b, _c;
+            let parsed;
+            if (curr.path.endsWith(".yml") || curr.path.endsWith(".yaml")) {
+              if (this._yamlParser) {
+                parsed = this._yamlParser(curr.data);
               } else {
-                compver.prerelease.push(0);
+                throw new Error(`Attempted to parse yaml file (${curr.path}) without parser.`);
               }
-              compver.raw = compver.format();
-            /* fallthrough */
-            case "":
-            case ">=":
-              if (!setMin || gt(compver, setMin)) {
-                setMin = compver;
-              }
-              break;
-            case "<":
-            case "<=":
-              break;
-            /* istanbul ignore next */
-            default:
-              throw new Error(`Unexpected operation: ${comparator.operator}`);
+            } else {
+              parsed = JSON.parse(curr.data);
+            }
+            const flagsFromValues = {};
+            Object.entries((_a = parsed.flagValues) != null ? _a : {}).forEach(([key, value]) => {
+              flagsFromValues[key] = makeFlagWithValue(key, value, 1);
+            });
+            return {
+              segments: __spreadValues(__spreadValues({}, acc.segments), (_b = parsed.segments) != null ? _b : {}),
+              flags: __spreadValues(__spreadValues(__spreadValues({}, acc.flags), (_c = parsed.flags) != null ? _c : {}), flagsFromValues)
+            };
+          },
+          {
+            segments: {},
+            flags: {}
           }
-        });
-        if (setMin && (!minver || gt(minver, setMin))) {
-          minver = setMin;
+        );
+        return combined;
+      }
+      stop() {
+        if (this._fileLoader) {
+          this._fileLoader.close();
         }
       }
-      if (minver && range.test(minver)) {
-        return minver;
+    };
+    var import_js_sdk_common5 = require_cjs();
+    var OneShotInitializerFDv2 = class {
+      constructor(_requestor, _logger) {
+        this._requestor = _requestor;
+        this._logger = _logger;
+        this._stopped = false;
+      }
+      start(dataCallback, statusCallback) {
+        var _a;
+        statusCallback(import_js_sdk_common5.subsystem.DataSourceState.Initializing);
+        (_a = this._logger) == null ? void 0 : _a.debug("Performing initialization request to LaunchDarkly for feature flag data.");
+        this._requestor.requestAllData((err, body, headers, fallbackToFDv1) => {
+          var _a2, _b, _c;
+          if (this._stopped) {
+            return;
+          }
+          const emitFallback = () => {
+            var _a3;
+            const status = err == null ? void 0 : err.status;
+            const message = err ? (0, import_js_sdk_common5.httpErrorMessage)(err, "initializer", "falling back to FDv1") : `Response header indicates to fallback to FDv1`;
+            (_a3 = this._logger) == null ? void 0 : _a3.warn(message);
+            statusCallback(
+              import_js_sdk_common5.subsystem.DataSourceState.Closed,
+              new import_js_sdk_common5.LDFlagDeliveryFallbackError(import_js_sdk_common5.DataSourceErrorKind.ErrorResponse, message, status)
+            );
+          };
+          if (err) {
+            if (fallbackToFDv1) {
+              emitFallback();
+              return;
+            }
+            const { status } = err;
+            const message = (0, import_js_sdk_common5.httpErrorMessage)(err, "initializer", "initializer does not retry");
+            (_a2 = this._logger) == null ? void 0 : _a2.error(message);
+            statusCallback(
+              import_js_sdk_common5.subsystem.DataSourceState.Closed,
+              new import_js_sdk_common5.LDPollingError(import_js_sdk_common5.DataSourceErrorKind.ErrorResponse, message, status)
+            );
+            return;
+          }
+          if (!body) {
+            if (fallbackToFDv1) {
+              emitFallback();
+              return;
+            }
+            statusCallback(
+              import_js_sdk_common5.subsystem.DataSourceState.Closed,
+              new import_js_sdk_common5.LDPollingError(
+                import_js_sdk_common5.DataSourceErrorKind.InvalidData,
+                "One shot initializer response missing body."
+              )
+            );
+            return;
+          }
+          const initMetadata = import_js_sdk_common5.internal.initMetadataFromHeaders(headers);
+          try {
+            const parsed = JSON.parse(body);
+            const payloadProcessor = new import_js_sdk_common5.internal.PayloadProcessor(
+              {
+                flag: (flag) => {
+                  processFlag(flag);
+                  return flag;
+                },
+                segment: (segment) => {
+                  processSegment(segment);
+                  return segment;
+                }
+              },
+              (errorKind, message) => {
+                if (fallbackToFDv1) {
+                  emitFallback();
+                  return;
+                }
+                statusCallback(
+                  import_js_sdk_common5.subsystem.DataSourceState.Interrupted,
+                  new import_js_sdk_common5.LDPollingError(errorKind, message)
+                );
+              },
+              this._logger
+            );
+            statusCallback(import_js_sdk_common5.subsystem.DataSourceState.Valid);
+            payloadProcessor.addPayloadListener((payload) => {
+              var _a3;
+              const data = {
+                initMetadata,
+                payload
+              };
+              if (fallbackToFDv1) {
+                data.fallbackToFDv1 = true;
+                (_a3 = this._logger) == null ? void 0 : _a3.warn(`Response header indicates to fallback to FDv1`);
+              }
+              dataCallback(payload.type === "full", data);
+            });
+            payloadProcessor.processEvents(parsed.events);
+            statusCallback(import_js_sdk_common5.subsystem.DataSourceState.Closed);
+          } catch (parseError) {
+            (_b = this._logger) == null ? void 0 : _b.error("Response contained invalid data");
+            (_c = this._logger) == null ? void 0 : _c.debug(`${parseError} - Body follows: ${body}`);
+            if (fallbackToFDv1) {
+              emitFallback();
+              return;
+            }
+            statusCallback(
+              import_js_sdk_common5.subsystem.DataSourceState.Closed,
+              new import_js_sdk_common5.LDPollingError(import_js_sdk_common5.DataSourceErrorKind.InvalidData, "Malformed data in polling response")
+            );
+          }
+        });
+      }
+      stop() {
+        this._stopped = true;
+      }
+    };
+    var import_js_sdk_common6 = require_cjs();
+    function promisify(method) {
+      return new Promise((resolve) => {
+        method((val) => {
+          resolve(val);
+        });
+      });
+    }
+    var AsyncStoreFacade = class {
+      constructor(store) {
+        this._store = store;
+      }
+      async get(kind, key) {
+        return promisify((cb) => {
+          this._store.get(kind, key, cb);
+        });
+      }
+      async all(kind) {
+        return promisify((cb) => {
+          this._store.all(kind, cb);
+        });
+      }
+      async init(allData, initMetadata) {
+        return promisify((cb) => {
+          this._store.init(allData, cb, initMetadata);
+        });
+      }
+      async delete(kind, key, version) {
+        return promisify((cb) => {
+          this._store.delete(kind, key, version, cb);
+        });
+      }
+      async upsert(kind, data) {
+        return promisify((cb) => {
+          this._store.upsert(kind, data, cb);
+        });
+      }
+      async initialized() {
+        return promisify((cb) => {
+          this._store.initialized(cb);
+        });
+      }
+      close() {
+        this._store.close();
+      }
+      getInitMetadata() {
+        var _a, _b;
+        return (_b = (_a = this._store).getInitMetaData) == null ? void 0 : _b.call(_a);
+      }
+    };
+    var AsyncTransactionalStoreFacade = class {
+      constructor(store) {
+        this._store = store;
+      }
+      async get(kind, key) {
+        return promisify((cb) => {
+          this._store.get(kind, key, cb);
+        });
+      }
+      async all(kind) {
+        return promisify((cb) => {
+          this._store.all(kind, cb);
+        });
+      }
+      async init(allData, initMetadata) {
+        return promisify((cb) => {
+          this._store.init(allData, cb, initMetadata);
+        });
+      }
+      async delete(kind, key, version) {
+        return promisify((cb) => {
+          this._store.delete(kind, key, version, cb);
+        });
+      }
+      async upsert(kind, data) {
+        return promisify((cb) => {
+          this._store.upsert(kind, data, cb);
+        });
+      }
+      async initialized() {
+        return promisify((cb) => {
+          this._store.initialized(cb);
+        });
+      }
+      async applyChanges(basis, data, initMetadata, selector) {
+        return promisify((cb) => {
+          this._store.applyChanges(basis, data, cb, initMetadata, selector);
+        });
+      }
+      close() {
+        this._store.close();
+      }
+      getInitMetadata() {
+        var _a, _b;
+        return (_b = (_a = this._store).getInitMetaData) == null ? void 0 : _b.call(_a);
+      }
+    };
+    function isStale(record) {
+      return Date.now() > record.expiration;
+    }
+    var TtlCache = class {
+      constructor(_options) {
+        this._options = _options;
+        this._storage = /* @__PURE__ */ new Map();
+        this._checkIntervalHandle = setInterval(() => {
+          this._purgeStale();
+        }, _options.checkInterval * 1e3);
+      }
+      /**
+       * Get a value from the cache.
+       * @param key The key to get a value for.
+       * @returns The value for the key, or undefined if the key was not added, or
+       * if the value has expired.
+       */
+      get(key) {
+        const record = this._storage.get(key);
+        if (record && isStale(record)) {
+          this._storage.delete(key);
+          return void 0;
+        }
+        return record == null ? void 0 : record.value;
+      }
+      /**
+       * Set an item in the cache. It will expire after the TTL specified
+       * in the cache configuration.
+       * @param key The key for the value.
+       * @param value The value to set.
+       */
+      set(key, value) {
+        this._storage.set(key, {
+          value,
+          expiration: Date.now() + this._options.ttl * 1e3
+        });
+      }
+      /**
+       * Delete the item with the specific key. If the item does not exist,
+       * then there will be no change to the cache.
+       * @param key The key of the value to delete.
+       */
+      delete(key) {
+        this._storage.delete(key);
+      }
+      /**
+       * Clear the items that are in the cache.
+       */
+      clear() {
+        this._storage.clear();
+      }
+      /**
+       * Indicate that you are no longer going to use the cache. The cache will be
+       * cleared and it will stop checking for stale items.
+       */
+      close() {
+        this.clear();
+        if (this._checkIntervalHandle) {
+          clearInterval(this._checkIntervalHandle);
+          this._checkIntervalHandle = null;
+        }
+      }
+      _purgeStale() {
+        this._storage.forEach((record, key) => {
+          if (isStale(record)) {
+            this._storage.delete(key);
+          }
+        });
+      }
+      /**
+       * This is for testing.
+       * @internal
+       */
+      get size() {
+        return this._storage.size;
+      }
+    };
+    var persistentStoreKinds = {
+      segments: {
+        namespace: VersionedDataKinds.Segments.namespace,
+        deserialize: (data) => {
+          const segment = deserializeSegment(data);
+          if (segment) {
+            return {
+              version: segment.version,
+              item: segment
+            };
+          }
+          return void 0;
+        },
+        serialize: (data) => {
+          const serializedItem = serializeSegment(data);
+          return {
+            version: data.version,
+            deleted: data.deleted,
+            serializedItem
+          };
+        },
+        priority: 0
+      },
+      features: {
+        namespace: VersionedDataKinds.Features.namespace,
+        deserialize: (data) => {
+          const flag = deserializeFlag(data);
+          if (flag) {
+            return {
+              version: flag.version,
+              item: flag
+            };
+          }
+          return void 0;
+        },
+        serialize: (data) => {
+          const serializedItem = serializeFlag(data);
+          return {
+            version: data.version,
+            deleted: data.deleted,
+            serializedItem
+          };
+        },
+        priority: 1
+      }
+    };
+    function getDependencyKeys(flag) {
+      if (!flag.prerequisites || !flag.prerequisites.length) {
+        return [];
+      }
+      return flag.prerequisites.map((preReq) => preReq.key);
+    }
+    function topologicalSort(kind, itemsMap) {
+      const sortedItems = [];
+      const unvisitedItems = new Set(Object.keys(itemsMap));
+      const visit = (key) => {
+        if (!unvisitedItems.has(key)) {
+          return;
+        }
+        unvisitedItems.delete(key);
+        const item = itemsMap[key];
+        if (kind.namespace === "features") {
+          getDependencyKeys(item).forEach((prereqKey) => {
+            visit(prereqKey);
+          });
+        }
+        sortedItems.push({
+          key,
+          item: kind.serialize(item)
+        });
+      };
+      while (unvisitedItems.size > 0) {
+        const key = unvisitedItems.values().next().value;
+        visit(key);
+      }
+      return sortedItems;
+    }
+    function sortDataSet(dataMap) {
+      const result = [];
+      Object.keys(dataMap).forEach((kindNamespace) => {
+        const kind = persistentStoreKinds[kindNamespace];
+        result.push({ key: kind, item: topologicalSort(kind, dataMap[kindNamespace]) });
+      });
+      result.sort((i1, i2) => i1.key.priority - i2.key.priority);
+      return result;
+    }
+    var UpdateQueue = class {
+      constructor() {
+        this._queue = [];
+      }
+      enqueue(updateFn, cb) {
+        this._queue.push([updateFn, cb]);
+        if (this._queue.length === 1) {
+          this.executePendingUpdates();
+        }
+      }
+      executePendingUpdates() {
+        if (this._queue.length > 0) {
+          const [fn, cb] = this._queue[0];
+          const newCb = () => {
+            this._queue.shift();
+            if (this._queue.length > 0) {
+              setTimeout(() => this.executePendingUpdates(), 0);
+            }
+            cb == null ? void 0 : cb();
+          };
+          fn(newCb);
+        }
+      }
+    };
+    function cacheKey(kind, key) {
+      return `${kind.namespace}:${key}`;
+    }
+    function allForKindCacheKey(kind) {
+      return `$all:${kind.namespace}`;
+    }
+    var initializationCheckedKey = "$checkedInit";
+    var defaultCheckInterval = 600;
+    function itemIfNotDeleted(item) {
+      return !item || item.item.deleted ? null : item.item;
+    }
+    function deletedDescriptor(version) {
+      return {
+        version,
+        item: { version, deleted: true }
+      };
+    }
+    function deserialize(kind, descriptor) {
+      if (descriptor.deleted || !descriptor.serializedItem) {
+        return deletedDescriptor(descriptor.version);
+      }
+      const deserializedItem = kind.deserialize(descriptor.serializedItem);
+      if (deserializedItem === void 0) {
+        return deletedDescriptor(descriptor.version);
+      }
+      if (deserializedItem.version === 0 || deserializedItem.version === descriptor.version || deserializedItem.item === void 0) {
+        return deserializedItem;
+      }
+      return {
+        version: descriptor.version,
+        item: deserializedItem.item
+      };
+    }
+    var PersistentDataStoreWrapper = class {
+      constructor(_core, ttl, _logger) {
+        this._core = _core;
+        this._logger = _logger;
+        this._isInitialized = false;
+        this._queue = new UpdateQueue();
+        if (ttl) {
+          this._itemCache = new TtlCache({
+            ttl,
+            checkInterval: defaultCheckInterval
+          });
+          this._allItemsCache = new TtlCache({
+            ttl,
+            checkInterval: defaultCheckInterval
+          });
+        }
+      }
+      init(allData, callback) {
+        this._queue.enqueue((cb) => {
+          const afterStoreInit = () => {
+            this._isInitialized = true;
+            if (this._itemCache) {
+              this._itemCache.clear();
+              this._allItemsCache.clear();
+              Object.keys(allData).forEach((kindNamespace) => {
+                const kind = persistentStoreKinds[kindNamespace];
+                const items = allData[kindNamespace];
+                this._allItemsCache.set(allForKindCacheKey(kind), items);
+                Object.keys(items).forEach((key) => {
+                  const itemForKey = items[key];
+                  const itemDescriptor = {
+                    version: itemForKey.version,
+                    item: itemForKey
+                  };
+                  this._itemCache.set(cacheKey(kind, key), itemDescriptor);
+                });
+              });
+            }
+            cb();
+          };
+          this._core.init(sortDataSet(allData), afterStoreInit);
+        }, callback);
+      }
+      get(kind, key, callback) {
+        if (this._itemCache) {
+          const item = this._itemCache.get(cacheKey(kind, key));
+          if (item) {
+            callback(itemIfNotDeleted(item));
+            return;
+          }
+        }
+        const persistKind = persistentStoreKinds[kind.namespace];
+        this._core.get(persistKind, key, (descriptor) => {
+          var _a;
+          if (descriptor && descriptor.serializedItem) {
+            const value = deserialize(persistKind, descriptor);
+            (_a = this._itemCache) == null ? void 0 : _a.set(cacheKey(kind, key), value);
+            callback(itemIfNotDeleted(value));
+            return;
+          }
+          callback(null);
+        });
+      }
+      initialized(callback) {
+        var _a;
+        if (this._isInitialized) {
+          callback(true);
+        } else if ((_a = this._itemCache) == null ? void 0 : _a.get(initializationCheckedKey)) {
+          callback(false);
+        } else {
+          this._core.initialized((storeInitialized) => {
+            var _a2;
+            this._isInitialized = storeInitialized;
+            if (!this._isInitialized) {
+              (_a2 = this._itemCache) == null ? void 0 : _a2.set(initializationCheckedKey, true);
+            }
+            callback(this._isInitialized);
+          });
+        }
+      }
+      all(kind, callback) {
+        var _a;
+        const items = (_a = this._allItemsCache) == null ? void 0 : _a.get(allForKindCacheKey(kind));
+        if (items) {
+          callback(items);
+          return;
+        }
+        const persistKind = persistentStoreKinds[kind.namespace];
+        this._core.getAll(persistKind, (storeItems) => {
+          var _a2;
+          if (!storeItems) {
+            callback({});
+            return;
+          }
+          const filteredItems = {};
+          storeItems.forEach(({ key, item }) => {
+            const deserializedItem = deserialize(persistKind, item);
+            const filteredItem = itemIfNotDeleted(deserializedItem);
+            if (filteredItem) {
+              filteredItems[key] = filteredItem;
+            }
+          });
+          (_a2 = this._allItemsCache) == null ? void 0 : _a2.set(allForKindCacheKey(kind), filteredItems);
+          callback(filteredItems);
+        });
+      }
+      upsert(kind, data, callback) {
+        this._queue.enqueue((cb) => {
+          if (this._allItemsCache) {
+            this._allItemsCache.clear();
+          }
+          const persistKind = persistentStoreKinds[kind.namespace];
+          this._core.upsert(
+            persistKind,
+            data.key,
+            persistKind.serialize(data),
+            (err, updatedDescriptor) => {
+              var _a, _b, _c;
+              if (err) {
+                (_a = this._logger) == null ? void 0 : _a.error(
+                  `Persistent store returned error: ${err instanceof Error ? err.message : err}`
+                );
+              }
+              if (!err && updatedDescriptor) {
+                if (updatedDescriptor.serializedItem) {
+                  const value = deserialize(persistKind, updatedDescriptor);
+                  (_b = this._itemCache) == null ? void 0 : _b.set(cacheKey(kind, data.key), value);
+                } else if (updatedDescriptor.deleted) {
+                  (_c = this._itemCache) == null ? void 0 : _c.set(data.key, {
+                    key: data.key,
+                    version: updatedDescriptor.version,
+                    deleted: true
+                  });
+                }
+              }
+              cb();
+            }
+          );
+        }, callback);
+      }
+      delete(kind, key, version, callback) {
+        this.upsert(kind, { key, version, deleted: true }, callback);
+      }
+      close() {
+        var _a, _b;
+        (_a = this._itemCache) == null ? void 0 : _a.close();
+        (_b = this._allItemsCache) == null ? void 0 : _b.close();
+        this._core.close();
+      }
+      getDescription() {
+        return this._core.getDescription();
+      }
+    };
+    var InMemoryFeatureStore = class {
+      constructor() {
+        this._allData = {};
+        this._initCalled = false;
+      }
+      get(kind, key, callback) {
+        const items = this._allData[kind.namespace];
+        if (items) {
+          if (Object.prototype.hasOwnProperty.call(items, key)) {
+            const item = items[key];
+            if (item && !item.deleted) {
+              return callback == null ? void 0 : callback(item);
+            }
+          }
+        }
+        return callback == null ? void 0 : callback(null);
+      }
+      all(kind, callback) {
+        var _a;
+        const result = {};
+        const items = (_a = this._allData[kind.namespace]) != null ? _a : {};
+        Object.entries(items).forEach(([key, item]) => {
+          if (item && !item.deleted) {
+            result[key] = item;
+          }
+        });
+        callback == null ? void 0 : callback(result);
+      }
+      init(allData, callback, initMetadata) {
+        this.applyChanges(true, allData, callback, initMetadata);
+      }
+      delete(kind, key, version, callback) {
+        const item = { key, version, deleted: true };
+        this.applyChanges(
+          false,
+          {
+            [kind.namespace]: {
+              [key]: item
+            }
+          },
+          callback
+        );
+      }
+      upsert(kind, data, callback) {
+        this.applyChanges(
+          false,
+          {
+            [kind.namespace]: {
+              [data.key]: data
+            }
+          },
+          callback
+        );
+      }
+      applyChanges(basis, data, callback, initMetadata, selector) {
+        if (basis) {
+          this._initCalled = true;
+          this._allData = data;
+          this._initMetadata = initMetadata;
+        } else {
+          const tempData = {};
+          Object.entries(this._allData).forEach(([namespace, items]) => {
+            tempData[namespace] = __spreadValues({}, items);
+          });
+          Object.entries(data).forEach(([namespace, items]) => {
+            Object.keys(items || {}).forEach((key) => {
+              let existingItems = tempData[namespace];
+              if (!existingItems) {
+                existingItems = {};
+                tempData[namespace] = existingItems;
+              }
+              const item = items[key];
+              if (Object.hasOwnProperty.call(existingItems, key)) {
+                const old = existingItems[key];
+                if (!old || old.version < item.version) {
+                  existingItems[key] = __spreadValues({ key }, item);
+                }
+              } else {
+                existingItems[key] = __spreadValues({ key }, item);
+              }
+            });
+          });
+          this._allData = tempData;
+        }
+        this._selector = selector;
+        callback == null ? void 0 : callback();
+      }
+      initialized(callback) {
+        return callback == null ? void 0 : callback(this._initCalled);
+      }
+      close() {
+      }
+      getDescription() {
+        return "memory";
+      }
+      getInitMetaData() {
+        return this._initMetadata;
+      }
+      getSelector() {
+        return this._selector;
+      }
+    };
+    var TransactionalFeatureStore = class {
+      constructor(_nonTransPersistenceStore) {
+        this._nonTransPersistenceStore = _nonTransPersistenceStore;
+        this._activeStore = this._nonTransPersistenceStore;
+        this._memoryStore = new InMemoryFeatureStore();
+      }
+      get(kind, key, callback) {
+        this._activeStore.get(kind, key, callback);
+      }
+      all(kind, callback) {
+        this._activeStore.all(kind, callback);
+      }
+      init(allData, callback) {
+        this.applyChanges(true, allData, callback);
+      }
+      delete(kind, key, version, callback) {
+        const item = { key, version, deleted: true };
+        this.applyChanges(
+          false,
+          {
+            [kind.namespace]: {
+              [key]: item
+            }
+          },
+          callback
+        );
+      }
+      upsert(kind, data, callback) {
+        this.applyChanges(
+          false,
+          {
+            [kind.namespace]: {
+              [data.key]: data
+            }
+          },
+          callback
+        );
+      }
+      applyChanges(basis, data, callback, initMetadata, selector) {
+        this._memoryStore.applyChanges(
+          basis,
+          data,
+          () => {
+            if (basis) {
+              this._activeStore = this._memoryStore;
+              this._nonTransPersistenceStore.init(data, callback);
+            } else {
+              const params = [];
+              Object.entries(data).forEach(([namespace, items]) => {
+                Object.keys(items || {}).forEach((key) => {
+                  params.push({ dataKind: { namespace }, item: __spreadValues({ key }, items[key]) });
+                });
+              });
+              params.reduce(
+                (previousPromise, nextParams) => previousPromise.then(
+                  () => new Promise((resolve) => {
+                    this._nonTransPersistenceStore.upsert(
+                      nextParams.dataKind,
+                      nextParams.item,
+                      resolve
+                    );
+                  })
+                ),
+                Promise.resolve()
+              ).then(callback);
+            }
+          },
+          initMetadata,
+          selector
+        );
+      }
+      initialized(callback) {
+        this._activeStore.initialized(callback);
+      }
+      close() {
+        this._nonTransPersistenceStore.close();
+        this._memoryStore.close();
+      }
+      getDescription() {
+        return "transactional persistent store";
+      }
+      // applyChanges always writes here first, so the memory store has the latest
+      // metadata/selector even while _activeStore still points at the persistence
+      // store; the plain LDFeatureStore contract has no equivalent to read them from
+      getInitMetaData() {
+        var _a, _b;
+        return (_b = (_a = this._memoryStore).getInitMetaData) == null ? void 0 : _b.call(_a);
+      }
+      getSelector() {
+        var _a, _b;
+        return (_b = (_a = this._memoryStore).getSelector) == null ? void 0 : _b.call(_a);
+      }
+    };
+    var { initMetadataFromHeaders: initMetadataFromHeaders2 } = import_js_sdk_common6.internal;
+    var PollingProcessor = class {
+      constructor(_requestor, _pollInterval, _featureStore, _logger, _initSuccessHandler = () => {
+      }, _errorHandler) {
+        this._requestor = _requestor;
+        this._pollInterval = _pollInterval;
+        this._featureStore = _featureStore;
+        this._logger = _logger;
+        this._initSuccessHandler = _initSuccessHandler;
+        this._errorHandler = _errorHandler;
+        this._stopped = false;
+      }
+      _poll() {
+        var _a;
+        if (this._stopped) {
+          return;
+        }
+        const reportJsonError2 = (data) => {
+          var _a2, _b, _c;
+          (_a2 = this._logger) == null ? void 0 : _a2.error("Polling received invalid data");
+          (_b = this._logger) == null ? void 0 : _b.debug(`Invalid JSON follows: ${data}`);
+          (_c = this._errorHandler) == null ? void 0 : _c.call(
+            this,
+            new import_js_sdk_common6.LDPollingError(
+              import_js_sdk_common6.DataSourceErrorKind.InvalidData,
+              "Malformed JSON data in polling response"
+            )
+          );
+        };
+        const startTime = Date.now();
+        (_a = this._logger) == null ? void 0 : _a.debug("Polling LaunchDarkly for feature flag updates");
+        this._requestor.requestAllData((err, body, headers) => {
+          var _a2, _b, _c, _d;
+          const elapsed = Date.now() - startTime;
+          const sleepFor = Math.max(this._pollInterval * 1e3 - elapsed, 0);
+          (_a2 = this._logger) == null ? void 0 : _a2.debug("Elapsed: %d ms, sleeping for %d ms", elapsed, sleepFor);
+          if (err) {
+            const { status } = err;
+            if (status && !(0, import_js_sdk_common6.isHttpRecoverable)(status)) {
+              const message = (0, import_js_sdk_common6.httpErrorMessage)(err, "polling request");
+              (_b = this._logger) == null ? void 0 : _b.error(message);
+              (_c = this._errorHandler) == null ? void 0 : _c.call(
+                this,
+                new import_js_sdk_common6.LDPollingError(import_js_sdk_common6.DataSourceErrorKind.ErrorResponse, message, status)
+              );
+              return;
+            }
+            (_d = this._logger) == null ? void 0 : _d.warn((0, import_js_sdk_common6.httpErrorMessage)(err, "polling request", "will retry"));
+          } else if (body) {
+            const parsed = deserializePoll(body);
+            if (!parsed) {
+              reportJsonError2(body);
+            } else {
+              const initData = {
+                [VersionedDataKinds.Features.namespace]: parsed.flags,
+                [VersionedDataKinds.Segments.namespace]: parsed.segments
+              };
+              this._featureStore.init(
+                initData,
+                () => {
+                  this._initSuccessHandler();
+                  this._timeoutHandle = setTimeout(() => {
+                    this._poll();
+                  }, sleepFor);
+                },
+                initMetadataFromHeaders2(headers)
+              );
+              return;
+            }
+          }
+          this._timeoutHandle = setTimeout(() => {
+            this._poll();
+          }, sleepFor);
+        });
+      }
+      start() {
+        this._poll();
+      }
+      stop() {
+        if (this._timeoutHandle) {
+          clearTimeout(this._timeoutHandle);
+          this._timeoutHandle = void 0;
+        }
+        this._stopped = true;
+      }
+      close() {
+        this.stop();
+      }
+    };
+    var import_js_sdk_common7 = require_cjs();
+    function selectorAsQueryParams(selector) {
+      if (!selector) {
+        return [];
+      }
+      return [
+        {
+          key: "basis",
+          value: selector
+        }
+      ];
+    }
+    function processFDv1FlagsAndSegments(payloadProcessor, data) {
+      const adaptor = import_js_sdk_common7.internal.FDv1PayloadAdaptor(payloadProcessor);
+      adaptor.useSelector("FDv1Fallback").processFullTransfer(data);
+    }
+    var PollingProcessorFDv2 = class {
+      /**
+       * @param _requestor to fetch flags
+       * @param _pollInterval in seconds controlling how frequently polling request is made
+       * @param _logger for logging
+       * @param _processResponseAsFDv1 defaults to false, but if set to true, this data source will process
+       * the response body as FDv1 and convert it into a FDv2 payload.
+       */
+      constructor(_requestor, _pollInterval = 30, _logger, _processResponseAsFDv1 = false) {
+        this._requestor = _requestor;
+        this._pollInterval = _pollInterval;
+        this._logger = _logger;
+        this._processResponseAsFDv1 = _processResponseAsFDv1;
+        this._stopped = false;
+      }
+      _poll(dataCallback, statusCallback, selectorGetter) {
+        var _a;
+        if (this._stopped) {
+          return;
+        }
+        const startTime = Date.now();
+        (_a = this._logger) == null ? void 0 : _a.debug("Polling LaunchDarkly for feature flag updates");
+        this._requestor.requestAllData((err, body, headers, fallbackToFDv1) => {
+          var _a2, _b, _c, _d, _e, _f;
+          if (this._stopped) {
+            return;
+          }
+          const elapsed = Date.now() - startTime;
+          const sleepFor = Math.max(this._pollInterval * 1e3 - elapsed, 0);
+          const emitFallback = () => {
+            var _a3;
+            const fallbackErr = err instanceof import_js_sdk_common7.LDFlagDeliveryFallbackError ? err : new import_js_sdk_common7.LDFlagDeliveryFallbackError(
+              import_js_sdk_common7.DataSourceErrorKind.ErrorResponse,
+              err ? (0, import_js_sdk_common7.httpErrorMessage)(err, "polling request", "falling back to FDv1") : `Response header indicates to fallback to FDv1`,
+              err == null ? void 0 : err.status
+            );
+            (_a3 = this._logger) == null ? void 0 : _a3.warn(fallbackErr.message);
+            statusCallback(import_js_sdk_common7.subsystem.DataSourceState.Closed, fallbackErr);
+          };
+          (_a2 = this._logger) == null ? void 0 : _a2.debug("Elapsed: %d ms, sleeping for %d ms", elapsed, sleepFor);
+          if (err) {
+            if (fallbackToFDv1 || err instanceof import_js_sdk_common7.LDFlagDeliveryFallbackError) {
+              emitFallback();
+              return;
+            }
+            const { status } = err;
+            if (status && !(0, import_js_sdk_common7.isHttpRecoverable)(status)) {
+              const message2 = (0, import_js_sdk_common7.httpErrorMessage)(err, "polling request");
+              (_b = this._logger) == null ? void 0 : _b.error(message2);
+              statusCallback(
+                import_js_sdk_common7.subsystem.DataSourceState.Closed,
+                new import_js_sdk_common7.LDPollingError(import_js_sdk_common7.DataSourceErrorKind.ErrorResponse, message2, status, false)
+              );
+              return;
+            }
+            const message = (0, import_js_sdk_common7.httpErrorMessage)(err, "polling request", "will retry");
+            statusCallback(
+              import_js_sdk_common7.subsystem.DataSourceState.Interrupted,
+              new import_js_sdk_common7.LDPollingError(import_js_sdk_common7.DataSourceErrorKind.ErrorResponse, message, status)
+            );
+            (_c = this._logger) == null ? void 0 : _c.warn(message);
+            this._timeoutHandle = setTimeout(() => {
+              this._poll(dataCallback, statusCallback, selectorGetter);
+            }, sleepFor);
+            return;
+          }
+          const initMetadata = import_js_sdk_common7.internal.initMetadataFromHeaders(headers);
+          if (body) {
+            try {
+              const payloadProcessor = new import_js_sdk_common7.internal.PayloadProcessor(
+                {
+                  flag: (flag) => {
+                    processFlag(flag);
+                    return flag;
+                  },
+                  segment: (segment) => {
+                    processSegment(segment);
+                    return segment;
+                  }
+                },
+                (errorKind, message) => {
+                  if (fallbackToFDv1) {
+                    emitFallback();
+                    return;
+                  }
+                  statusCallback(
+                    import_js_sdk_common7.subsystem.DataSourceState.Interrupted,
+                    new import_js_sdk_common7.LDPollingError(errorKind, message)
+                  );
+                },
+                this._logger
+              );
+              payloadProcessor.addPayloadListener((payload) => {
+                var _a3;
+                const data = {
+                  initMetadata,
+                  payload
+                };
+                if (fallbackToFDv1) {
+                  data.fallbackToFDv1 = true;
+                  (_a3 = this._logger) == null ? void 0 : _a3.warn(`Response header indicates to fallback to FDv1`);
+                }
+                dataCallback(payload.type === "full", data);
+              });
+              (_d = this._logger) == null ? void 0 : _d.debug(`Got body: ${body}`);
+              if (!this._processResponseAsFDv1) {
+                const parsed = JSON.parse(body);
+                payloadProcessor.processEvents(parsed.events);
+              } else {
+                const parsed = JSON.parse(body);
+                processFDv1FlagsAndSegments(payloadProcessor, parsed);
+              }
+              if (fallbackToFDv1) {
+                return;
+              }
+              statusCallback(import_js_sdk_common7.subsystem.DataSourceState.Valid);
+            } catch (e) {
+              (_e = this._logger) == null ? void 0 : _e.error("Response contained invalid data");
+              (_f = this._logger) == null ? void 0 : _f.debug(`${err} - Body follows: ${body}`);
+              if (fallbackToFDv1) {
+                emitFallback();
+                return;
+              }
+              statusCallback(
+                import_js_sdk_common7.subsystem.DataSourceState.Interrupted,
+                new import_js_sdk_common7.LDPollingError(
+                  import_js_sdk_common7.DataSourceErrorKind.InvalidData,
+                  "Malformed data in polling response"
+                )
+              );
+            }
+          } else if (fallbackToFDv1) {
+            emitFallback();
+            return;
+          }
+          this._timeoutHandle = setTimeout(() => {
+            this._poll(dataCallback, statusCallback, selectorGetter);
+          }, sleepFor);
+        }, selectorAsQueryParams(selectorGetter == null ? void 0 : selectorGetter()));
+      }
+      start(dataCallback, statusCallback, selectorGetter) {
+        this._statusCallback = statusCallback;
+        statusCallback(import_js_sdk_common7.subsystem.DataSourceState.Initializing);
+        this._poll(dataCallback, statusCallback, selectorGetter);
+      }
+      stop() {
+        var _a;
+        if (this._timeoutHandle) {
+          clearTimeout(this._timeoutHandle);
+          this._timeoutHandle = void 0;
+        }
+        (_a = this._statusCallback) == null ? void 0 : _a.call(this, import_js_sdk_common7.subsystem.DataSourceState.Closed);
+        this._stopped = true;
+        this._statusCallback = void 0;
+      }
+    };
+    var import_js_sdk_common8 = require_cjs();
+    var Requestor = class {
+      constructor(config, _requests, baseHeaders, _path = "/sdk/latest-all", _logger, serviceEndpointsOverride) {
+        this._requests = _requests;
+        this._path = _path;
+        this._logger = _logger;
+        this._eTagCache = {};
+        this._headers = __spreadValues({}, baseHeaders);
+        this._serviceEndpoints = serviceEndpointsOverride != null ? serviceEndpointsOverride : config.serviceEndpoints;
+        this._timeoutMs = config.timeout * 1e3;
+      }
+      /**
+       * Perform a request and utilize the ETag cache. The ETags are cached in the
+       * requestor instance.
+       */
+      async _requestWithETagCache(requestUrl, options) {
+        const cacheEntry = this._eTagCache[requestUrl];
+        const cachedETag = cacheEntry == null ? void 0 : cacheEntry.etag;
+        const updatedOptions = cachedETag ? __spreadProps(__spreadValues({}, options), {
+          headers: __spreadProps(__spreadValues({}, options.headers), { "if-none-match": cachedETag })
+        }) : options;
+        const res = await this._requests.fetch(requestUrl, updatedOptions);
+        if (res.status === 304 && cacheEntry) {
+          return { res, body: cacheEntry.body };
+        }
+        const etag = res.headers.get("etag");
+        const body = await res.text();
+        if (etag) {
+          this._eTagCache[requestUrl] = { etag, body };
+        }
+        return { res, body };
+      }
+      async requestAllData(cb, queryParams = []) {
+        var _a, _b;
+        const options = {
+          method: "GET",
+          headers: this._headers,
+          timeout: this._timeoutMs
+        };
+        const uri = (0, import_js_sdk_common8.getPollingUri)(this._serviceEndpoints, this._path, queryParams);
+        (_a = this._logger) == null ? void 0 : _a.debug(`Requestor making request to uri: ${uri}`);
+        try {
+          const { res, body } = await this._requestWithETagCache(uri, options);
+          (_b = this._logger) == null ? void 0 : _b.debug(`Requestor got (possibly cached) body: ${JSON.stringify(body)}`);
+          const fallbackToFDv1 = res.headers.get(`x-ld-fd-fallback`) === `true`;
+          const responseHeaders = Object.fromEntries(res.headers.entries());
+          if (res.status !== 200 && res.status !== 304) {
+            const err = fallbackToFDv1 ? new import_js_sdk_common8.LDFlagDeliveryFallbackError(
+              import_js_sdk_common8.DataSourceErrorKind.ErrorResponse,
+              `Response header indicates to fallback to FDv1.`,
+              res.status
+            ) : new import_js_sdk_common8.LDPollingError(
+              import_js_sdk_common8.DataSourceErrorKind.ErrorResponse,
+              `Unexpected status code: ${res.status}`,
+              res.status
+            );
+            return cb(err, void 0, responseHeaders, fallbackToFDv1);
+          }
+          return cb(void 0, res.status === 304 ? null : body, responseHeaders, fallbackToFDv1);
+        } catch (err) {
+          return cb(err, void 0, void 0, false);
+        }
+      }
+    };
+    var import_js_sdk_common9 = require_cjs();
+    var reportJsonError = (type, data, logger, errorHandler) => {
+      logger == null ? void 0 : logger.error(`Stream received invalid data in "${type}" message`);
+      logger == null ? void 0 : logger.debug(`Invalid JSON follows: ${data}`);
+      errorHandler == null ? void 0 : errorHandler(
+        new import_js_sdk_common9.LDStreamingError(import_js_sdk_common9.DataSourceErrorKind.InvalidData, "Malformed JSON data in event stream")
+      );
+    };
+    var StreamingProcessor = class {
+      constructor(clientContext, streamUriPath, parameters, _listeners, baseHeaders, _diagnosticsManager, _errorHandler, _streamInitialReconnectDelay = 1) {
+        this._listeners = _listeners;
+        this._diagnosticsManager = _diagnosticsManager;
+        this._errorHandler = _errorHandler;
+        this._streamInitialReconnectDelay = _streamInitialReconnectDelay;
+        const { basicConfiguration, platform: platform22 } = clientContext;
+        const { logger } = basicConfiguration;
+        const { requests } = platform22;
+        this._headers = __spreadValues({}, baseHeaders);
+        this._logger = logger;
+        this._requests = requests;
+        this._streamUri = (0, import_js_sdk_common9.getStreamingUri)(
+          basicConfiguration.serviceEndpoints,
+          streamUriPath,
+          parameters
+        );
+      }
+      _logConnectionStarted() {
+        this._connectionAttemptStartTime = Date.now();
+      }
+      _logConnectionResult(success) {
+        if (this._connectionAttemptStartTime && this._diagnosticsManager) {
+          this._diagnosticsManager.recordStreamInit(
+            this._connectionAttemptStartTime,
+            !success,
+            Date.now() - this._connectionAttemptStartTime
+          );
+        }
+        this._connectionAttemptStartTime = void 0;
+      }
+      /**
+       * This is a wrapper around the passed errorHandler which adds additional
+       * diagnostics and logging logic.
+       *
+       * @param err The error to be logged and handled.
+       * @return boolean whether to retry the connection.
+       *
+       * @private
+       */
+      _retryAndHandleError(err) {
+        var _a, _b, _c;
+        if (!(0, import_js_sdk_common9.shouldRetry)(err)) {
+          this._logConnectionResult(false);
+          (_a = this._errorHandler) == null ? void 0 : _a.call(
+            this,
+            new import_js_sdk_common9.LDStreamingError(import_js_sdk_common9.DataSourceErrorKind.ErrorResponse, err.message, err.status)
+          );
+          (_b = this._logger) == null ? void 0 : _b.error((0, import_js_sdk_common9.httpErrorMessage)(err, "streaming request"));
+          return false;
+        }
+        (_c = this._logger) == null ? void 0 : _c.warn((0, import_js_sdk_common9.httpErrorMessage)(err, "streaming request", "will retry"));
+        this._logConnectionResult(false);
+        this._logConnectionStarted();
+        return true;
+      }
+      start() {
+        this._logConnectionStarted();
+        const eventSource = this._requests.createEventSource(this._streamUri, {
+          headers: this._headers,
+          errorFilter: (error2) => this._retryAndHandleError(error2),
+          initialRetryDelayMillis: 1e3 * this._streamInitialReconnectDelay,
+          readTimeoutMillis: 5 * 60 * 1e3,
+          retryResetIntervalMillis: 60 * 1e3
+        });
+        this._eventSource = eventSource;
+        eventSource.onclose = () => {
+          var _a;
+          (_a = this._logger) == null ? void 0 : _a.info("Closed LaunchDarkly stream connection");
+        };
+        eventSource.onerror = () => {
+        };
+        eventSource.onopen = (e) => {
+          var _a;
+          this._initHeaders = e.headers;
+          (_a = this._logger) == null ? void 0 : _a.info("Opened LaunchDarkly stream connection");
+        };
+        eventSource.onretrying = (e) => {
+          var _a;
+          (_a = this._logger) == null ? void 0 : _a.info(`Will retry stream connection in ${e.delayMillis} milliseconds`);
+        };
+        this._listeners.forEach(({ deserializeData, processJson }, eventName) => {
+          eventSource.addEventListener(eventName, (event) => {
+            var _a, _b;
+            (_a = this._logger) == null ? void 0 : _a.debug(`Received ${eventName} event`);
+            if (event == null ? void 0 : event.data) {
+              this._logConnectionResult(true);
+              const { data } = event;
+              const dataJson = deserializeData(data);
+              if (!dataJson) {
+                reportJsonError(eventName, data, this._logger, this._errorHandler);
+                return;
+              }
+              processJson(dataJson, this._initHeaders);
+            } else {
+              (_b = this._errorHandler) == null ? void 0 : _b.call(
+                this,
+                new import_js_sdk_common9.LDStreamingError(
+                  import_js_sdk_common9.DataSourceErrorKind.Unknown,
+                  "Unexpected payload from event stream"
+                )
+              );
+            }
+          });
+        });
+      }
+      stop() {
+        var _a;
+        (_a = this._eventSource) == null ? void 0 : _a.close();
+        this._eventSource = void 0;
+      }
+      close() {
+        this.stop();
+      }
+    };
+    var import_js_sdk_common10 = require_cjs();
+    var StreamingProcessorFDv2 = class {
+      constructor(clientContext, _streamUriPath, _parameters, baseHeaders, _diagnosticsManager, _streamInitialReconnectDelay = 1, serviceEndpointsOverride) {
+        this._streamUriPath = _streamUriPath;
+        this._parameters = _parameters;
+        this._diagnosticsManager = _diagnosticsManager;
+        this._streamInitialReconnectDelay = _streamInitialReconnectDelay;
+        const { basicConfiguration, platform: platform22 } = clientContext;
+        const { logger, serviceEndpoints } = basicConfiguration;
+        const { requests } = platform22;
+        this._headers = __spreadValues({}, baseHeaders);
+        this._serviceEndpoints = serviceEndpointsOverride != null ? serviceEndpointsOverride : serviceEndpoints;
+        this._logger = logger;
+        this._requests = requests;
+      }
+      _logConnectionAttempt() {
+        this._connectionAttemptStartTime = Date.now();
+      }
+      _logConnectionResult(success) {
+        if (this._connectionAttemptStartTime && this._diagnosticsManager) {
+          this._diagnosticsManager.recordStreamInit(
+            this._connectionAttemptStartTime,
+            !success,
+            Date.now() - this._connectionAttemptStartTime
+          );
+        }
+        this._connectionAttemptStartTime = void 0;
+      }
+      /**
+       * This is a wrapper around the passed errorHandler which adds additional
+       * diagnostics and logging logic.
+       *
+       * @param err The error to be logged and handled.
+       * @return boolean whether to retry the connection.
+       *
+       * @private
+       */
+      _retryAndHandleError(err, statusCallback) {
+        var _a, _b, _c;
+        if (((_a = err.headers) == null ? void 0 : _a[`x-ld-fd-fallback`]) === `true`) {
+          const fallbackErr = new import_js_sdk_common10.LDFlagDeliveryFallbackError(
+            import_js_sdk_common10.DataSourceErrorKind.ErrorResponse,
+            `Response header indicates to fallback to FDv1`,
+            err.status
+          );
+          statusCallback(import_js_sdk_common10.subsystem.DataSourceState.Closed, fallbackErr);
+          return false;
+        }
+        if (!(0, import_js_sdk_common10.shouldRetry)(err)) {
+          (_b = this._logger) == null ? void 0 : _b.error((0, import_js_sdk_common10.httpErrorMessage)(err, "streaming request"));
+          this._logConnectionResult(false);
+          statusCallback(
+            import_js_sdk_common10.subsystem.DataSourceState.Closed,
+            new import_js_sdk_common10.LDStreamingError(import_js_sdk_common10.DataSourceErrorKind.ErrorResponse, err.message, err.status, false)
+          );
+          return false;
+        }
+        (_c = this._logger) == null ? void 0 : _c.warn((0, import_js_sdk_common10.httpErrorMessage)(err, "streaming request", "will retry"));
+        this._logConnectionResult(false);
+        this._logConnectionAttempt();
+        statusCallback(import_js_sdk_common10.subsystem.DataSourceState.Interrupted);
+        return true;
+      }
+      start(dataCallback, statusCallback, selectorGetter) {
+        var _a;
+        this._logConnectionAttempt();
+        statusCallback(import_js_sdk_common10.subsystem.DataSourceState.Initializing);
+        const selector = selectorGetter == null ? void 0 : selectorGetter();
+        const params = selector ? [...this._parameters, { key: "basis", value: selector }] : this._parameters;
+        const uri = (0, import_js_sdk_common10.getStreamingUri)(this._serviceEndpoints, this._streamUriPath, params);
+        (_a = this._logger) == null ? void 0 : _a.debug(`Streaming processor opening event source to uri: ${uri}`);
+        let fallbackRequested = false;
+        const eventSource = this._requests.createEventSource(uri, {
+          headers: this._headers,
+          errorFilter: (error2) => this._retryAndHandleError(error2, statusCallback),
+          initialRetryDelayMillis: 1e3 * this._streamInitialReconnectDelay,
+          readTimeoutMillis: 5 * 60 * 1e3,
+          retryResetIntervalMillis: 60 * 1e3
+        });
+        this._eventSource = eventSource;
+        const payloadReader = new import_js_sdk_common10.internal.PayloadStreamReader(
+          eventSource,
+          {
+            flag: (flag) => {
+              processFlag(flag);
+              return flag;
+            },
+            segment: (segment) => {
+              processSegment(segment);
+              return segment;
+            }
+          },
+          (errorKind, message) => {
+            var _a2;
+            if (fallbackRequested) {
+              const fallbackErr = new import_js_sdk_common10.LDFlagDeliveryFallbackError(
+                import_js_sdk_common10.DataSourceErrorKind.ErrorResponse,
+                `Response header indicates to fallback to FDv1`
+              );
+              (_a2 = this._logger) == null ? void 0 : _a2.warn(fallbackErr.message);
+              statusCallback(import_js_sdk_common10.subsystem.DataSourceState.Closed, fallbackErr);
+            } else {
+              statusCallback(
+                import_js_sdk_common10.subsystem.DataSourceState.Interrupted,
+                new import_js_sdk_common10.LDStreamingError(errorKind, message)
+              );
+            }
+            this.stop();
+          },
+          this._logger
+        );
+        payloadReader.addPayloadListener((payload) => {
+          var _a2;
+          this._logConnectionResult(true);
+          const data = {
+            initMetadata: this._initMetadata,
+            payload
+          };
+          if (fallbackRequested) {
+            data.fallbackToFDv1 = true;
+            (_a2 = this._logger) == null ? void 0 : _a2.warn(`Response header indicates to fallback to FDv1`);
+          }
+          dataCallback(payload.type === "full", data);
+          if (fallbackRequested) {
+            this.stop();
+          }
+        });
+        eventSource.onclose = () => {
+          var _a2;
+          (_a2 = this._logger) == null ? void 0 : _a2.info("Closed LaunchDarkly stream connection");
+          statusCallback(import_js_sdk_common10.subsystem.DataSourceState.Closed);
+        };
+        eventSource.onerror = () => {
+        };
+        eventSource.onopen = (e) => {
+          var _a2, _b;
+          (_a2 = this._logger) == null ? void 0 : _a2.info("Opened LaunchDarkly stream connection");
+          this._initMetadata = import_js_sdk_common10.internal.initMetadataFromHeaders(e.headers);
+          if (((_b = e.headers) == null ? void 0 : _b[`x-ld-fd-fallback`]) === `true`) {
+            fallbackRequested = true;
+          }
+          statusCallback(import_js_sdk_common10.subsystem.DataSourceState.Valid);
+        };
+        eventSource.onretrying = (e) => {
+          var _a2;
+          (_a2 = this._logger) == null ? void 0 : _a2.info(`Will retry stream connection in ${e.delayMillis} milliseconds`);
+        };
+      }
+      stop() {
+        var _a;
+        (_a = this._eventSource) == null ? void 0 : _a.close();
+        this._eventSource = void 0;
+      }
+      close() {
+        this.stop();
+      }
+    };
+    var TransactionalDataSourceUpdates = class {
+      constructor(_featureStore, _hasEventListeners, _onChange) {
+        this._featureStore = _featureStore;
+        this._hasEventListeners = _hasEventListeners;
+        this._onChange = _onChange;
+        this._dependencyTracker = new DependencyTracker();
+      }
+      init(allData, callback, initMetadata) {
+        this.applyChanges(true, allData, callback, initMetadata);
+      }
+      upsert(kind, data, callback) {
+        this.applyChanges(
+          false,
+          // basis is false for upserts
+          {
+            [kind.namespace]: {
+              [data.key]: data
+            }
+          },
+          callback
+        );
+      }
+      applyChanges(basis, data, callback, initMetadata, selector) {
+        const checkForChanges = this._hasEventListeners();
+        const doApplyChanges = (oldData2) => {
+          this._featureStore.applyChanges(
+            basis,
+            data,
+            () => {
+              Promise.resolve().then(() => {
+                if (basis) {
+                  this._dependencyTracker.reset();
+                }
+                Object.entries(data).forEach(([namespace, items]) => {
+                  Object.keys(items || {}).forEach((key) => {
+                    const item = items[key];
+                    this._dependencyTracker.updateDependenciesFrom(
+                      namespace,
+                      key,
+                      computeDependencies(namespace, item)
+                    );
+                  });
+                });
+                if (checkForChanges) {
+                  const updatedItems = new NamespacedDataSet();
+                  Object.keys(data).forEach((namespace) => {
+                    const oldDataForKind = oldData2[namespace];
+                    const newDataForKind = data[namespace];
+                    let iterateData;
+                    if (basis) {
+                      iterateData = __spreadValues(__spreadValues({}, oldDataForKind), newDataForKind);
+                    } else {
+                      iterateData = __spreadValues({}, newDataForKind);
+                    }
+                    Object.keys(iterateData).forEach((key) => {
+                      this.addIfModified(
+                        namespace,
+                        key,
+                        oldDataForKind && oldDataForKind[key],
+                        newDataForKind && newDataForKind[key],
+                        updatedItems
+                      );
+                    });
+                  });
+                  this.sendChangeEvents(updatedItems);
+                }
+              });
+              callback == null ? void 0 : callback();
+            },
+            initMetadata,
+            selector
+          );
+        };
+        let oldData = {};
+        if (checkForChanges) {
+          this._featureStore.all(VersionedDataKinds.Features, (oldFlags) => {
+            this._featureStore.all(VersionedDataKinds.Segments, (oldSegments) => {
+              oldData = {
+                [VersionedDataKinds.Features.namespace]: oldFlags,
+                [VersionedDataKinds.Segments.namespace]: oldSegments
+              };
+            });
+          });
+        }
+        doApplyChanges(oldData);
+      }
+      addIfModified(namespace, key, oldValue, newValue, toDataSet) {
+        if (newValue && oldValue && newValue.version <= oldValue.version) {
+          return;
+        }
+        this._dependencyTracker.updateModifiedItems(toDataSet, namespace, key);
+      }
+      sendChangeEvents(dataSet) {
+        dataSet.enumerate((namespace, key) => {
+          if (namespace === VersionedDataKinds.Features.namespace) {
+            this._onChange(key);
+          }
+        });
+      }
+    };
+    var import_js_sdk_common12 = require_cjs();
+    var import_js_sdk_common11 = require_cjs();
+    var validations = {
+      baseUri: import_js_sdk_common11.TypeValidators.String,
+      streamUri: import_js_sdk_common11.TypeValidators.String,
+      eventsUri: import_js_sdk_common11.TypeValidators.String,
+      timeout: import_js_sdk_common11.TypeValidators.numberWithMin(1),
+      capacity: import_js_sdk_common11.TypeValidators.Number,
+      logger: import_js_sdk_common11.TypeValidators.Object,
+      featureStore: import_js_sdk_common11.TypeValidators.ObjectOrFactory,
+      dataSystem: import_js_sdk_common11.TypeValidators.Object,
+      bigSegments: import_js_sdk_common11.TypeValidators.Object,
+      updateProcessor: import_js_sdk_common11.TypeValidators.ObjectOrFactory,
+      flushInterval: import_js_sdk_common11.TypeValidators.Number,
+      pollInterval: import_js_sdk_common11.TypeValidators.numberWithMin(30),
+      proxyOptions: import_js_sdk_common11.TypeValidators.Object,
+      offline: import_js_sdk_common11.TypeValidators.Boolean,
+      stream: import_js_sdk_common11.TypeValidators.Boolean,
+      streamInitialReconnectDelay: import_js_sdk_common11.TypeValidators.Number,
+      useLdd: import_js_sdk_common11.TypeValidators.Boolean,
+      sendEvents: import_js_sdk_common11.TypeValidators.Boolean,
+      allAttributesPrivate: import_js_sdk_common11.TypeValidators.Boolean,
+      privateAttributes: import_js_sdk_common11.TypeValidators.StringArray,
+      contextKeysCapacity: import_js_sdk_common11.TypeValidators.Number,
+      contextKeysFlushInterval: import_js_sdk_common11.TypeValidators.Number,
+      tlsParams: import_js_sdk_common11.TypeValidators.Object,
+      diagnosticOptOut: import_js_sdk_common11.TypeValidators.Boolean,
+      diagnosticRecordingInterval: import_js_sdk_common11.TypeValidators.numberWithMin(60),
+      wrapperName: import_js_sdk_common11.TypeValidators.String,
+      wrapperVersion: import_js_sdk_common11.TypeValidators.String,
+      application: import_js_sdk_common11.TypeValidators.Object,
+      payloadFilterKey: import_js_sdk_common11.TypeValidators.stringMatchingRegex(/^[a-zA-Z0-9](\w|\.|-)*$/),
+      hooks: import_js_sdk_common11.TypeValidators.createTypeArray("Hook[]", {}),
+      enableEventCompression: import_js_sdk_common11.TypeValidators.Boolean,
+      dataSourceOptionsType: import_js_sdk_common11.TypeValidators.String
+    };
+    var DEFAULT_POLL_INTERVAL = 30;
+    var DEFAULT_STREAM_RECONNECT_DELAY = 1;
+    var defaultStandardDataSourceOptions = {
+      dataSourceOptionsType: "standard",
+      streamInitialReconnectDelay: DEFAULT_STREAM_RECONNECT_DELAY,
+      pollInterval: DEFAULT_POLL_INTERVAL
+    };
+    var defaultStreamingDataSourceOptions = {
+      dataSourceOptionsType: "streamingOnly",
+      streamInitialReconnectDelay: DEFAULT_STREAM_RECONNECT_DELAY
+    };
+    var defaultPollingDataSourceOptions = {
+      dataSourceOptionsType: "pollingOnly",
+      pollInterval: DEFAULT_POLL_INTERVAL
+    };
+    var defaultDataSystemOptions = {
+      dataSource: defaultStandardDataSourceOptions
+    };
+    var defaultValues = {
+      baseUri: "https://sdk.launchdarkly.com",
+      streamUri: "https://stream.launchdarkly.com",
+      eventsUri: import_js_sdk_common11.ServiceEndpoints.DEFAULT_EVENTS,
+      stream: true,
+      streamInitialReconnectDelay: DEFAULT_STREAM_RECONNECT_DELAY,
+      sendEvents: true,
+      timeout: 10,
+      capacity: 1e4,
+      flushInterval: 5,
+      pollInterval: DEFAULT_POLL_INTERVAL,
+      offline: false,
+      useLdd: false,
+      allAttributesPrivate: false,
+      privateAttributes: [],
+      contextKeysCapacity: 1e3,
+      contextKeysFlushInterval: 300,
+      diagnosticOptOut: false,
+      diagnosticRecordingInterval: 900,
+      featureStore: () => new InMemoryFeatureStore(),
+      enableEventCompression: false,
+      dataSystem: defaultDataSystemOptions
+    };
+    function validateTypesAndNames(options, defaults) {
+      const errors = [];
+      const validatedOptions = __spreadValues({}, defaults);
+      Object.keys(options).forEach((optionName) => {
+        var _a;
+        const optionValue = options[optionName];
+        const validator = validations[optionName];
+        if (validator) {
+          if (!validator.is(optionValue)) {
+            if (validator.getType() === "boolean") {
+              errors.push(import_js_sdk_common11.OptionMessages.wrongOptionTypeBoolean(optionName, typeof optionValue));
+              validatedOptions[optionName] = !!optionValue;
+            } else if (validator instanceof import_js_sdk_common11.NumberWithMinimum && import_js_sdk_common11.TypeValidators.Number.is(optionValue)) {
+              const { min } = validator;
+              errors.push(import_js_sdk_common11.OptionMessages.optionBelowMinimum(optionName, optionValue, min));
+              validatedOptions[optionName] = min;
+            } else {
+              errors.push(
+                import_js_sdk_common11.OptionMessages.wrongOptionType(optionName, validator.getType(), typeof optionValue)
+              );
+              validatedOptions[optionName] = defaultValues[optionName];
+            }
+          } else {
+            validatedOptions[optionName] = optionValue;
+          }
+        } else {
+          (_a = options.logger) == null ? void 0 : _a.warn(import_js_sdk_common11.OptionMessages.unknownOption(optionName));
+        }
+      });
+      return { errors, validatedOptions };
+    }
+    function validateEndpoints(options, validatedOptions) {
+      var _a, _b, _c;
+      const { baseUri, streamUri, eventsUri } = options;
+      const streamingEndpointSpecified = streamUri !== void 0 && streamUri !== null;
+      const pollingEndpointSpecified = baseUri !== void 0 && baseUri !== null;
+      const eventEndpointSpecified = eventsUri !== void 0 && eventsUri !== null;
+      if (streamingEndpointSpecified === pollingEndpointSpecified && streamingEndpointSpecified === eventEndpointSpecified) {
+        return;
+      }
+      if (!streamingEndpointSpecified && validatedOptions.stream) {
+        (_a = validatedOptions.logger) == null ? void 0 : _a.warn(import_js_sdk_common11.OptionMessages.partialEndpoint("streamUri"));
+      }
+      if (!pollingEndpointSpecified) {
+        (_b = validatedOptions.logger) == null ? void 0 : _b.warn(import_js_sdk_common11.OptionMessages.partialEndpoint("baseUri"));
+      }
+      if (!eventEndpointSpecified && validatedOptions.sendEvents) {
+        (_c = validatedOptions.logger) == null ? void 0 : _c.warn(import_js_sdk_common11.OptionMessages.partialEndpoint("eventsUri"));
+      }
+    }
+    var fdv1FallbackValidations = {
+      baseUri: import_js_sdk_common11.TypeValidators.String,
+      pollInterval: import_js_sdk_common11.TypeValidators.numberWithMin(30)
+    };
+    function validateFDv1FallbackOptions(options) {
+      const errors = [];
+      const validatedOptions = {};
+      Object.keys(options).forEach((optionName) => {
+        const optionValue = options[optionName];
+        const validator = fdv1FallbackValidations[optionName];
+        if (!validator) {
+          errors.push(import_js_sdk_common11.OptionMessages.unknownOption(`dataSystem.fdv1Fallback.${optionName}`));
+          return;
+        }
+        if (!validator.is(optionValue)) {
+          if (validator instanceof import_js_sdk_common11.NumberWithMinimum && import_js_sdk_common11.TypeValidators.Number.is(optionValue)) {
+            const { min } = validator;
+            errors.push(
+              import_js_sdk_common11.OptionMessages.optionBelowMinimum(
+                `dataSystem.fdv1Fallback.${optionName}`,
+                optionValue,
+                min
+              )
+            );
+            validatedOptions[optionName] = min;
+          } else {
+            errors.push(
+              import_js_sdk_common11.OptionMessages.wrongOptionType(
+                `dataSystem.fdv1Fallback.${optionName}`,
+                validator.getType(),
+                typeof optionValue
+              )
+            );
+          }
+        } else {
+          validatedOptions[optionName] = optionValue;
+        }
+      });
+      return { errors, validatedOptions };
+    }
+    function rejectDataSourceBaseUri(dataSource, validatedDataSource) {
+      if (!Object.prototype.hasOwnProperty.call(dataSource, "baseUri")) {
+        return [];
+      }
+      delete validatedDataSource.baseUri;
+      return [import_js_sdk_common11.OptionMessages.unknownOption("dataSystem.dataSource.baseUri")];
+    }
+    function validateDataSystemOptions(options) {
+      const allErrors = [];
+      const validatedOptions = __spreadValues({}, options);
+      if (options.persistentStore && !import_js_sdk_common11.TypeValidators.ObjectOrFactory.is(options.persistentStore)) {
+        validatedOptions.persistentStore = void 0;
+        allErrors.push(
+          import_js_sdk_common11.OptionMessages.wrongOptionType(
+            "persistentStore",
+            "LDFeatureStore",
+            typeof options.persistentStore
+          )
+        );
+      }
+      if (options.fdv1Fallback !== void 0 && options.fdv1Fallback !== null) {
+        if (import_js_sdk_common11.TypeValidators.Object.is(options.fdv1Fallback)) {
+          const { errors: fbErrors, validatedOptions: fbValidated } = validateFDv1FallbackOptions(
+            options.fdv1Fallback
+          );
+          validatedOptions.fdv1Fallback = fbValidated;
+          allErrors.push(...fbErrors);
+        } else {
+          validatedOptions.fdv1Fallback = void 0;
+          allErrors.push(
+            import_js_sdk_common11.OptionMessages.wrongOptionType(
+              "dataSystem.fdv1Fallback",
+              "FDv1FallbackConfiguration",
+              typeof options.fdv1Fallback
+            )
+          );
+        }
+      }
+      if (options.dataSource) {
+        let errors;
+        let validatedDataSourceOptions;
+        if (isStandardOptions(options.dataSource)) {
+          ({ errors, validatedOptions: validatedDataSourceOptions } = validateTypesAndNames(
+            options.dataSource,
+            defaultStandardDataSourceOptions
+          ));
+          errors.push(...rejectDataSourceBaseUri(options.dataSource, validatedDataSourceOptions));
+        } else if (isStreamingOnlyOptions(options.dataSource)) {
+          ({ errors, validatedOptions: validatedDataSourceOptions } = validateTypesAndNames(
+            options.dataSource,
+            defaultStreamingDataSourceOptions
+          ));
+          errors.push(...rejectDataSourceBaseUri(options.dataSource, validatedDataSourceOptions));
+        } else if (isPollingOnlyOptions(options.dataSource)) {
+          ({ errors, validatedOptions: validatedDataSourceOptions } = validateTypesAndNames(
+            options.dataSource,
+            defaultPollingDataSourceOptions
+          ));
+          errors.push(...rejectDataSourceBaseUri(options.dataSource, validatedDataSourceOptions));
+        } else if (isCustomOptions(options.dataSource)) {
+          validatedDataSourceOptions = options.dataSource;
+          errors = [];
+        } else {
+          validatedDataSourceOptions = defaultStandardDataSourceOptions;
+          errors = [
+            import_js_sdk_common11.OptionMessages.wrongOptionType(
+              "dataSource",
+              "DataSourceOptions",
+              typeof options.dataSource
+            )
+          ];
+        }
+        validatedOptions.dataSource = validatedDataSourceOptions;
+        allErrors.push(...errors);
+      } else {
+        validatedOptions.dataSource = defaultStandardDataSourceOptions;
+      }
+      return { errors: allErrors, validatedOptions };
+    }
+    var Configuration = class {
+      constructor(options = {}, internalOptions = {}) {
+        var _a;
+        options = options || {};
+        this.logger = options.logger;
+        const { errors, validatedOptions: topLevelResult } = validateTypesAndNames(
+          options,
+          defaultValues
+        );
+        const validatedOptions = topLevelResult;
+        errors.forEach((error2) => {
+          var _a2;
+          (_a2 = this.logger) == null ? void 0 : _a2.warn(error2);
+        });
+        validateEndpoints(options, validatedOptions);
+        if (options.dataSystem) {
+          const { errors: dsErrors, validatedOptions: dsResult } = validateDataSystemOptions(
+            options.dataSystem
+          );
+          const validatedDSOptions = dsResult;
+          this.dataSystem = {
+            dataSource: validatedDSOptions.dataSource,
+            useLdd: validatedDSOptions.useLdd,
+            fdv1Fallback: validatedDSOptions.fdv1Fallback,
+            featureStoreFactory: (clientContext) => {
+              const { persistentStore } = validatedDSOptions;
+              let store;
+              if (persistentStore === void 0) {
+                store = new InMemoryFeatureStore();
+              } else if (import_js_sdk_common11.TypeValidators.Function.is(persistentStore)) {
+                store = persistentStore(
+                  clientContext
+                );
+              } else {
+                store = persistentStore;
+              }
+              if (import_js_sdk_common11.TypeValidators.Function.is(store.applyChanges)) {
+                return store;
+              }
+              return new TransactionalFeatureStore(store);
+            }
+          };
+          dsErrors.forEach((error2) => {
+            var _a2;
+            (_a2 = this.logger) == null ? void 0 : _a2.warn(error2);
+          });
+        }
+        this.serviceEndpoints = new import_js_sdk_common11.ServiceEndpoints(
+          validatedOptions.streamUri,
+          validatedOptions.baseUri,
+          validatedOptions.eventsUri,
+          internalOptions.analyticsEventPath,
+          internalOptions.diagnosticEventPath,
+          internalOptions.includeAuthorizationHeader,
+          validatedOptions.payloadFilterKey
+        );
+        this.eventsCapacity = validatedOptions.capacity;
+        this.timeout = validatedOptions.timeout;
+        this.bigSegments = validatedOptions.bigSegments;
+        this.flushInterval = validatedOptions.flushInterval;
+        this.pollInterval = validatedOptions.pollInterval;
+        this.proxyOptions = validatedOptions.proxyOptions;
+        this.offline = validatedOptions.offline;
+        this.stream = validatedOptions.stream;
+        this.streamInitialReconnectDelay = validatedOptions.streamInitialReconnectDelay;
+        this.useLdd = validatedOptions.useLdd;
+        this.sendEvents = validatedOptions.sendEvents;
+        this.allAttributesPrivate = validatedOptions.allAttributesPrivate;
+        this.privateAttributes = validatedOptions.privateAttributes;
+        this.contextKeysCapacity = validatedOptions.contextKeysCapacity;
+        this.contextKeysFlushInterval = validatedOptions.contextKeysFlushInterval;
+        this.tlsParams = validatedOptions.tlsParams;
+        this.diagnosticOptOut = validatedOptions.diagnosticOptOut;
+        this.wrapperName = validatedOptions.wrapperName;
+        this.payloadFilterKey = validatedOptions.payloadFilterKey;
+        this.wrapperVersion = validatedOptions.wrapperVersion;
+        this.tags = new import_js_sdk_common11.ApplicationTags(validatedOptions);
+        this.diagnosticRecordingInterval = validatedOptions.diagnosticRecordingInterval;
+        if (import_js_sdk_common11.TypeValidators.Function.is(validatedOptions.updateProcessor)) {
+          this.updateProcessorFactory = validatedOptions.updateProcessor;
+        } else {
+          this.updateProcessorFactory = () => validatedOptions.updateProcessor;
+        }
+        if (import_js_sdk_common11.TypeValidators.Function.is(validatedOptions.featureStore)) {
+          this.featureStoreFactory = validatedOptions.featureStore;
+        } else {
+          this.featureStoreFactory = () => validatedOptions.featureStore;
+        }
+        this.hooks = validatedOptions.hooks;
+        this.enableEventCompression = validatedOptions.enableEventCompression;
+        this.getImplementationHooks = (_a = internalOptions.getImplementationHooks) != null ? _a : (() => []);
+        this.applicationInfo = validatedOptions.application;
+      }
+    };
+    var createDiagnosticsInitConfig = (config, platform22, featureStore) => {
+      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
+      let pollingIntervalMillis;
+      if ((_a = config.dataSystem) == null ? void 0 : _a.dataSource) {
+        if ((isStandardOptions(config.dataSystem.dataSource) || isPollingOnlyOptions(config.dataSystem.dataSource)) && config.dataSystem.dataSource.pollInterval) {
+          pollingIntervalMillis = (0, import_js_sdk_common12.secondsToMillis)(config.dataSystem.dataSource.pollInterval);
+        }
+      } else {
+        pollingIntervalMillis = (0, import_js_sdk_common12.secondsToMillis)(config.pollInterval);
+      }
+      let reconnectTimeMillis;
+      if ((_b = config.dataSystem) == null ? void 0 : _b.dataSource) {
+        if ((isStandardOptions(config.dataSystem.dataSource) || isStreamingOnlyOptions(config.dataSystem.dataSource)) && config.dataSystem.dataSource.streamInitialReconnectDelay) {
+          reconnectTimeMillis = (0, import_js_sdk_common12.secondsToMillis)(
+            config.dataSystem.dataSource.streamInitialReconnectDelay
+          );
+        }
+      } else {
+        reconnectTimeMillis = (0, import_js_sdk_common12.secondsToMillis)(config.streamInitialReconnectDelay);
+      }
+      let streamDisabled;
+      if ((_c = config.dataSystem) == null ? void 0 : _c.dataSource) {
+        streamDisabled = isPollingOnlyOptions((_d = config.dataSystem) == null ? void 0 : _d.dataSource);
+      } else {
+        streamDisabled = !config.stream;
+      }
+      return __spreadProps(__spreadValues(__spreadValues({
+        customBaseURI: config.serviceEndpoints.polling !== defaultValues.baseUri,
+        customStreamURI: config.serviceEndpoints.streaming !== defaultValues.streamUri,
+        customEventsURI: config.serviceEndpoints.events !== defaultValues.eventsUri,
+        eventsCapacity: config.eventsCapacity,
+        // Node doesn't distinguish between these two kinds of timeouts. It is unlikely other web
+        // based implementations would be able to either.
+        connectTimeoutMillis: (0, import_js_sdk_common12.secondsToMillis)(config.timeout),
+        socketTimeoutMillis: (0, import_js_sdk_common12.secondsToMillis)(config.timeout),
+        eventsFlushIntervalMillis: (0, import_js_sdk_common12.secondsToMillis)(config.flushInterval)
+      }, pollingIntervalMillis ? { pollingIntervalMillis } : null), reconnectTimeMillis ? { reconnectTimeMillis } : null), {
+        contextKeysFlushIntervalMillis: (0, import_js_sdk_common12.secondsToMillis)(config.contextKeysFlushInterval),
+        diagnosticRecordingIntervalMillis: (0, import_js_sdk_common12.secondsToMillis)(config.diagnosticRecordingInterval),
+        streamingDisabled: streamDisabled,
+        usingRelayDaemon: (_f = (_e = config.dataSystem) == null ? void 0 : _e.useLdd) != null ? _f : config.useLdd,
+        offline: config.offline,
+        allAttributesPrivate: config.allAttributesPrivate,
+        contextKeysCapacity: config.contextKeysCapacity,
+        usingProxy: !!((_h = (_g = platform22.requests).usingProxy) == null ? void 0 : _h.call(_g)),
+        usingProxyAuthenticator: !!((_j = (_i = platform22.requests).usingProxyAuth) == null ? void 0 : _j.call(_i)),
+        dataStoreType: (_l = (_k = featureStore.getDescription) == null ? void 0 : _k.call(featureStore)) != null ? _l : "memory"
+      });
+    };
+    var createDiagnosticsInitConfig_default = createDiagnosticsInitConfig;
+    function firstResult(collection, operator) {
+      let res;
+      collection == null ? void 0 : collection.some((item, index) => {
+        res = operator(item, index);
+        return !!res;
+      });
+      return res;
+    }
+    var ITERATION_RECURSION_LIMIT = 50;
+    function seriesAsync(collection, check, all, index, cb) {
+      if (!collection) {
+        cb(false);
+        return;
+      }
+      if (index < (collection == null ? void 0 : collection.length)) {
+        check(collection[index], index, (res) => {
+          if (all) {
+            if (!res) {
+              cb(false);
+              return;
+            }
+          } else if (res) {
+            cb(true);
+            return;
+          }
+          if (collection.length > ITERATION_RECURSION_LIMIT) {
+            Promise.resolve().then(() => {
+              seriesAsync(collection, check, all, index + 1, cb);
+            });
+          } else {
+            seriesAsync(collection, check, all, index + 1, cb);
+          }
+        });
+      } else {
+        cb(all);
+      }
+    }
+    function allSeriesAsync(collection, check, cb) {
+      seriesAsync(collection, check, true, 0, cb);
+    }
+    function firstSeriesAsync(collection, check, cb) {
+      seriesAsync(collection, check, false, 0, cb);
+    }
+    function allAsync(collection, check, cb) {
+      if (!collection) {
+        cb(false);
+        return;
+      }
+      Promise.all(
+        collection == null ? void 0 : collection.map(
+          (item) => new Promise((resolve) => {
+            check(item, resolve);
+          })
+        )
+      ).then((results) => {
+        cb(results.every((success) => success));
+      });
+    }
+    var Reasons = class {
+      static prerequisiteFailed(prerequisiteKey) {
+        return { kind: "PREREQUISITE_FAILED", prerequisiteKey };
+      }
+      static ruleMatch(ruleId, ruleIndex) {
+        return { kind: "RULE_MATCH", ruleId, ruleIndex };
+      }
+    };
+    Reasons.Fallthrough = { kind: "FALLTHROUGH" };
+    Reasons.Off = { kind: "OFF" };
+    Reasons.TargetMatch = { kind: "TARGET_MATCH" };
+    var EvalResult = class _EvalResult {
+      constructor(isError, detail, message) {
+        this.isError = isError;
+        this.detail = detail;
+        this.message = message;
+        this.isError = isError;
+        this.detail = detail;
+        this.message = message;
+      }
+      get isOff() {
+        return this.detail.reason.kind === Reasons.Off.kind;
+      }
+      setDefault(def) {
+        this.detail.value = def;
+      }
+      static forError(errorKind, message, def) {
+        return new _EvalResult(
+          true,
+          {
+            value: def != null ? def : null,
+            variationIndex: null,
+            reason: { kind: "ERROR", errorKind }
+          },
+          message
+        );
+      }
+      static forSuccess(value, reason, variationIndex) {
+        return new _EvalResult(false, {
+          value,
+          variationIndex: variationIndex === void 0 ? null : variationIndex,
+          reason
+        });
+      }
+    };
+    var import_js_sdk_common16 = require_cjs();
+    function valueForBucketing(value) {
+      if (typeof value === "string") {
+        return value;
+      }
+      if (Number.isInteger(value)) {
+        return String(value);
       }
       return null;
+    }
+    var Bucketer = class {
+      constructor(crypto2) {
+        this._crypto = crypto2;
+      }
+      _sha1Hex(value) {
+        const hash = this._crypto.createHash("sha1");
+        hash.update(value);
+        if (!hash.digest) {
+          throw new Error("Platform must implement digest or asyncDigest");
+        }
+        return hash.digest("hex");
+      }
+      /**
+       * Bucket the provided context using the provided parameters.
+       * @param context The context to bucket. Can be a 'multi' kind context, but
+       * the bucketing will be by a specific contained kind.
+       * @param key A key to use in hashing. Typically the flag key or the segment key.
+       * @param attr The attribute to use for bucketing.
+       * @param salt A salt to use in hashing.
+       * @param kindForRollout The kind to use for bucketing.
+       * @param seed A seed to use in hashing.
+       *
+       * @returns A tuple where the first value is the bucket, and the second value indicates if there
+       * was a context for the value specified by `kindForRollout`. If there was not a context for the
+       * specified kind, then the `inExperiment` attribute should be `false`.
+       */
+      bucket(context, key, attr, salt, kindForRollout = "user", seed) {
+        const value = context.valueForKind(attr, kindForRollout);
+        const bucketableValue = valueForBucketing(value);
+        if (bucketableValue === null) {
+          const hadContext = context.kinds.indexOf(kindForRollout) >= 0;
+          return [0, hadContext];
+        }
+        const prefix = seed ? Number(seed) : `${key}.${salt}`;
+        const hashKey = `${prefix}.${bucketableValue}`;
+        const hashVal = parseInt(this._sha1Hex(hashKey).substring(0, 15), 16);
+        return [hashVal / 1152921504606847e3, true];
+      }
     };
-    module.exports = minVersion;
-  }
-});
-
-// node_modules/semver/ranges/valid.js
-var require_valid2 = __commonJS({
-  "node_modules/semver/ranges/valid.js"(exports, module) {
-    var Range = require_range();
-    var validRange = (range, options) => {
-      try {
-        return new Range(range, options).range || "*";
-      } catch (er) {
-        return null;
+    var import_js_sdk_common14 = require_cjs();
+    var import_js_sdk_common13 = require_cjs();
+    var { ErrorKinds } = import_js_sdk_common13.internal;
+    var KEY_ATTR_REF = new import_js_sdk_common13.AttributeReference("key");
+    function getVariation(flag, index, reason) {
+      if (import_js_sdk_common13.TypeValidators.Number.is(index) && index >= 0 && index < flag.variations.length) {
+        return EvalResult.forSuccess(flag.variations[index], reason, index);
       }
-    };
-    module.exports = validRange;
-  }
-});
-
-// node_modules/semver/ranges/outside.js
-var require_outside = __commonJS({
-  "node_modules/semver/ranges/outside.js"(exports, module) {
-    var SemVer = require_semver();
-    var Comparator = require_comparator();
-    var { ANY } = Comparator;
-    var Range = require_range();
-    var satisfies = require_satisfies();
-    var gt = require_gt();
-    var lt = require_lt();
-    var lte = require_lte();
-    var gte = require_gte();
-    var outside = (version, range, hilo, options) => {
-      version = new SemVer(version, options);
-      range = new Range(range, options);
-      let gtfn, ltefn, ltfn, comp, ecomp;
-      switch (hilo) {
-        case ">":
-          gtfn = gt;
-          ltefn = lte;
-          ltfn = lt;
-          comp = ">";
-          ecomp = ">=";
-          break;
-        case "<":
-          gtfn = lt;
-          ltefn = gte;
-          ltfn = gt;
-          comp = "<";
-          ecomp = "<=";
-          break;
-        default:
-          throw new TypeError('Must provide a hilo val of "<" or ">"');
+      return EvalResult.forError(ErrorKinds.MalformedFlag, "Invalid variation index in flag");
+    }
+    function getOffVariation(flag, reason) {
+      if (!import_js_sdk_common13.TypeValidators.Number.is(flag.offVariation)) {
+        return EvalResult.forSuccess(null, reason);
       }
-      if (satisfies(version, range, options)) {
-        return false;
+      return getVariation(flag, flag.offVariation, reason);
+    }
+    function getBucketBy(isExperiment2, bucketByAttributeReference) {
+      var _a;
+      return (_a = isExperiment2 ? void 0 : bucketByAttributeReference) != null ? _a : KEY_ATTR_REF;
+    }
+    function evalTarget(flag, target, context) {
+      const contextKey = context.key(target.contextKind);
+      if (contextKey !== void 0) {
+        const found = target.values.indexOf(contextKey) >= 0;
+        if (found) {
+          return getVariation(flag, target.variation, Reasons.TargetMatch);
+        }
       }
-      for (let i = 0; i < range.set.length; ++i) {
-        const comparators = range.set[i];
-        let high = null;
-        let low = null;
-        comparators.forEach((comparator) => {
-          if (comparator.semver === ANY) {
-            comparator = new Comparator(">=0.0.0");
+      return void 0;
+    }
+    function evalTargets(flag, context) {
+      var _a;
+      if (!((_a = flag.contextTargets) == null ? void 0 : _a.length)) {
+        return firstResult(flag.targets, (target) => evalTarget(flag, target, context));
+      }
+      return firstResult(flag.contextTargets, (target) => {
+        if (!target.contextKind || target.contextKind === import_js_sdk_common14.Context.UserKind) {
+          const userTarget = (flag.targets || []).find((ut) => ut.variation === target.variation);
+          if (userTarget) {
+            return evalTarget(flag, userTarget, context);
           }
-          high = high || comparator;
-          low = low || comparator;
-          if (gtfn(comparator.semver, high.semver, options)) {
-            high = comparator;
-          } else if (ltfn(comparator.semver, low.semver, options)) {
-            low = comparator;
-          }
-        });
-        if (high.operator === comp || high.operator === ecomp) {
-          return false;
+          return void 0;
         }
-        if ((!low.operator || low.operator === comp) && ltefn(version, low.semver)) {
-          return false;
-        } else if (low.operator === ecomp && ltfn(version, low.semver)) {
-          return false;
-        }
-      }
-      return true;
-    };
-    module.exports = outside;
-  }
-});
-
-// node_modules/semver/ranges/gtr.js
-var require_gtr = __commonJS({
-  "node_modules/semver/ranges/gtr.js"(exports, module) {
-    var outside = require_outside();
-    var gtr = (version, range, options) => outside(version, range, ">", options);
-    module.exports = gtr;
-  }
-});
-
-// node_modules/semver/ranges/ltr.js
-var require_ltr = __commonJS({
-  "node_modules/semver/ranges/ltr.js"(exports, module) {
-    var outside = require_outside();
-    var ltr = (version, range, options) => outside(version, range, "<", options);
-    module.exports = ltr;
-  }
-});
-
-// node_modules/semver/ranges/intersects.js
-var require_intersects = __commonJS({
-  "node_modules/semver/ranges/intersects.js"(exports, module) {
-    var Range = require_range();
-    var intersects = (r1, r2, options) => {
-      r1 = new Range(r1, options);
-      r2 = new Range(r2, options);
-      return r1.intersects(r2, options);
-    };
-    module.exports = intersects;
-  }
-});
-
-// node_modules/semver/ranges/simplify.js
-var require_simplify = __commonJS({
-  "node_modules/semver/ranges/simplify.js"(exports, module) {
-    var satisfies = require_satisfies();
-    var compare = require_compare();
-    module.exports = (versions, range, options) => {
-      const set = [];
-      let first = null;
-      let prev = null;
-      const v = versions.sort((a, b) => compare(a, b, options));
-      for (const version of v) {
-        const included = satisfies(version, range, options);
-        if (included) {
-          prev = version;
-          if (!first) {
-            first = version;
-          }
-        } else {
-          if (prev) {
-            set.push([first, prev]);
-          }
-          prev = null;
-          first = null;
-        }
-      }
-      if (first) {
-        set.push([first, null]);
-      }
-      const ranges = [];
-      for (const [min, max] of set) {
-        if (min === max) {
-          ranges.push(min);
-        } else if (!max && min === v[0]) {
-          ranges.push("*");
-        } else if (!max) {
-          ranges.push(`>=${min}`);
-        } else if (min === v[0]) {
-          ranges.push(`<=${max}`);
-        } else {
-          ranges.push(`${min} - ${max}`);
-        }
-      }
-      const simplified = ranges.join(" || ");
-      const original = typeof range.raw === "string" ? range.raw : String(range);
-      return simplified.length < original.length ? simplified : range;
-    };
-  }
-});
-
-// node_modules/semver/ranges/subset.js
-var require_subset = __commonJS({
-  "node_modules/semver/ranges/subset.js"(exports, module) {
-    var Range = require_range();
-    var Comparator = require_comparator();
-    var { ANY } = Comparator;
-    var satisfies = require_satisfies();
-    var compare = require_compare();
-    var subset = (sub, dom, options = {}) => {
-      if (sub === dom) {
-        return true;
-      }
-      sub = new Range(sub, options);
-      dom = new Range(dom, options);
-      let sawNonNull = false;
-      OUTER: for (const simpleSub of sub.set) {
-        for (const simpleDom of dom.set) {
-          const isSub = simpleSubset(simpleSub, simpleDom, options);
-          sawNonNull = sawNonNull || isSub !== null;
-          if (isSub) {
-            continue OUTER;
-          }
-        }
-        if (sawNonNull) {
-          return false;
-        }
-      }
-      return true;
-    };
-    var minimumVersionWithPreRelease = [new Comparator(">=0.0.0-0")];
-    var minimumVersion = [new Comparator(">=0.0.0")];
-    var simpleSubset = (sub, dom, options) => {
-      if (sub === dom) {
-        return true;
-      }
-      if (sub.length === 1 && sub[0].semver === ANY) {
-        if (dom.length === 1 && dom[0].semver === ANY) {
-          return true;
-        } else if (options.includePrerelease) {
-          sub = minimumVersionWithPreRelease;
-        } else {
-          sub = minimumVersion;
-        }
-      }
-      if (dom.length === 1 && dom[0].semver === ANY) {
-        if (options.includePrerelease) {
-          return true;
-        } else {
-          dom = minimumVersion;
-        }
-      }
-      const eqSet = /* @__PURE__ */ new Set();
-      let gt, lt;
-      for (const c of sub) {
-        if (c.operator === ">" || c.operator === ">=") {
-          gt = higherGT(gt, c, options);
-        } else if (c.operator === "<" || c.operator === "<=") {
-          lt = lowerLT(lt, c, options);
-        } else {
-          eqSet.add(c.semver);
-        }
-      }
-      if (eqSet.size > 1) {
-        return null;
-      }
-      let gtltComp;
-      if (gt && lt) {
-        gtltComp = compare(gt.semver, lt.semver, options);
-        if (gtltComp > 0) {
-          return null;
-        } else if (gtltComp === 0 && (gt.operator !== ">=" || lt.operator !== "<=")) {
-          return null;
-        }
-      }
-      for (const eq of eqSet) {
-        if (gt && !satisfies(eq, String(gt), options)) {
-          return null;
-        }
-        if (lt && !satisfies(eq, String(lt), options)) {
-          return null;
-        }
-        for (const c of dom) {
-          if (!satisfies(eq, String(c), options)) {
-            return false;
-          }
-        }
-        return true;
-      }
-      let higher, lower;
-      let hasDomLT, hasDomGT;
-      let needDomLTPre = lt && !options.includePrerelease && lt.semver.prerelease.length ? lt.semver : false;
-      let needDomGTPre = gt && !options.includePrerelease && gt.semver.prerelease.length ? gt.semver : false;
-      if (needDomLTPre && needDomLTPre.prerelease.length === 1 && lt.operator === "<" && needDomLTPre.prerelease[0] === 0) {
-        needDomLTPre = false;
-      }
-      for (const c of dom) {
-        hasDomGT = hasDomGT || c.operator === ">" || c.operator === ">=";
-        hasDomLT = hasDomLT || c.operator === "<" || c.operator === "<=";
-        if (gt) {
-          if (needDomGTPre) {
-            if (c.semver.prerelease && c.semver.prerelease.length && c.semver.major === needDomGTPre.major && c.semver.minor === needDomGTPre.minor && c.semver.patch === needDomGTPre.patch) {
-              needDomGTPre = false;
-            }
-          }
-          if (c.operator === ">" || c.operator === ">=") {
-            higher = higherGT(gt, c, options);
-            if (higher === c && higher !== gt) {
-              return false;
-            }
-          } else if (gt.operator === ">=" && !satisfies(gt.semver, String(c), options)) {
-            return false;
-          }
-        }
-        if (lt) {
-          if (needDomLTPre) {
-            if (c.semver.prerelease && c.semver.prerelease.length && c.semver.major === needDomLTPre.major && c.semver.minor === needDomLTPre.minor && c.semver.patch === needDomLTPre.patch) {
-              needDomLTPre = false;
-            }
-          }
-          if (c.operator === "<" || c.operator === "<=") {
-            lower = lowerLT(lt, c, options);
-            if (lower === c && lower !== lt) {
-              return false;
-            }
-          } else if (lt.operator === "<=" && !satisfies(lt.semver, String(c), options)) {
-            return false;
-          }
-        }
-        if (!c.operator && (lt || gt) && gtltComp !== 0) {
-          return false;
-        }
-      }
-      if (gt && hasDomLT && !lt && gtltComp !== 0) {
-        return false;
-      }
-      if (lt && hasDomGT && !gt && gtltComp !== 0) {
-        return false;
-      }
-      if (needDomGTPre || needDomLTPre) {
-        return false;
-      }
-      return true;
-    };
-    var higherGT = (a, b, options) => {
-      if (!a) {
-        return b;
-      }
-      const comp = compare(a.semver, b.semver, options);
-      return comp > 0 ? a : comp < 0 ? b : b.operator === ">" && a.operator === ">=" ? b : a;
-    };
-    var lowerLT = (a, b, options) => {
-      if (!a) {
-        return b;
-      }
-      const comp = compare(a.semver, b.semver, options);
-      return comp < 0 ? a : comp > 0 ? b : b.operator === "<" && a.operator === "<=" ? b : a;
-    };
-    module.exports = subset;
-  }
-});
-
-// node_modules/semver/index.js
-var require_semver2 = __commonJS({
-  "node_modules/semver/index.js"(exports, module) {
-    var internalRe = require_re();
-    var constants3 = require_constants6();
-    var SemVer = require_semver();
-    var identifiers = require_identifiers();
-    var parse = require_parse2();
-    var valid = require_valid();
-    var clean = require_clean();
-    var inc = require_inc();
-    var diff = require_diff();
-    var major = require_major();
-    var minor = require_minor();
-    var patch = require_patch();
-    var prerelease = require_prerelease();
-    var compare = require_compare();
-    var rcompare = require_rcompare();
-    var compareLoose = require_compare_loose();
-    var compareBuild = require_compare_build();
-    var sort = require_sort();
-    var rsort = require_rsort();
-    var gt = require_gt();
-    var lt = require_lt();
-    var eq = require_eq();
-    var neq = require_neq();
-    var gte = require_gte();
-    var lte = require_lte();
-    var cmp = require_cmp();
-    var coerce = require_coerce();
-    var Comparator = require_comparator();
-    var Range = require_range();
-    var satisfies = require_satisfies();
-    var toComparators = require_to_comparators();
-    var maxSatisfying = require_max_satisfying();
-    var minSatisfying = require_min_satisfying();
-    var minVersion = require_min_version();
-    var validRange = require_valid2();
-    var outside = require_outside();
-    var gtr = require_gtr();
-    var ltr = require_ltr();
-    var intersects = require_intersects();
-    var simplifyRange = require_simplify();
-    var subset = require_subset();
-    module.exports = {
-      parse,
-      valid,
-      clean,
-      inc,
-      diff,
-      major,
-      minor,
-      patch,
-      prerelease,
-      compare,
-      rcompare,
-      compareLoose,
-      compareBuild,
-      sort,
-      rsort,
-      gt,
-      lt,
-      eq,
-      neq,
-      gte,
-      lte,
-      cmp,
-      coerce,
-      Comparator,
-      Range,
-      satisfies,
-      toComparators,
-      maxSatisfying,
-      minSatisfying,
-      minVersion,
-      validRange,
-      outside,
-      gtr,
-      ltr,
-      intersects,
-      simplifyRange,
-      subset,
-      SemVer,
-      re: internalRe.re,
-      src: internalRe.src,
-      tokens: internalRe.t,
-      SEMVER_SPEC_VERSION: constants3.SEMVER_SPEC_VERSION,
-      RELEASE_TYPES: constants3.RELEASE_TYPES,
-      compareIdentifiers: identifiers.compareIdentifiers,
-      rcompareIdentifiers: identifiers.rcompareIdentifiers
-    };
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/evaluation/Operations.js
-var require_Operations = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/evaluation/Operations.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var semver_1 = require_semver2();
-    var js_sdk_common_1 = require_cjs();
+        return evalTarget(flag, target, context);
+      });
+    }
+    function makeBigSegmentRef(segment) {
+      return `${segment.key}.g${segment.generation}`;
+    }
+    var import_parse = __toESM2(require_parse2(), 1);
+    var import_js_sdk_common15 = require_cjs();
     var VERSION_COMPONENTS_REGEX = /^\d+(\.\d+)?(\.\d+)?/;
     function parseSemver(input) {
-      if (js_sdk_common_1.TypeValidators.String.is(input) && !input.startsWith("v")) {
-        const parsed = (0, semver_1.parse)(input);
+      if (import_js_sdk_common15.TypeValidators.String.is(input) && !input.startsWith("v")) {
+        const parsed = (0, import_parse.default)(input);
         if (parsed) {
           return parsed;
         }
@@ -28097,7 +25585,7 @@ var require_Operations = __commonJS({
             }
           }
           transformed += input.substring(components[0].length);
-          return (0, semver_1.parse)(transformed);
+          return (0, import_parse.default)(transformed);
         }
       }
       return null;
@@ -28129,22 +25617,25 @@ var require_Operations = __commonJS({
     function safeRegexMatch(pattern, value) {
       try {
         return new RegExp(pattern).test(value);
-      } catch (_a) {
+      } catch (e) {
         return false;
       }
     }
     var operators = {
       in: (a, b) => a === b,
-      endsWith: makeOperator((a, b) => a.endsWith(b), js_sdk_common_1.TypeValidators.String),
-      startsWith: makeOperator((a, b) => a.startsWith(b), js_sdk_common_1.TypeValidators.String),
-      matches: makeOperator((value, pattern) => safeRegexMatch(pattern, value), js_sdk_common_1.TypeValidators.String),
-      contains: makeOperator((a, b) => a.indexOf(b) > -1, js_sdk_common_1.TypeValidators.String),
-      lessThan: makeOperator((a, b) => a < b, js_sdk_common_1.TypeValidators.Number),
-      lessThanOrEqual: makeOperator((a, b) => a <= b, js_sdk_common_1.TypeValidators.Number),
-      greaterThan: makeOperator((a, b) => a > b, js_sdk_common_1.TypeValidators.Number),
-      greaterThanOrEqual: makeOperator((a, b) => a >= b, js_sdk_common_1.TypeValidators.Number),
-      before: makeOperator((a, b) => a < b, js_sdk_common_1.TypeValidators.Date, parseDate),
-      after: makeOperator((a, b) => a > b, js_sdk_common_1.TypeValidators.Date, parseDate),
+      endsWith: makeOperator((a, b) => a.endsWith(b), import_js_sdk_common15.TypeValidators.String),
+      startsWith: makeOperator((a, b) => a.startsWith(b), import_js_sdk_common15.TypeValidators.String),
+      matches: makeOperator(
+        (value, pattern) => safeRegexMatch(pattern, value),
+        import_js_sdk_common15.TypeValidators.String
+      ),
+      contains: makeOperator((a, b) => a.indexOf(b) > -1, import_js_sdk_common15.TypeValidators.String),
+      lessThan: makeOperator((a, b) => a < b, import_js_sdk_common15.TypeValidators.Number),
+      lessThanOrEqual: makeOperator((a, b) => a <= b, import_js_sdk_common15.TypeValidators.Number),
+      greaterThan: makeOperator((a, b) => a > b, import_js_sdk_common15.TypeValidators.Number),
+      greaterThanOrEqual: makeOperator((a, b) => a >= b, import_js_sdk_common15.TypeValidators.Number),
+      before: makeOperator((a, b) => a < b, import_js_sdk_common15.TypeValidators.Date, parseDate),
+      after: makeOperator((a, b) => a > b, import_js_sdk_common15.TypeValidators.Date, parseDate),
       semVerEqual: semVerOperator((a, b) => a.compare(b) === 0),
       semVerLessThan: semVerOperator((a, b) => a.compare(b) < 0),
       semVerGreaterThan: semVerOperator((a, b) => a.compare(b) > 0)
@@ -28155,29 +25646,17 @@ var require_Operations = __commonJS({
       }
       static execute(op, a, b) {
         var _a, _b;
-        return (_b = (_a = operators[op]) === null || _a === void 0 ? void 0 : _a.call(operators, a, b)) !== null && _b !== void 0 ? _b : false;
+        return (_b = (_a = operators[op]) == null ? void 0 : _a.call(operators, a, b)) != null ? _b : false;
       }
     };
-    exports.default = Operators;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/evaluation/matchClause.js
-var require_matchClause = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/evaluation/matchClause.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.maybeNegate = void 0;
-    var Operations_1 = require_Operations();
     function maybeNegate(clause, value) {
       if (clause.negate) {
         return !value;
       }
       return value;
     }
-    exports.maybeNegate = maybeNegate;
     function matchAny(op, value, values) {
-      return values.some((testValue) => Operations_1.default.execute(op, value, testValue));
+      return values.some((testValue) => Operators.execute(op, value, testValue));
     }
     function matchClauseWithoutSegmentOperations(clause, context) {
       const contextValue = context.valueForKind(clause.attributeReference, clause.contextKind);
@@ -28185,19 +25664,13 @@ var require_matchClause = __commonJS({
         return false;
       }
       if (Array.isArray(contextValue)) {
-        return maybeNegate(clause, contextValue.some((value) => matchAny(clause.op, value, clause.values)));
+        return maybeNegate(
+          clause,
+          contextValue.some((value) => matchAny(clause.op, value, clause.values))
+        );
       }
       return maybeNegate(clause, matchAny(clause.op, contextValue, clause.values));
     }
-    exports.default = matchClauseWithoutSegmentOperations;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/evaluation/matchSegmentTargets.js
-var require_matchSegmentTargets = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/evaluation/matchSegmentTargets.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
     function segmentSearch(context, contextTargets, userTargets, userTargetSet) {
       if (contextTargets) {
         for (let targetIndex = 0; targetIndex < contextTargets.length; targetIndex += 1) {
@@ -28232,36 +25705,27 @@ var require_matchSegmentTargets = __commonJS({
       return false;
     }
     function matchSegmentTargets(segment, context) {
-      const included = segmentSearch(context, segment.includedContexts, segment.included, segment.generated_includedSet);
+      const included = segmentSearch(
+        context,
+        segment.includedContexts,
+        segment.included,
+        segment.generated_includedSet
+      );
       if (included) {
         return true;
       }
-      const excluded = segmentSearch(context, segment.excludedContexts, segment.excluded, segment.generated_excludedSet);
+      const excluded = segmentSearch(
+        context,
+        segment.excludedContexts,
+        segment.excluded,
+        segment.generated_excludedSet
+      );
       if (excluded) {
         return !excluded;
       }
       return void 0;
     }
-    exports.default = matchSegmentTargets;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/evaluation/Evaluator.js
-var require_Evaluator = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/evaluation/Evaluator.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var js_sdk_common_1 = require_cjs();
-    var Bucketer_1 = require_Bucketer();
-    var collection_1 = require_collection();
-    var EvalResult_1 = require_EvalResult();
-    var evalTargets_1 = require_evalTargets();
-    var makeBigSegmentRef_1 = require_makeBigSegmentRef();
-    var matchClause_1 = require_matchClause();
-    var matchSegmentTargets_1 = require_matchSegmentTargets();
-    var Reasons_1 = require_Reasons();
-    var variations_1 = require_variations();
-    var { ErrorKinds } = js_sdk_common_1.internal;
+    var { ErrorKinds: ErrorKinds2 } = import_js_sdk_common16.internal;
     var bigSegmentsStatusPriority = {
       HEALTHY: 1,
       STALE: 2,
@@ -28287,9 +25751,9 @@ var require_Evaluator = __commonJS({
       return { error: true, isMatch: false, result };
     }
     var Evaluator = class {
-      constructor(platform2, queries) {
+      constructor(platform22, queries) {
         this._queries = queries;
-        this._bucketer = new Bucketer_1.default(platform2.crypto);
+        this._bucketer = new Bucketer(platform22.crypto);
       }
       async evaluate(flag, context, eventFactory) {
         return new Promise((resolve) => {
@@ -28298,16 +25762,26 @@ var require_Evaluator = __commonJS({
       }
       evaluateCb(flag, context, cb, eventFactory) {
         const state = {};
-        this._evaluateInternal(flag, context, state, [], (res) => {
-          if (state.bigSegmentsStatus) {
-            res.detail.reason = Object.assign(Object.assign({}, res.detail.reason), { bigSegmentsStatus: state.bigSegmentsStatus });
-          }
-          if (state.prerequisites) {
-            res.prerequisites = state.prerequisites;
-          }
-          res.events = state.events;
-          cb(res);
-        }, true, eventFactory);
+        this._evaluateInternal(
+          flag,
+          context,
+          state,
+          [],
+          (res) => {
+            if (state.bigSegmentsStatus) {
+              res.detail.reason = __spreadProps(__spreadValues({}, res.detail.reason), {
+                bigSegmentsStatus: state.bigSegmentsStatus
+              });
+            }
+            if (state.prerequisites) {
+              res.prerequisites = state.prerequisites;
+            }
+            res.events = state.events;
+            cb(res);
+          },
+          true,
+          eventFactory
+        );
       }
       /**
        * Evaluate the given flag against the given context. This internal method is entered
@@ -28323,27 +25797,35 @@ var require_Evaluator = __commonJS({
        */
       _evaluateInternal(flag, context, state, visitedFlags, cb, topLevel, eventFactory) {
         if (!flag.on) {
-          cb((0, variations_1.getOffVariation)(flag, Reasons_1.default.Off));
+          cb(getOffVariation(flag, Reasons.Off));
           return;
         }
-        this._checkPrerequisites(flag, context, state, visitedFlags, (res) => {
-          if (res) {
-            cb(res);
-            return;
-          }
-          const targetRes = (0, evalTargets_1.default)(flag, context);
-          if (targetRes) {
-            cb(targetRes);
-            return;
-          }
-          this._evaluateRules(flag, context, state, (evalRes) => {
-            if (evalRes) {
-              cb(evalRes);
+        this._checkPrerequisites(
+          flag,
+          context,
+          state,
+          visitedFlags,
+          (res) => {
+            if (res) {
+              cb(res);
               return;
             }
-            cb(this._variationForContext(flag.fallthrough, context, flag, Reasons_1.default.Fallthrough));
-          });
-        }, topLevel, eventFactory);
+            const targetRes = evalTargets(flag, context);
+            if (targetRes) {
+              cb(targetRes);
+              return;
+            }
+            this._evaluateRules(flag, context, state, (evalRes) => {
+              if (evalRes) {
+                cb(evalRes);
+                return;
+              }
+              cb(this._variationForContext(flag.fallthrough, context, flag, Reasons.Fallthrough));
+            });
+          },
+          topLevel,
+          eventFactory
+        );
       }
       /**
        * Evaluate the prerequisite flags for the given flag.
@@ -28363,52 +25845,61 @@ var require_Evaluator = __commonJS({
           cb(void 0);
           return;
         }
-        (0, collection_1.allSeriesAsync)(flag.prerequisites, (prereq, _index, iterCb) => {
-          if (visitedFlags.indexOf(prereq.key) !== -1) {
-            prereqResult = EvalResult_1.default.forError(ErrorKinds.MalformedFlag, `Prerequisite of ${flag.key} causing a circular reference. This is probably a temporary condition due to an incomplete update.`);
-            iterCb(true);
-            return;
-          }
-          const updatedVisitedFlags = [...visitedFlags, prereq.key];
-          this._queries.getFlag(prereq.key, (prereqFlag) => {
-            if (!prereqFlag) {
-              prereqResult = (0, variations_1.getOffVariation)(flag, Reasons_1.default.prerequisiteFailed(prereq.key));
-              iterCb(false);
+        allSeriesAsync(
+          flag.prerequisites,
+          (prereq, _index, iterCb) => {
+            if (visitedFlags.indexOf(prereq.key) !== -1) {
+              prereqResult = EvalResult.forError(
+                ErrorKinds2.MalformedFlag,
+                `Prerequisite of ${flag.key} causing a circular reference. This is probably a temporary condition due to an incomplete update.`
+              );
+              iterCb(true);
               return;
             }
-            this._evaluateInternal(
-              prereqFlag,
-              context,
-              state,
-              updatedVisitedFlags,
-              (res) => {
-                var _a, _b;
-                (_a = state.events) !== null && _a !== void 0 ? _a : state.events = [];
-                if (topLevel) {
-                  (_b = state.prerequisites) !== null && _b !== void 0 ? _b : state.prerequisites = [];
-                  state.prerequisites.push(prereqFlag.key);
-                }
-                if (eventFactory) {
-                  state.events.push(eventFactory.evalEventServer(prereqFlag, context, res.detail, null, flag));
-                }
-                if (res.isError) {
-                  prereqResult = res;
-                  return iterCb(false);
-                }
-                if (res.isOff || res.detail.variationIndex !== prereq.variation) {
-                  prereqResult = (0, variations_1.getOffVariation)(flag, Reasons_1.default.prerequisiteFailed(prereq.key));
-                  return iterCb(false);
-                }
-                return iterCb(true);
-              },
-              false,
-              // topLevel false evaluating the prerequisite.
-              eventFactory
-            );
-          });
-        }, () => {
-          cb(prereqResult);
-        });
+            const updatedVisitedFlags = [...visitedFlags, prereq.key];
+            this._queries.getFlag(prereq.key, (prereqFlag) => {
+              if (!prereqFlag) {
+                prereqResult = getOffVariation(flag, Reasons.prerequisiteFailed(prereq.key));
+                iterCb(false);
+                return;
+              }
+              this._evaluateInternal(
+                prereqFlag,
+                context,
+                state,
+                updatedVisitedFlags,
+                (res) => {
+                  var _a, _b;
+                  (_a = state.events) != null ? _a : state.events = [];
+                  if (topLevel) {
+                    (_b = state.prerequisites) != null ? _b : state.prerequisites = [];
+                    state.prerequisites.push(prereqFlag.key);
+                  }
+                  if (eventFactory) {
+                    state.events.push(
+                      eventFactory.evalEventServer(prereqFlag, context, res.detail, null, flag)
+                    );
+                  }
+                  if (res.isError) {
+                    prereqResult = res;
+                    return iterCb(false);
+                  }
+                  if (res.isOff || res.detail.variationIndex !== prereq.variation) {
+                    prereqResult = getOffVariation(flag, Reasons.prerequisiteFailed(prereq.key));
+                    return iterCb(false);
+                  }
+                  return iterCb(true);
+                },
+                false,
+                // topLevel false evaluating the prerequisite.
+                eventFactory
+              );
+            });
+          },
+          () => {
+            cb(prereqResult);
+          }
+        );
       }
       /**
        * Evaluate the rules for a flag and return an {@link EvalResult} if there is
@@ -28421,48 +25912,63 @@ var require_Evaluator = __commonJS({
        */
       _evaluateRules(flag, context, state, cb) {
         let ruleResult;
-        (0, collection_1.firstSeriesAsync)(flag.rules, (rule, ruleIndex, iterCb) => {
-          this._ruleMatchContext(flag, rule, ruleIndex, context, state, [], (res) => {
-            ruleResult = res;
-            iterCb(!!res);
-          });
-        }, () => cb(ruleResult));
+        firstSeriesAsync(
+          flag.rules,
+          (rule, ruleIndex, iterCb) => {
+            this._ruleMatchContext(flag, rule, ruleIndex, context, state, [], (res) => {
+              ruleResult = res;
+              iterCb(!!res);
+            });
+          },
+          () => cb(ruleResult)
+        );
       }
       _clauseMatchContext(clause, context, segmentsVisited, state, cb) {
         let errorResult;
         if (clause.op === "segmentMatch") {
-          (0, collection_1.firstSeriesAsync)(clause.values, (value, _index, iterCb) => {
-            this._queries.getSegment(value, (segment) => {
-              if (segment) {
-                if (segmentsVisited.includes(segment.key)) {
-                  errorResult = EvalResult_1.default.forError(ErrorKinds.MalformedFlag, `Segment rule referencing segment ${segment.key} caused a circular reference. This is probably a temporary condition due to an incomplete update`);
-                  iterCb(true);
-                  return;
-                }
-                const newVisited = [...segmentsVisited, segment === null || segment === void 0 ? void 0 : segment.key];
-                this.segmentMatchContext(segment, context, state, newVisited, (res) => {
-                  if (res.error) {
-                    errorResult = res.result;
+          firstSeriesAsync(
+            clause.values,
+            (value, _index, iterCb) => {
+              this._queries.getSegment(value, (segment) => {
+                if (segment) {
+                  if (segmentsVisited.includes(segment.key)) {
+                    errorResult = EvalResult.forError(
+                      ErrorKinds2.MalformedFlag,
+                      `Segment rule referencing segment ${segment.key} caused a circular reference. This is probably a temporary condition due to an incomplete update`
+                    );
+                    iterCb(true);
+                    return;
                   }
-                  iterCb(res.error || res.isMatch);
-                });
-              } else {
-                iterCb(false);
+                  const newVisited = [...segmentsVisited, segment == null ? void 0 : segment.key];
+                  this.segmentMatchContext(segment, context, state, newVisited, (res) => {
+                    if (res.error) {
+                      errorResult = res.result;
+                    }
+                    iterCb(res.error || res.isMatch);
+                  });
+                } else {
+                  iterCb(false);
+                }
+              });
+            },
+            (match) => {
+              if (errorResult) {
+                return cb(makeError(errorResult));
               }
-            });
-          }, (match) => {
-            if (errorResult) {
-              return cb(makeError(errorResult));
+              return cb(makeMatch(maybeNegate(clause, match)));
             }
-            return cb(makeMatch((0, matchClause_1.maybeNegate)(clause, match)));
-          });
+          );
           return;
         }
         if (!clause.attributeReference.isValid) {
-          cb(makeError(EvalResult_1.default.forError(ErrorKinds.MalformedFlag, "Invalid attribute reference in clause")));
+          cb(
+            makeError(
+              EvalResult.forError(ErrorKinds2.MalformedFlag, "Invalid attribute reference in clause")
+            )
+          );
           return;
         }
-        cb(makeMatch((0, matchClause_1.default)(clause, context)));
+        cb(makeMatch(matchClauseWithoutSegmentOperations(clause, context)));
       }
       /**
        * Evaluate a flag rule against the given context.
@@ -28479,104 +25985,144 @@ var require_Evaluator = __commonJS({
           return;
         }
         let errorResult;
-        (0, collection_1.allSeriesAsync)(rule.clauses, (clause, _index, iterCb) => {
-          this._clauseMatchContext(clause, context, segmentsVisited, state, (res) => {
-            errorResult = res.result;
-            return iterCb(res.error || res.isMatch);
-          });
-        }, (match) => {
-          if (errorResult) {
-            return cb(errorResult);
+        allSeriesAsync(
+          rule.clauses,
+          (clause, _index, iterCb) => {
+            this._clauseMatchContext(clause, context, segmentsVisited, state, (res) => {
+              errorResult = res.result;
+              return iterCb(res.error || res.isMatch);
+            });
+          },
+          (match) => {
+            if (errorResult) {
+              return cb(errorResult);
+            }
+            if (match) {
+              return cb(
+                this._variationForContext(rule, context, flag, Reasons.ruleMatch(rule.id, ruleIndex))
+              );
+            }
+            return cb(void 0);
           }
-          if (match) {
-            return cb(this._variationForContext(rule, context, flag, Reasons_1.default.ruleMatch(rule.id, ruleIndex)));
-          }
-          return cb(void 0);
-        });
+        );
       }
       _variationForContext(varOrRollout, context, flag, reason) {
         if (varOrRollout === void 0) {
-          return EvalResult_1.default.forError(ErrorKinds.MalformedFlag, "Fallthrough variation undefined");
+          return EvalResult.forError(ErrorKinds2.MalformedFlag, "Fallthrough variation undefined");
         }
         if (varOrRollout.variation !== void 0) {
-          return (0, variations_1.getVariation)(flag, varOrRollout.variation, reason);
+          return getVariation(flag, varOrRollout.variation, reason);
         }
         if (varOrRollout.rollout) {
           const { rollout } = varOrRollout;
           const { variations } = rollout;
-          const isExperiment = rollout.kind === "experiment";
+          const isExperiment2 = rollout.kind === "experiment";
           if (variations && variations.length) {
-            const bucketBy = (0, variations_1.getBucketBy)(isExperiment, rollout.bucketByAttributeReference);
+            const bucketBy = getBucketBy(isExperiment2, rollout.bucketByAttributeReference);
             if (!bucketBy.isValid) {
-              return EvalResult_1.default.forError(ErrorKinds.MalformedFlag, "Invalid attribute reference for bucketBy in rollout");
+              return EvalResult.forError(
+                ErrorKinds2.MalformedFlag,
+                "Invalid attribute reference for bucketBy in rollout"
+              );
             }
-            const [bucket, hadContext] = this._bucketer.bucket(context, flag.key, bucketBy, flag.salt || "", rollout.contextKind, rollout.seed);
-            const updatedReason = Object.assign({}, reason);
+            const [bucket, hadContext] = this._bucketer.bucket(
+              context,
+              flag.key,
+              bucketBy,
+              flag.salt || "",
+              rollout.contextKind,
+              rollout.seed
+            );
+            const updatedReason = __spreadValues({}, reason);
             let sum = 0;
             for (let i = 0; i < variations.length; i += 1) {
               const variate = variations[i];
               sum += variate.weight / 1e5;
               if (bucket < sum) {
-                if (isExperiment && hadContext && !variate.untracked) {
+                if (isExperiment2 && hadContext && !variate.untracked) {
                   updatedReason.inExperiment = true;
                 }
-                return (0, variations_1.getVariation)(flag, variate.variation, updatedReason);
+                return getVariation(flag, variate.variation, updatedReason);
               }
             }
             const lastVariate = variations[variations.length - 1];
-            if (isExperiment && !lastVariate.untracked) {
+            if (isExperiment2 && !lastVariate.untracked) {
               updatedReason.inExperiment = true;
             }
-            return (0, variations_1.getVariation)(flag, lastVariate.variation, updatedReason);
+            return getVariation(flag, lastVariate.variation, updatedReason);
           }
         }
-        return EvalResult_1.default.forError(ErrorKinds.MalformedFlag, "Variation/rollout object with no variation or rollout");
+        return EvalResult.forError(
+          ErrorKinds2.MalformedFlag,
+          "Variation/rollout object with no variation or rollout"
+        );
       }
       segmentRuleMatchContext(segment, rule, context, state, segmentsVisited, cb) {
         let errorResult;
-        (0, collection_1.allSeriesAsync)(rule.clauses, (clause, _index, iterCb) => {
-          this._clauseMatchContext(clause, context, segmentsVisited, state, (res) => {
-            errorResult = res.result;
-            iterCb(res.error || res.isMatch);
-          });
-        }, (match) => {
-          if (errorResult) {
-            return cb(makeError(errorResult));
-          }
-          if (match) {
-            if (rule.weight === void 0) {
-              return cb(makeMatch(match));
+        allSeriesAsync(
+          rule.clauses,
+          (clause, _index, iterCb) => {
+            this._clauseMatchContext(clause, context, segmentsVisited, state, (res) => {
+              errorResult = res.result;
+              iterCb(res.error || res.isMatch);
+            });
+          },
+          (match) => {
+            if (errorResult) {
+              return cb(makeError(errorResult));
             }
-            const bucketBy = (0, variations_1.getBucketBy)(false, rule.bucketByAttributeReference);
-            if (!bucketBy.isValid) {
-              return cb(makeError(EvalResult_1.default.forError(ErrorKinds.MalformedFlag, "Invalid attribute reference in clause")));
+            if (match) {
+              if (rule.weight === void 0) {
+                return cb(makeMatch(match));
+              }
+              const bucketBy = getBucketBy(false, rule.bucketByAttributeReference);
+              if (!bucketBy.isValid) {
+                return cb(
+                  makeError(
+                    EvalResult.forError(
+                      ErrorKinds2.MalformedFlag,
+                      "Invalid attribute reference in clause"
+                    )
+                  )
+                );
+              }
+              const [bucket] = this._bucketer.bucket(
+                context,
+                segment.key,
+                bucketBy,
+                segment.salt || "",
+                rule.rolloutContextKind
+              );
+              return cb(makeMatch(bucket < rule.weight / 1e5));
             }
-            const [bucket] = this._bucketer.bucket(context, segment.key, bucketBy, segment.salt || "", rule.rolloutContextKind);
-            return cb(makeMatch(bucket < rule.weight / 1e5));
+            return cb(makeMatch(false));
           }
-          return cb(makeMatch(false));
-        });
+        );
       }
       simpleSegmentMatchContext(segment, context, state, segmentsVisited, cb) {
         if (!segment.unbounded) {
-          const includeExclude = (0, matchSegmentTargets_1.default)(segment, context);
+          const includeExclude = matchSegmentTargets(segment, context);
           if (includeExclude !== void 0) {
             cb(makeMatch(includeExclude));
             return;
           }
         }
         let evalResult;
-        (0, collection_1.firstSeriesAsync)(segment.rules, (rule, _index, iterCb) => {
-          this.segmentRuleMatchContext(segment, rule, context, state, segmentsVisited, (res) => {
-            evalResult = res.result;
-            return iterCb(res.error || res.isMatch);
-          });
-        }, (matched) => {
-          if (evalResult) {
-            return cb(makeError(evalResult));
+        firstSeriesAsync(
+          segment.rules,
+          (rule, _index, iterCb) => {
+            this.segmentRuleMatchContext(segment, rule, context, state, segmentsVisited, (res) => {
+              evalResult = res.result;
+              return iterCb(res.error || res.isMatch);
+            });
+          },
+          (matched) => {
+            if (evalResult) {
+              return cb(makeError(evalResult));
+            }
+            return cb(makeMatch(matched));
           }
-          return cb(makeMatch(matched));
-        });
+        );
       }
       segmentMatchContext(segment, context, state, segmentsVisited, cb) {
         if (!segment.unbounded) {
@@ -28590,12 +26136,20 @@ var require_Evaluator = __commonJS({
           return;
         }
         if (!segment.generation) {
-          state.bigSegmentsStatus = computeUpdatedBigSegmentsStatus(state.bigSegmentsStatus, "NOT_CONFIGURED");
+          state.bigSegmentsStatus = computeUpdatedBigSegmentsStatus(
+            state.bigSegmentsStatus,
+            "NOT_CONFIGURED"
+          );
           cb(makeMatch(false));
           return;
         }
         if (state.bigSegmentsMembership && state.bigSegmentsMembership[keyForBigSegment]) {
-          this.bigSegmentMatchContext(state.bigSegmentsMembership[keyForBigSegment], segment, context, state).then(cb);
+          this.bigSegmentMatchContext(
+            state.bigSegmentsMembership[keyForBigSegment],
+            segment,
+            context,
+            state
+          ).then(cb);
           return;
         }
         this._queries.getBigSegmentsMembership(keyForBigSegment).then((result) => {
@@ -28603,16 +26157,27 @@ var require_Evaluator = __commonJS({
           if (result) {
             const [membership, status] = result;
             state.bigSegmentsMembership[keyForBigSegment] = membership;
-            state.bigSegmentsStatus = computeUpdatedBigSegmentsStatus(state.bigSegmentsStatus, status);
+            state.bigSegmentsStatus = computeUpdatedBigSegmentsStatus(
+              state.bigSegmentsStatus,
+              status
+            );
           } else {
-            state.bigSegmentsStatus = computeUpdatedBigSegmentsStatus(state.bigSegmentsStatus, "NOT_CONFIGURED");
+            state.bigSegmentsStatus = computeUpdatedBigSegmentsStatus(
+              state.bigSegmentsStatus,
+              "NOT_CONFIGURED"
+            );
           }
-          this.bigSegmentMatchContext(state.bigSegmentsMembership[keyForBigSegment], segment, context, state).then(cb);
+          this.bigSegmentMatchContext(
+            state.bigSegmentsMembership[keyForBigSegment],
+            segment,
+            context,
+            state
+          ).then(cb);
         });
       }
       bigSegmentMatchContext(membership, segment, context, state) {
-        const segmentRef = (0, makeBigSegmentRef_1.default)(segment);
-        const included = membership === null || membership === void 0 ? void 0 : membership[segmentRef];
+        const segmentRef = makeBigSegmentRef(segment);
+        const included = membership == null ? void 0 : membership[segmentRef];
         return new Promise((resolve) => {
           if (included !== void 0 && included !== null) {
             resolve(makeMatch(included));
@@ -28622,19 +26187,9 @@ var require_Evaluator = __commonJS({
         });
       }
     };
-    exports.default = Evaluator;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/events/ContextDeduplicator.js
-var require_ContextDeduplicator = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/events/ContextDeduplicator.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var LruCache_1 = require_LruCache();
     var ContextDeduplicator = class {
       constructor(options) {
-        this._contextKeysCache = new LruCache_1.default({ max: options.contextKeysCapacity });
+        this._contextKeysCache = new LruCache({ max: options.contextKeysCapacity });
         this.flushInterval = options.contextKeysFlushInterval;
       }
       processContext(context) {
@@ -28647,15 +26202,7 @@ var require_ContextDeduplicator = __commonJS({
         this._contextKeysCache.clear();
       }
     };
-    exports.default = ContextDeduplicator;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/events/isExperiment.js
-var require_isExperiment = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/events/isExperiment.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
+    var import_js_sdk_common17 = require_cjs();
     function isExperiment(flag, reason) {
       if (reason) {
         if (reason.inExperiment) {
@@ -28677,21 +26224,10 @@ var require_isExperiment = __commonJS({
       }
       return false;
     }
-    exports.default = isExperiment;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/events/EventFactory.js
-var require_EventFactory = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/events/EventFactory.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var js_sdk_common_1 = require_cjs();
-    var isExperiment_1 = require_isExperiment();
-    var EventFactory = class extends js_sdk_common_1.internal.EventFactoryBase {
+    var EventFactory = class extends import_js_sdk_common17.internal.EventFactoryBase {
       evalEventServer(flag, context, detail, defaultVal, prereqOfFlag) {
         var _a;
-        const addExperimentData = (0, isExperiment_1.default)(flag, detail.reason);
+        const addExperimentData = isExperiment(flag, detail.reason);
         return super.evalEvent({
           addExperimentData,
           context,
@@ -28699,25 +26235,16 @@ var require_EventFactory = __commonJS({
           defaultVal,
           excludeFromSummaries: flag.excludeFromSummaries,
           flagKey: flag.key,
-          prereqOfFlagKey: prereqOfFlag === null || prereqOfFlag === void 0 ? void 0 : prereqOfFlag.key,
+          prereqOfFlagKey: prereqOfFlag == null ? void 0 : prereqOfFlag.key,
           reason: detail.reason,
           samplingRatio: flag.samplingRatio,
           trackEvents: flag.trackEvents || addExperimentData,
           value: detail.value,
-          variation: (_a = detail.variationIndex) !== null && _a !== void 0 ? _a : void 0,
+          variation: (_a = detail.variationIndex) != null ? _a : void 0,
           version: flag.version
         });
       }
     };
-    exports.default = EventFactory;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/FlagsStateBuilder.js
-var require_FlagsStateBuilder = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/FlagsStateBuilder.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
     var FlagsStateBuilder = class {
       constructor(_valid, _withReasons) {
         this._valid = _valid;
@@ -28759,21 +26286,15 @@ var require_FlagsStateBuilder = __commonJS({
           getFlagValue: (key) => this._flagValues[key],
           getFlagReason: (key) => {
             var _a;
-            return (_a = this._flagMetadata[key] ? this._flagMetadata[key].reason : null) !== null && _a !== void 0 ? _a : null;
+            return (_a = this._flagMetadata[key] ? this._flagMetadata[key].reason : null) != null ? _a : null;
           },
-          toJSON: () => Object.assign(Object.assign({}, this._flagValues), { $flagsState: this._flagMetadata, $valid: this._valid })
+          toJSON: () => __spreadProps(__spreadValues({}, this._flagValues), {
+            $flagsState: this._flagMetadata,
+            $valid: this._valid
+          })
         };
       }
     };
-    exports.default = FlagsStateBuilder;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/hooks/HookRunner.js
-var require_HookRunner = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/hooks/HookRunner.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
     var BEFORE_EVALUATION_STAGE_NAME = "beforeEvaluation";
     var AFTER_EVALUATION_STAGE_NAME = "afterEvaluation";
     var UNKNOWN_HOOK_NAME = "unknown hook";
@@ -28787,10 +26308,17 @@ var require_HookRunner = __commonJS({
         if (this._hooks.length === 0) {
           return method();
         }
-        return this.withEvaluationSeriesExtraDetail(key, context, defaultValue, methodName, async () => {
-          const detail = await method();
-          return { detail };
-        }, environmentId).then(({ detail }) => detail);
+        return this.withEvaluationSeriesExtraDetail(
+          key,
+          context,
+          defaultValue,
+          methodName,
+          async () => {
+            const detail = await method();
+            return { detail };
+          },
+          environmentId
+        ).then(({ detail }) => detail);
       }
       /**
        * This function allows extra information to be returned with the detail for situations like
@@ -28811,16 +26339,18 @@ var require_HookRunner = __commonJS({
         try {
           return stage();
         } catch (err) {
-          (_a = this._logger) === null || _a === void 0 ? void 0 : _a.error(`An error was encountered in "${method}" of the "${hookName}" hook: ${err}`);
+          (_a = this._logger) == null ? void 0 : _a.error(
+            `An error was encountered in "${method}" of the "${hookName}" hook: ${err}`
+          );
           return {};
         }
       }
       _hookName(hook) {
         var _a, _b;
         try {
-          return (_a = hook === null || hook === void 0 ? void 0 : hook.getMetadata().name) !== null && _a !== void 0 ? _a : UNKNOWN_HOOK_NAME;
-        } catch (_c) {
-          (_b = this._logger) === null || _b === void 0 ? void 0 : _b.error(`Exception thrown getting metadata for hook. Unable to get hook name.`);
+          return (_a = hook == null ? void 0 : hook.getMetadata().name) != null ? _a : UNKNOWN_HOOK_NAME;
+        } catch (e) {
+          (_b = this._logger) == null ? void 0 : _b.error(`Exception thrown getting metadata for hook. Unable to get hook name.`);
           return UNKNOWN_HOOK_NAME;
         }
       }
@@ -28828,18 +26358,28 @@ var require_HookRunner = __commonJS({
         var _a;
         for (let hookIndex = hooks.length - 1; hookIndex >= 0; hookIndex -= 1) {
           const hook = hooks[hookIndex];
-          const data = (_a = updatedData[hookIndex]) !== null && _a !== void 0 ? _a : {};
-          this._tryExecuteStage(AFTER_EVALUATION_STAGE_NAME, this._hookName(hook), () => {
-            var _a2, _b;
-            return (_b = (_a2 = hook === null || hook === void 0 ? void 0 : hook.afterEvaluation) === null || _a2 === void 0 ? void 0 : _a2.call(hook, hookContext, data, result)) !== null && _b !== void 0 ? _b : {};
-          });
+          const data = (_a = updatedData[hookIndex]) != null ? _a : {};
+          this._tryExecuteStage(
+            AFTER_EVALUATION_STAGE_NAME,
+            this._hookName(hook),
+            () => {
+              var _a2, _b;
+              return (_b = (_a2 = hook == null ? void 0 : hook.afterEvaluation) == null ? void 0 : _a2.call(hook, hookContext, data, result)) != null ? _b : {};
+            }
+          );
         }
       }
       _executeBeforeEvaluation(hooks, hookContext) {
-        return hooks.map((hook) => this._tryExecuteStage(BEFORE_EVALUATION_STAGE_NAME, this._hookName(hook), () => {
-          var _a, _b;
-          return (_b = (_a = hook === null || hook === void 0 ? void 0 : hook.beforeEvaluation) === null || _a === void 0 ? void 0 : _a.call(hook, hookContext, {})) !== null && _b !== void 0 ? _b : {};
-        }));
+        return hooks.map(
+          (hook) => this._tryExecuteStage(
+            BEFORE_EVALUATION_STAGE_NAME,
+            this._hookName(hook),
+            () => {
+              var _a, _b;
+              return (_b = (_a = hook == null ? void 0 : hook.beforeEvaluation) == null ? void 0 : _a.call(hook, hookContext, {})) != null ? _b : {};
+            }
+          )
+        );
       }
       _prepareHooks(key, context, defaultValue, methodName, environmentId) {
         const hooks = [...this._hooks];
@@ -28856,18 +26396,9 @@ var require_HookRunner = __commonJS({
         this._hooks.push(hook);
       }
     };
-    exports.default = HookRunner;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/MigrationOpEventConversion.js
-var require_MigrationOpEventConversion = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/MigrationOpEventConversion.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var js_sdk_common_1 = require_cjs();
+    var import_js_sdk_common18 = require_cjs();
     function isOperation(value) {
-      if (!js_sdk_common_1.TypeValidators.String.is(value)) {
+      if (!import_js_sdk_common18.TypeValidators.String.is(value)) {
         return false;
       }
       return value === "read" || value === "write";
@@ -28887,10 +26418,10 @@ var require_MigrationOpEventConversion = __commonJS({
     function areValidNumbers(values) {
       const oldValue = values.old;
       const newValue = values.new;
-      if (oldValue !== void 0 && !js_sdk_common_1.TypeValidators.Number.is(oldValue)) {
+      if (oldValue !== void 0 && !import_js_sdk_common18.TypeValidators.Number.is(oldValue)) {
         return false;
       }
-      if (newValue !== void 0 && !js_sdk_common_1.TypeValidators.Number.is(newValue)) {
+      if (newValue !== void 0 && !import_js_sdk_common18.TypeValidators.Number.is(newValue)) {
         return false;
       }
       return true;
@@ -28898,20 +26429,20 @@ var require_MigrationOpEventConversion = __commonJS({
     function areValidBooleans(values) {
       const oldValue = values.old;
       const newValue = values.new;
-      if (oldValue !== void 0 && !js_sdk_common_1.TypeValidators.Boolean.is(oldValue)) {
+      if (oldValue !== void 0 && !import_js_sdk_common18.TypeValidators.Boolean.is(oldValue)) {
         return false;
       }
-      if (newValue !== void 0 && !js_sdk_common_1.TypeValidators.Boolean.is(newValue)) {
+      if (newValue !== void 0 && !import_js_sdk_common18.TypeValidators.Boolean.is(newValue)) {
         return false;
       }
       return true;
     }
     function validateMeasurement(measurement) {
-      if (!js_sdk_common_1.TypeValidators.String.is(measurement.key) || measurement.key === "") {
+      if (!import_js_sdk_common18.TypeValidators.String.is(measurement.key) || measurement.key === "") {
         return void 0;
       }
       if (isLatencyMeasurement(measurement)) {
-        if (!js_sdk_common_1.TypeValidators.Object.is(measurement.values)) {
+        if (!import_js_sdk_common18.TypeValidators.Object.is(measurement.values)) {
           return void 0;
         }
         if (!areValidNumbers(measurement.values)) {
@@ -28926,7 +26457,7 @@ var require_MigrationOpEventConversion = __commonJS({
         };
       }
       if (isErrorMeasurement(measurement)) {
-        if (!js_sdk_common_1.TypeValidators.Object.is(measurement.values)) {
+        if (!import_js_sdk_common18.TypeValidators.Object.is(measurement.values)) {
           return void 0;
         }
         if (!areValidBooleans(measurement.values)) {
@@ -28941,7 +26472,7 @@ var require_MigrationOpEventConversion = __commonJS({
         };
       }
       if (isConsistencyMeasurement(measurement)) {
-        if (!js_sdk_common_1.TypeValidators.Boolean.is(measurement.value) || !js_sdk_common_1.TypeValidators.Number.is(measurement.samplingRatio)) {
+        if (!import_js_sdk_common18.TypeValidators.Boolean.is(measurement.value) || !import_js_sdk_common18.TypeValidators.Number.is(measurement.samplingRatio)) {
           return void 0;
         }
         return {
@@ -28951,7 +26482,7 @@ var require_MigrationOpEventConversion = __commonJS({
         };
       }
       if (isInvokedMeasurement(measurement)) {
-        if (!js_sdk_common_1.TypeValidators.Object.is(measurement.values)) {
+        if (!import_js_sdk_common18.TypeValidators.Object.is(measurement.values)) {
           return void 0;
         }
         if (!areValidBooleans(measurement.values)) {
@@ -28971,13 +26502,13 @@ var require_MigrationOpEventConversion = __commonJS({
       return measurements.map(validateMeasurement).filter((value) => value !== void 0);
     }
     function validateEvaluation(evaluation) {
-      if (!js_sdk_common_1.TypeValidators.String.is(evaluation.key) || evaluation.key === "") {
+      if (!import_js_sdk_common18.TypeValidators.String.is(evaluation.key) || evaluation.key === "") {
         return void 0;
       }
-      if (!js_sdk_common_1.TypeValidators.Object.is(evaluation.reason)) {
+      if (!import_js_sdk_common18.TypeValidators.Object.is(evaluation.reason)) {
         return void 0;
       }
-      if (!js_sdk_common_1.TypeValidators.String.is(evaluation.reason.kind) || evaluation.reason.kind === "") {
+      if (!import_js_sdk_common18.TypeValidators.String.is(evaluation.reason.kind) || evaluation.reason.kind === "") {
         return void 0;
       }
       const validated = {
@@ -28990,28 +26521,28 @@ var require_MigrationOpEventConversion = __commonJS({
       };
       const inReason = evaluation.reason;
       const outReason = validated.reason;
-      if (js_sdk_common_1.TypeValidators.String.is(inReason.errorKind)) {
+      if (import_js_sdk_common18.TypeValidators.String.is(inReason.errorKind)) {
         outReason.errorKind = inReason.errorKind;
       }
-      if (js_sdk_common_1.TypeValidators.String.is(inReason.ruleId)) {
+      if (import_js_sdk_common18.TypeValidators.String.is(inReason.ruleId)) {
         outReason.ruleId = inReason.ruleId;
       }
-      if (js_sdk_common_1.TypeValidators.String.is(inReason.prerequisiteKey)) {
+      if (import_js_sdk_common18.TypeValidators.String.is(inReason.prerequisiteKey)) {
         outReason.prerequisiteKey = inReason.prerequisiteKey;
       }
-      if (js_sdk_common_1.TypeValidators.Boolean.is(inReason.inExperiment)) {
+      if (import_js_sdk_common18.TypeValidators.Boolean.is(inReason.inExperiment)) {
         outReason.inExperiment = inReason.inExperiment;
       }
-      if (js_sdk_common_1.TypeValidators.Number.is(inReason.ruleIndex)) {
+      if (import_js_sdk_common18.TypeValidators.Number.is(inReason.ruleIndex)) {
         outReason.ruleIndex = inReason.ruleIndex;
       }
-      if (js_sdk_common_1.TypeValidators.String.is(inReason.bigSegmentsStatus)) {
+      if (import_js_sdk_common18.TypeValidators.String.is(inReason.bigSegmentsStatus)) {
         outReason.bigSegmentsStatus = inReason.bigSegmentsStatus;
       }
-      if (evaluation.variation !== void 0 && js_sdk_common_1.TypeValidators.Number.is(evaluation.variation)) {
+      if (evaluation.variation !== void 0 && import_js_sdk_common18.TypeValidators.Number.is(evaluation.variation)) {
         validated.variation = evaluation.variation;
       }
-      if (evaluation.version !== void 0 && js_sdk_common_1.TypeValidators.Number.is(evaluation.version)) {
+      if (evaluation.version !== void 0 && import_js_sdk_common18.TypeValidators.Number.is(evaluation.version)) {
         validated.version = evaluation.version;
       }
       return validated;
@@ -29024,48 +26555,44 @@ var require_MigrationOpEventConversion = __commonJS({
       if (!isOperation(inEvent.operation)) {
         return void 0;
       }
-      if (!js_sdk_common_1.TypeValidators.Number.is(inEvent.creationDate)) {
+      if (!import_js_sdk_common18.TypeValidators.Number.is(inEvent.creationDate)) {
         return void 0;
       }
       const contextKeysOrContext = {};
-      if (js_sdk_common_1.TypeValidators.Object.is(inEvent.context)) {
-        const context = js_sdk_common_1.Context.fromLDContext(inEvent.context);
+      if (import_js_sdk_common18.TypeValidators.Object.is(inEvent.context)) {
+        const context = import_js_sdk_common18.Context.fromLDContext(inEvent.context);
         if (context.valid) {
           contextKeysOrContext.context = context;
         }
-      } else if (js_sdk_common_1.TypeValidators.Object.is(inEvent.contextKeys)) {
-        if (Object.keys(inEvent.contextKeys).every((key) => js_sdk_common_1.TypeValidators.Kind.is(key)) && Object.values(inEvent.contextKeys).every((value) => js_sdk_common_1.TypeValidators.String.is(value) && value !== "")) {
-          contextKeysOrContext.contextKeys = Object.assign({}, inEvent.contextKeys);
+      } else if (import_js_sdk_common18.TypeValidators.Object.is(inEvent.contextKeys)) {
+        if (Object.keys(inEvent.contextKeys).every((key) => import_js_sdk_common18.TypeValidators.Kind.is(key)) && Object.values(inEvent.contextKeys).every(
+          (value) => import_js_sdk_common18.TypeValidators.String.is(value) && value !== ""
+        )) {
+          contextKeysOrContext.contextKeys = __spreadValues({}, inEvent.contextKeys);
         }
       }
       if (!contextKeysOrContext.context && !contextKeysOrContext.contextKeys) {
         return void 0;
       }
-      const samplingRatio = (_a = inEvent.samplingRatio) !== null && _a !== void 0 ? _a : 1;
-      if (!js_sdk_common_1.TypeValidators.Number.is(samplingRatio)) {
+      const samplingRatio = (_a = inEvent.samplingRatio) != null ? _a : 1;
+      if (!import_js_sdk_common18.TypeValidators.Number.is(samplingRatio)) {
         return void 0;
       }
       const evaluation = validateEvaluation(inEvent.evaluation);
       if (!evaluation) {
         return void 0;
       }
-      return Object.assign(Object.assign({ kind: inEvent.kind, operation: inEvent.operation, creationDate: inEvent.creationDate }, contextKeysOrContext), {
+      return __spreadProps(__spreadValues({
+        kind: inEvent.kind,
+        operation: inEvent.operation,
+        creationDate: inEvent.creationDate
+      }, contextKeysOrContext), {
         measurements: validateMeasurements(inEvent.measurements),
         evaluation,
         samplingRatio
       });
     }
-    exports.default = MigrationOpEventToInputEvent;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/MigrationOpTracker.js
-var require_MigrationOpTracker = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/MigrationOpTracker.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var js_sdk_common_1 = require_cjs();
-    var data_1 = require_data();
+    var import_js_sdk_common19 = require_cjs();
     function isPopulated(data) {
       return !Number.isNaN(data);
     }
@@ -29089,7 +26616,7 @@ var require_MigrationOpTracker = __commonJS({
           old: false,
           new: false
         };
-        this._consistencyCheck = data_1.LDConsistencyCheck.NotChecked;
+        this._consistencyCheck = 2;
         this._latencyMeasurement = {
           old: NaN,
           new: NaN
@@ -29103,12 +26630,14 @@ var require_MigrationOpTracker = __commonJS({
       }
       consistency(check) {
         var _a, _b;
-        if (js_sdk_common_1.internal.shouldSample((_a = this._checkRatio) !== null && _a !== void 0 ? _a : 1)) {
+        if (import_js_sdk_common19.internal.shouldSample((_a = this._checkRatio) != null ? _a : 1)) {
           try {
             const res = check();
-            this._consistencyCheck = res ? data_1.LDConsistencyCheck.Consistent : data_1.LDConsistencyCheck.Inconsistent;
+            this._consistencyCheck = res ? 1 : 0;
           } catch (exception) {
-            (_b = this._logger) === null || _b === void 0 ? void 0 : _b.error(`Exception when executing consistency check function for migration '${this._flagKey}' the consistency check will not be included in the generated migration op event. Exception: ${exception}`);
+            (_b = this._logger) == null ? void 0 : _b.error(
+              `Exception when executing consistency check function for migration '${this._flagKey}' the consistency check will not be included in the generated migration op event. Exception: ${exception}`
+            );
           }
         }
       }
@@ -29120,20 +26649,24 @@ var require_MigrationOpTracker = __commonJS({
       }
       createEvent() {
         var _a, _b, _c, _d, _e;
-        if (!js_sdk_common_1.TypeValidators.String.is(this._flagKey) || this._flagKey === "") {
-          (_a = this._logger) === null || _a === void 0 ? void 0 : _a.error("The flag key for a migration operation must be a non-empty string.");
+        if (!import_js_sdk_common19.TypeValidators.String.is(this._flagKey) || this._flagKey === "") {
+          (_a = this._logger) == null ? void 0 : _a.error("The flag key for a migration operation must be a non-empty string.");
           return void 0;
         }
         if (!this._operation) {
-          (_b = this._logger) === null || _b === void 0 ? void 0 : _b.error('The operation must be set using "op" before an event can be created.');
+          (_b = this._logger) == null ? void 0 : _b.error('The operation must be set using "op" before an event can be created.');
           return void 0;
         }
-        if (!js_sdk_common_1.Context.fromLDContext(this._context).valid) {
-          (_c = this._logger) === null || _c === void 0 ? void 0 : _c.error("The migration was not done against a valid context and cannot generate an event.");
+        if (!import_js_sdk_common19.Context.fromLDContext(this._context).valid) {
+          (_c = this._logger) == null ? void 0 : _c.error(
+            "The migration was not done against a valid context and cannot generate an event."
+          );
           return void 0;
         }
         if (!this._wasInvoked.old && !this._wasInvoked.new) {
-          (_d = this._logger) === null || _d === void 0 ? void 0 : _d.error('The migration invoked neither the "old" or "new" implementation andan event cannot be generated');
+          (_d = this._logger) == null ? void 0 : _d.error(
+            'The migration invoked neither the "old" or "new" implementation andan event cannot be generated'
+          );
           return void 0;
         }
         if (!this._measurementConsistencyCheck()) {
@@ -29158,7 +26691,7 @@ var require_MigrationOpTracker = __commonJS({
             version: this._version
           },
           measurements,
-          samplingRatio: (_e = this._samplingRatio) !== null && _e !== void 0 ? _e : 1
+          samplingRatio: (_e = this._samplingRatio) != null ? _e : 1
         };
       }
       _logTag() {
@@ -29179,15 +26712,15 @@ var require_MigrationOpTracker = __commonJS({
           return true;
         }
         if (!Number.isNaN(this._latencyMeasurement[origin])) {
-          (_a = this._logger) === null || _a === void 0 ? void 0 : _a.error(`${this._logTag()} ${this._latencyConsistencyMessage(origin)}`);
+          (_a = this._logger) == null ? void 0 : _a.error(`${this._logTag()} ${this._latencyConsistencyMessage(origin)}`);
           return false;
         }
         if (this._errors[origin]) {
-          (_b = this._logger) === null || _b === void 0 ? void 0 : _b.error(`${this._logTag()} ${this._errorConsistencyMessage(origin)}`);
+          (_b = this._logger) == null ? void 0 : _b.error(`${this._logTag()} ${this._errorConsistencyMessage(origin)}`);
           return false;
         }
-        if (this._consistencyCheck !== data_1.LDConsistencyCheck.NotChecked) {
-          (_c = this._logger) === null || _c === void 0 ? void 0 : _c.error(`${this._logTag()} ${this._consistencyCheckConsistencyMessage(origin)}`);
+        if (this._consistencyCheck !== 2) {
+          (_c = this._logger) == null ? void 0 : _c.error(`${this._logTag()} ${this._consistencyCheckConsistencyMessage(origin)}`);
           return false;
         }
         return true;
@@ -29205,7 +26738,7 @@ var require_MigrationOpTracker = __commonJS({
           values: {}
         };
         if (!this._wasInvoked.old && !this._wasInvoked.new) {
-          (_a = this._logger) === null || _a === void 0 ? void 0 : _a.error("Migration op completed without executing any origins (old/new).");
+          (_a = this._logger) == null ? void 0 : _a.error("Migration op completed without executing any origins (old/new).");
         }
         if (this._wasInvoked.old) {
           measurement.values.old = true;
@@ -29217,11 +26750,11 @@ var require_MigrationOpTracker = __commonJS({
       }
       _populateConsistency(measurements) {
         var _a;
-        if (this._consistencyCheck !== void 0 && this._consistencyCheck !== data_1.LDConsistencyCheck.NotChecked) {
+        if (this._consistencyCheck !== void 0 && this._consistencyCheck !== 2) {
           measurements.push({
             key: "consistent",
-            value: this._consistencyCheck === data_1.LDConsistencyCheck.Consistent,
-            samplingRatio: (_a = this._checkRatio) !== null && _a !== void 0 ? _a : 1
+            value: this._consistencyCheck === 1,
+            samplingRatio: (_a = this._checkRatio) != null ? _a : 1
           });
         }
       }
@@ -29258,51 +26791,7 @@ var require_MigrationOpTracker = __commonJS({
         }
       }
     };
-    exports.default = MigrationOpTracker;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/LDClientImpl.js
-var require_LDClientImpl = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/LDClientImpl.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var js_sdk_common_1 = require_cjs();
-    var api_1 = require_api2();
-    var LDDataSystemOptions_1 = require_LDDataSystemOptions();
-    var BigSegmentsManager_1 = require_BigSegmentsManager();
-    var createPluginEnvironmentMetadata_1 = require_createPluginEnvironmentMetadata();
-    var createPayloadListenerFDv2_1 = require_createPayloadListenerFDv2();
-    var createStreamListeners_1 = require_createStreamListeners();
-    var DataSourceUpdates_1 = require_DataSourceUpdates();
-    var fileDataInitilizerFDv2_1 = require_fileDataInitilizerFDv2();
-    var OneShotInitializerFDv2_1 = require_OneShotInitializerFDv2();
-    var PollingProcessor_1 = require_PollingProcessor();
-    var PollingProcessorFDv2_1 = require_PollingProcessorFDv2();
-    var Requestor_1 = require_Requestor();
-    var StreamingProcessor_1 = require_StreamingProcessor();
-    var StreamingProcessorFDv2_1 = require_StreamingProcessorFDv2();
-    var TransactionalDataSourceUpdates_1 = require_TransactionalDataSourceUpdates();
-    var createDiagnosticsInitConfig_1 = require_createDiagnosticsInitConfig();
-    var collection_1 = require_collection();
-    var EvalResult_1 = require_EvalResult();
-    var Evaluator_1 = require_Evaluator();
-    var ContextDeduplicator_1 = require_ContextDeduplicator();
-    var EventFactory_1 = require_EventFactory();
-    var isExperiment_1 = require_isExperiment();
-    var FlagsStateBuilder_1 = require_FlagsStateBuilder();
-    var HookRunner_1 = require_HookRunner();
-    var MigrationOpEventConversion_1 = require_MigrationOpEventConversion();
-    var MigrationOpTracker_1 = require_MigrationOpTracker();
-    var Configuration_1 = require_Configuration();
-    var VersionedDataKinds_1 = require_VersionedDataKinds();
-    var { ClientMessages, ErrorKinds, NullEventProcessor } = js_sdk_common_1.internal;
-    var InitState;
-    (function(InitState2) {
-      InitState2[InitState2["Initializing"] = 0] = "Initializing";
-      InitState2[InitState2["Initialized"] = 1] = "Initialized";
-      InitState2[InitState2["Failed"] = 2] = "Failed";
-    })(InitState || (InitState = {}));
+    var { ClientMessages, ErrorKinds: ErrorKinds3, NullEventProcessor } = import_js_sdk_common20.internal;
     var HIGH_TIMEOUT_THRESHOLD = 60;
     var BOOL_VARIATION_METHOD_NAME = "LDClient.boolVariation";
     var NUMBER_VARIATION_METHOD_NAME = "LDClient.numberVariation";
@@ -29315,48 +26804,95 @@ var require_LDClientImpl = __commonJS({
     var STRING_VARIATION_DETAIL_METHOD_NAME = "LDClient.stringVariationDetail";
     var JSON_VARIATION_DETAIL_METHOD_NAME = "LDClient.jsonVariationDetail";
     var VARIATION_METHOD_DETAIL_NAME = "LDClient.variationDetail";
-    function constructFDv1(sdkKey, platform2, config, callbacks, initSuccess, dataSourceErrorHandler, hooks, instanceId, userAgentHeaderName, startEventProcessor) {
+    function constructFDv1(sdkKey, platform22, config, callbacks, initSuccess, dataSourceErrorHandler, hooks, instanceId, userAgentHeaderName, startEventProcessor) {
       var _a, _b, _c, _d, _e;
       const { onUpdate, hasEventListeners } = callbacks;
-      const hookRunner = new HookRunner_1.default(config.logger, hooks);
+      const hookRunner = new HookRunner(config.logger, hooks);
       if (!sdkKey && !config.offline) {
         throw new Error("You must configure the client with an SDK key");
       }
       const { logger } = config;
-      const baseHeaders = (0, js_sdk_common_1.defaultHeaders)(sdkKey, platform2.info, config.tags, true, userAgentHeaderName, instanceId);
-      const clientContext = new js_sdk_common_1.ClientContext(sdkKey, config, platform2);
+      const baseHeaders = (0, import_js_sdk_common20.defaultHeaders)(
+        sdkKey,
+        platform22.info,
+        config.tags,
+        true,
+        userAgentHeaderName,
+        instanceId
+      );
+      const clientContext = new import_js_sdk_common20.ClientContext(sdkKey, config, platform22);
       const featureStore = config.featureStoreFactory(clientContext);
-      const dataSourceUpdates = new DataSourceUpdates_1.default(featureStore, hasEventListeners, onUpdate);
+      const dataSourceUpdates = new DataSourceUpdates(featureStore, hasEventListeners, onUpdate);
       let diagnosticsManager;
       if (config.sendEvents && !config.offline && !config.diagnosticOptOut) {
-        diagnosticsManager = new js_sdk_common_1.internal.DiagnosticsManager(sdkKey, platform2, (0, createDiagnosticsInitConfig_1.default)(config, platform2, featureStore));
+        diagnosticsManager = new import_js_sdk_common20.internal.DiagnosticsManager(
+          sdkKey,
+          platform22,
+          createDiagnosticsInitConfig_default(config, platform22, featureStore)
+        );
       }
       let eventProcessor;
       if (!config.sendEvents || config.offline) {
         eventProcessor = new NullEventProcessor();
       } else {
-        eventProcessor = new js_sdk_common_1.internal.EventProcessor(Object.assign(Object.assign({}, config), { redactAnonymousAllEvents: true }), clientContext, baseHeaders, new ContextDeduplicator_1.default(config), diagnosticsManager, startEventProcessor);
+        eventProcessor = new import_js_sdk_common20.internal.EventProcessor(
+          // Server-side SDKs redact anonymous context attributes on all inlined events (feature,
+          // custom, migration op), not just feature events.
+          __spreadProps(__spreadValues({}, config), { redactAnonymousAllEvents: true }),
+          clientContext,
+          baseHeaders,
+          new ContextDeduplicator(config),
+          diagnosticsManager,
+          startEventProcessor
+        );
       }
-      const bigSegmentsManager = new BigSegmentsManager_1.default((_b = (_a = config.bigSegments) === null || _a === void 0 ? void 0 : _a.store) === null || _b === void 0 ? void 0 : _b.call(_a, clientContext), (_c = config.bigSegments) !== null && _c !== void 0 ? _c : {}, config.logger, platform2.crypto);
+      const bigSegmentsManager = new BigSegmentsManager(
+        (_b = (_a = config.bigSegments) == null ? void 0 : _a.store) == null ? void 0 : _b.call(_a, clientContext),
+        (_c = config.bigSegments) != null ? _c : {},
+        config.logger,
+        platform22.crypto
+      );
       const queries = {
         getFlag(key, cb) {
-          featureStore.get(VersionedDataKinds_1.default.Features, key, (item) => cb(item));
+          featureStore.get(VersionedDataKinds.Features, key, (item) => cb(item));
         },
         getSegment(key, cb) {
-          featureStore.get(VersionedDataKinds_1.default.Segments, key, (item) => cb(item));
+          featureStore.get(VersionedDataKinds.Segments, key, (item) => cb(item));
         },
         getBigSegmentsMembership(userKey) {
           return bigSegmentsManager.getUserMembership(userKey);
         }
       };
-      const evaluator = new Evaluator_1.default(platform2, queries);
-      const listeners = (0, createStreamListeners_1.createStreamListeners)(dataSourceUpdates, logger, {
+      const evaluator = new Evaluator(platform22, queries);
+      const listeners = createStreamListeners(dataSourceUpdates, logger, {
         put: initSuccess
       });
-      const makeDefaultProcessor = () => config.stream ? new StreamingProcessor_1.default(clientContext, "/all", [], listeners, baseHeaders, diagnosticsManager, dataSourceErrorHandler, config.streamInitialReconnectDelay) : new PollingProcessor_1.default(new Requestor_1.default(config, platform2.requests, baseHeaders), config.pollInterval, dataSourceUpdates, config.logger, initSuccess, dataSourceErrorHandler);
+      const makeDefaultProcessor = () => config.stream ? new StreamingProcessor(
+        clientContext,
+        "/all",
+        [],
+        listeners,
+        baseHeaders,
+        diagnosticsManager,
+        dataSourceErrorHandler,
+        config.streamInitialReconnectDelay
+      ) : new PollingProcessor(
+        new Requestor(config, platform22.requests, baseHeaders),
+        config.pollInterval,
+        dataSourceUpdates,
+        config.logger,
+        initSuccess,
+        dataSourceErrorHandler
+      );
       let updateProcessor;
       if (!(config.offline || config.useLdd)) {
-        updateProcessor = (_e = (_d = config.updateProcessorFactory) === null || _d === void 0 ? void 0 : _d.call(config, clientContext, dataSourceUpdates, initSuccess, dataSourceErrorHandler)) !== null && _e !== void 0 ? _e : makeDefaultProcessor();
+        updateProcessor = (_e = (_d = config.updateProcessorFactory) == null ? void 0 : _d.call(
+          config,
+          clientContext,
+          dataSourceUpdates,
+          initSuccess,
+          dataSourceErrorHandler
+        )) != null ? _e : makeDefaultProcessor();
       }
       return {
         config,
@@ -29374,66 +26910,119 @@ var require_LDClientImpl = __commonJS({
     }
     function scopedServiceEndpoints(base, overrides) {
       var _a, _b;
-      return new js_sdk_common_1.ServiceEndpoints((_a = overrides.streaming) !== null && _a !== void 0 ? _a : base.streaming, (_b = overrides.polling) !== null && _b !== void 0 ? _b : base.polling, base.events, base.analyticsEventPath, base.diagnosticEventPath, base.includeAuthorizationHeader, base.payloadFilterKey);
+      return new import_js_sdk_common20.ServiceEndpoints(
+        (_a = overrides.streaming) != null ? _a : base.streaming,
+        (_b = overrides.polling) != null ? _b : base.polling,
+        base.events,
+        base.analyticsEventPath,
+        base.diagnosticEventPath,
+        base.includeAuthorizationHeader,
+        base.payloadFilterKey
+      );
     }
-    function constructFDv2(sdkKey, platform2, config, callbacks, initSuccess, hooks, instanceId, userAgentHeaderName, startEventProcessor) {
+    function constructFDv2(sdkKey, platform22, config, callbacks, initSuccess, hooks, instanceId, userAgentHeaderName, startEventProcessor) {
       var _a, _b, _c, _d, _e, _f;
       const { onUpdate, hasEventListeners } = callbacks;
-      const hookRunner = new HookRunner_1.default(config.logger, hooks);
+      const hookRunner = new HookRunner(config.logger, hooks);
       if (!sdkKey && !config.offline) {
         throw new Error("You must configure the client with an SDK key");
       }
       const { logger } = config;
       if (config.payloadFilterKey !== void 0) {
-        logger === null || logger === void 0 ? void 0 : logger.warn("Payload filtering is not supported with the FDv2 data system; the configured payload filter has no effect on FDv2 requests");
+        logger == null ? void 0 : logger.warn(
+          "Payload filtering is not supported with the FDv2 data system; the configured payload filter has no effect on FDv2 requests"
+        );
       }
-      const baseHeaders = (0, js_sdk_common_1.defaultHeaders)(sdkKey, platform2.info, config.tags, true, userAgentHeaderName, instanceId);
-      const clientContext = new js_sdk_common_1.ClientContext(sdkKey, config, platform2);
+      const baseHeaders = (0, import_js_sdk_common20.defaultHeaders)(
+        sdkKey,
+        platform22.info,
+        config.tags,
+        true,
+        userAgentHeaderName,
+        instanceId
+      );
+      const clientContext = new import_js_sdk_common20.ClientContext(sdkKey, config, platform22);
       const dataSystem = config.dataSystem;
       const featureStore = dataSystem.featureStoreFactory(clientContext);
-      const dataSourceUpdates = new TransactionalDataSourceUpdates_1.default(featureStore, hasEventListeners, onUpdate);
+      const dataSourceUpdates = new TransactionalDataSourceUpdates(
+        featureStore,
+        hasEventListeners,
+        onUpdate
+      );
       let diagnosticsManager;
       if (config.sendEvents && !config.offline && !config.diagnosticOptOut) {
-        diagnosticsManager = new js_sdk_common_1.internal.DiagnosticsManager(sdkKey, platform2, (0, createDiagnosticsInitConfig_1.default)(config, platform2, featureStore));
+        diagnosticsManager = new import_js_sdk_common20.internal.DiagnosticsManager(
+          sdkKey,
+          platform22,
+          createDiagnosticsInitConfig_default(config, platform22, featureStore)
+        );
       }
       let eventProcessor;
       if (!config.sendEvents || config.offline) {
         eventProcessor = new NullEventProcessor();
       } else {
-        eventProcessor = new js_sdk_common_1.internal.EventProcessor(Object.assign(Object.assign({}, config), { redactAnonymousAllEvents: true }), clientContext, baseHeaders, new ContextDeduplicator_1.default(config), diagnosticsManager, startEventProcessor);
+        eventProcessor = new import_js_sdk_common20.internal.EventProcessor(
+          // Server-side SDKs redact anonymous context attributes on all inlined events (feature,
+          // custom, migration op), not just feature events.
+          __spreadProps(__spreadValues({}, config), { redactAnonymousAllEvents: true }),
+          clientContext,
+          baseHeaders,
+          new ContextDeduplicator(config),
+          diagnosticsManager,
+          startEventProcessor
+        );
       }
-      const bigSegmentsManager = new BigSegmentsManager_1.default((_b = (_a = config.bigSegments) === null || _a === void 0 ? void 0 : _a.store) === null || _b === void 0 ? void 0 : _b.call(_a, clientContext), (_c = config.bigSegments) !== null && _c !== void 0 ? _c : {}, config.logger, platform2.crypto);
+      const bigSegmentsManager = new BigSegmentsManager(
+        (_b = (_a = config.bigSegments) == null ? void 0 : _a.store) == null ? void 0 : _b.call(_a, clientContext),
+        (_c = config.bigSegments) != null ? _c : {},
+        config.logger,
+        platform22.crypto
+      );
       const queries = {
         getFlag(key, cb) {
-          featureStore.get(VersionedDataKinds_1.default.Features, key, (item) => cb(item));
+          featureStore.get(VersionedDataKinds.Features, key, (item) => cb(item));
         },
         getSegment(key, cb) {
-          featureStore.get(VersionedDataKinds_1.default.Segments, key, (item) => cb(item));
+          featureStore.get(VersionedDataKinds.Segments, key, (item) => cb(item));
         },
         getBigSegmentsMembership(userKey) {
           return bigSegmentsManager.getUserMembership(userKey);
         }
       };
-      const evaluator = new Evaluator_1.default(platform2, queries);
+      const evaluator = new Evaluator(platform22, queries);
       let dataSource;
       let payloadListener;
       if (!(config.offline || config.dataSystem.useLdd)) {
         const initializers = [];
         const synchronizers = [];
         const fdv1FallbackSynchronizers = [];
-        if ((0, LDDataSystemOptions_1.isCustomOptions)(dataSystem.dataSource)) {
+        if (isCustomOptions(dataSystem.dataSource)) {
           const { initializers: initializerConfigs = [], synchronizers: synchronizerConfigs = [] } = dataSystem.dataSource;
           initializerConfigs.forEach((initializerConfig) => {
             switch (initializerConfig.type) {
               case "file": {
-                initializers.push(() => new fileDataInitilizerFDv2_1.default(initializerConfig, platform2, config.logger));
+                initializers.push(
+                  () => new FileDataInitializerFDv2(initializerConfig, platform22, config.logger)
+                );
                 break;
               }
               case "polling": {
                 const pollingEndpoints = initializerConfig.baseUri ? scopedServiceEndpoints(config.serviceEndpoints, {
                   polling: initializerConfig.baseUri
                 }) : void 0;
-                initializers.push(() => new OneShotInitializerFDv2_1.default(new Requestor_1.default(config, platform2.requests, baseHeaders, "/sdk/poll", config.logger, pollingEndpoints), config.logger));
+                initializers.push(
+                  () => new OneShotInitializerFDv2(
+                    new Requestor(
+                      config,
+                      platform22.requests,
+                      baseHeaders,
+                      "/sdk/poll",
+                      config.logger,
+                      pollingEndpoints
+                    ),
+                    config.logger
+                  )
+                );
                 break;
               }
               default: {
@@ -29444,19 +27033,42 @@ var require_LDClientImpl = __commonJS({
           synchronizerConfigs.forEach((synchronizerConfig) => {
             switch (synchronizerConfig.type) {
               case "streaming": {
-                const { streamInitialReconnectDelay = Configuration_1.DEFAULT_STREAM_RECONNECT_DELAY } = synchronizerConfig;
+                const { streamInitialReconnectDelay = DEFAULT_STREAM_RECONNECT_DELAY } = synchronizerConfig;
                 const streamingEndpoints = synchronizerConfig.baseUri ? scopedServiceEndpoints(config.serviceEndpoints, {
                   streaming: synchronizerConfig.baseUri
                 }) : void 0;
-                synchronizers.push(() => new StreamingProcessorFDv2_1.default(clientContext, "/sdk/stream", [], baseHeaders, diagnosticsManager, streamInitialReconnectDelay, streamingEndpoints));
+                synchronizers.push(
+                  () => new StreamingProcessorFDv2(
+                    clientContext,
+                    "/sdk/stream",
+                    [],
+                    baseHeaders,
+                    diagnosticsManager,
+                    streamInitialReconnectDelay,
+                    streamingEndpoints
+                  )
+                );
                 break;
               }
               case "polling": {
-                const { pollInterval = Configuration_1.DEFAULT_POLL_INTERVAL } = synchronizerConfig;
+                const { pollInterval = DEFAULT_POLL_INTERVAL } = synchronizerConfig;
                 const pollingEndpoints = synchronizerConfig.baseUri ? scopedServiceEndpoints(config.serviceEndpoints, {
                   polling: synchronizerConfig.baseUri
                 }) : void 0;
-                synchronizers.push(() => new PollingProcessorFDv2_1.default(new Requestor_1.default(config, platform2.requests, baseHeaders, "/sdk/poll", config.logger, pollingEndpoints), pollInterval, config.logger));
+                synchronizers.push(
+                  () => new PollingProcessorFDv2(
+                    new Requestor(
+                      config,
+                      platform22.requests,
+                      baseHeaders,
+                      "/sdk/poll",
+                      config.logger,
+                      pollingEndpoints
+                    ),
+                    pollInterval,
+                    config.logger
+                  )
+                );
                 break;
               }
               default: {
@@ -29465,29 +27077,68 @@ var require_LDClientImpl = __commonJS({
             }
           });
         } else {
-          if ((0, LDDataSystemOptions_1.isStandardOptions)(dataSystem.dataSource)) {
-            initializers.push(() => new OneShotInitializerFDv2_1.default(new Requestor_1.default(config, platform2.requests, baseHeaders, "/sdk/poll", config.logger), config.logger));
+          if (isStandardOptions(dataSystem.dataSource)) {
+            initializers.push(
+              () => new OneShotInitializerFDv2(
+                new Requestor(config, platform22.requests, baseHeaders, "/sdk/poll", config.logger),
+                config.logger
+              )
+            );
           }
-          if ((0, LDDataSystemOptions_1.isStandardOptions)(dataSystem.dataSource) || (0, LDDataSystemOptions_1.isStreamingOnlyOptions)(dataSystem.dataSource)) {
+          if (isStandardOptions(dataSystem.dataSource) || isStreamingOnlyOptions(dataSystem.dataSource)) {
             const reconnectDelay = dataSystem.dataSource.streamInitialReconnectDelay;
-            synchronizers.push(() => new StreamingProcessorFDv2_1.default(clientContext, "/sdk/stream", [], baseHeaders, diagnosticsManager, reconnectDelay));
+            synchronizers.push(
+              () => new StreamingProcessorFDv2(
+                clientContext,
+                "/sdk/stream",
+                [],
+                baseHeaders,
+                diagnosticsManager,
+                reconnectDelay
+              )
+            );
           }
-          let pollingInterval = Configuration_1.DEFAULT_POLL_INTERVAL;
-          if ((0, LDDataSystemOptions_1.isStandardOptions)(dataSystem.dataSource) || (0, LDDataSystemOptions_1.isPollingOnlyOptions)(dataSystem.dataSource)) {
-            pollingInterval = (_d = dataSystem.dataSource.pollInterval) !== null && _d !== void 0 ? _d : Configuration_1.DEFAULT_POLL_INTERVAL;
-            synchronizers.push(() => new PollingProcessorFDv2_1.default(new Requestor_1.default(config, platform2.requests, baseHeaders, "/sdk/poll", logger), pollingInterval, logger));
+          let pollingInterval = DEFAULT_POLL_INTERVAL;
+          if (isStandardOptions(dataSystem.dataSource) || isPollingOnlyOptions(dataSystem.dataSource)) {
+            pollingInterval = (_d = dataSystem.dataSource.pollInterval) != null ? _d : DEFAULT_POLL_INTERVAL;
+            synchronizers.push(
+              () => new PollingProcessorFDv2(
+                new Requestor(config, platform22.requests, baseHeaders, "/sdk/poll", logger),
+                pollingInterval,
+                logger
+              )
+            );
           }
         }
         const fdv1FallbackConfig = dataSystem.fdv1Fallback;
         if (fdv1FallbackConfig !== null) {
-          const fdv1FallbackPollInterval = (_f = (_e = fdv1FallbackConfig === null || fdv1FallbackConfig === void 0 ? void 0 : fdv1FallbackConfig.pollInterval) !== null && _e !== void 0 ? _e : config.pollInterval) !== null && _f !== void 0 ? _f : Configuration_1.DEFAULT_POLL_INTERVAL;
-          const fdv1FallbackEndpoints = (fdv1FallbackConfig === null || fdv1FallbackConfig === void 0 ? void 0 : fdv1FallbackConfig.baseUri) ? scopedServiceEndpoints(config.serviceEndpoints, {
+          const fdv1FallbackPollInterval = (_f = (_e = fdv1FallbackConfig == null ? void 0 : fdv1FallbackConfig.pollInterval) != null ? _e : config.pollInterval) != null ? _f : DEFAULT_POLL_INTERVAL;
+          const fdv1FallbackEndpoints = (fdv1FallbackConfig == null ? void 0 : fdv1FallbackConfig.baseUri) ? scopedServiceEndpoints(config.serviceEndpoints, {
             polling: fdv1FallbackConfig.baseUri
           }) : void 0;
-          fdv1FallbackSynchronizers.push(() => new PollingProcessorFDv2_1.default(new Requestor_1.default(config, platform2.requests, baseHeaders, "/sdk/latest-all", config.logger, fdv1FallbackEndpoints), fdv1FallbackPollInterval, config.logger, true));
+          fdv1FallbackSynchronizers.push(
+            () => new PollingProcessorFDv2(
+              new Requestor(
+                config,
+                platform22.requests,
+                baseHeaders,
+                "/sdk/latest-all",
+                config.logger,
+                fdv1FallbackEndpoints
+              ),
+              fdv1FallbackPollInterval,
+              config.logger,
+              true
+            )
+          );
         }
-        dataSource = new js_sdk_common_1.CompositeDataSource(initializers, synchronizers, fdv1FallbackSynchronizers, logger);
-        payloadListener = (0, createPayloadListenerFDv2_1.createPayloadListener)(dataSourceUpdates, logger, initSuccess);
+        dataSource = new import_js_sdk_common20.CompositeDataSource(
+          initializers,
+          synchronizers,
+          fdv1FallbackSynchronizers,
+          logger
+        );
+        payloadListener = createPayloadListener(dataSourceUpdates, logger, initSuccess);
       }
       return {
         config,
@@ -29505,18 +27156,17 @@ var require_LDClientImpl = __commonJS({
       };
     }
     var LDClientImpl = class {
-      get logger() {
-        return this._logger;
-      }
       constructor(_sdkKey, _platform, options, callbacks, internalOptions) {
         this._sdkKey = _sdkKey;
         this._platform = _platform;
-        this._initState = InitState.Initializing;
-        this._eventFactoryDefault = new EventFactory_1.default(false);
-        this._eventFactoryWithReasons = new EventFactory_1.default(true);
-        const config = new Configuration_1.default(options, internalOptions);
-        const startEventProcessor = !(internalOptions === null || internalOptions === void 0 ? void 0 : internalOptions.disableBackgroundEventFlush);
-        this.environmentMetadata = (0, createPluginEnvironmentMetadata_1.createPluginEnvironmentMetadata)(_platform, _sdkKey, config);
+        this._initState = 0;
+        this._lastKnownValuesWarningLogged = false;
+        this._allFlagsStateLastKnownValuesWarningLogged = false;
+        this._eventFactoryDefault = new EventFactory(false);
+        this._eventFactoryWithReasons = new EventFactory(true);
+        const config = new Configuration(options, internalOptions);
+        const startEventProcessor = !(internalOptions == null ? void 0 : internalOptions.disableBackgroundEventFlush);
+        this.environmentMetadata = createPluginEnvironmentMetadata(_platform, _sdkKey, config);
         const hooks = [];
         if (config.hooks) {
           hooks.push(...config.hooks);
@@ -29537,7 +27187,18 @@ var require_LDClientImpl = __commonJS({
             onError: this._onError,
             onFailed: this._onFailed,
             onReady: this._onReady
-          } = constructFDv1(_sdkKey, _platform, config, callbacks, () => this._initSuccess(), (e) => this._dataSourceErrorHandler(e), hooks, internalOptions === null || internalOptions === void 0 ? void 0 : internalOptions.instanceId, internalOptions === null || internalOptions === void 0 ? void 0 : internalOptions.userAgentHeaderName, startEventProcessor));
+          } = constructFDv1(
+            _sdkKey,
+            _platform,
+            config,
+            callbacks,
+            () => this._initSuccess(),
+            (e) => this._dataSourceErrorHandler(e),
+            hooks,
+            internalOptions == null ? void 0 : internalOptions.instanceId,
+            internalOptions == null ? void 0 : internalOptions.userAgentHeaderName,
+            startEventProcessor
+          ));
           this.bigSegmentStatusProviderInternal = this._bigSegmentsManager.statusProvider;
           if (this._updateProcessor) {
             this._updateProcessor.start();
@@ -29560,44 +27221,65 @@ var require_LDClientImpl = __commonJS({
             onError: this._onError,
             onFailed: this._onFailed,
             onReady: this._onReady
-          } = constructFDv2(_sdkKey, _platform, config, callbacks, () => this._initSuccess(), hooks, internalOptions === null || internalOptions === void 0 ? void 0 : internalOptions.instanceId, internalOptions === null || internalOptions === void 0 ? void 0 : internalOptions.userAgentHeaderName, startEventProcessor));
+          } = constructFDv2(
+            _sdkKey,
+            _platform,
+            config,
+            callbacks,
+            () => this._initSuccess(),
+            hooks,
+            internalOptions == null ? void 0 : internalOptions.instanceId,
+            internalOptions == null ? void 0 : internalOptions.userAgentHeaderName,
+            startEventProcessor
+          ));
           this._featureStore = transactionalStore;
           this.bigSegmentStatusProviderInternal = this._bigSegmentsManager.statusProvider;
           if (this._dataSource) {
-            this._dataSource.start((_, payload) => {
-              payloadListener === null || payloadListener === void 0 ? void 0 : payloadListener(payload);
-            }, (state, err) => {
-              if (state === js_sdk_common_1.subsystem.DataSourceState.Closed && err) {
-                this._dataSourceErrorHandler(err);
+            this._dataSource.start(
+              (_, payload) => {
+                payloadListener == null ? void 0 : payloadListener(payload);
+              },
+              (state, err) => {
+                if (state === import_js_sdk_common20.subsystem.DataSourceState.Closed && err) {
+                  this._dataSourceErrorHandler(err);
+                }
+              },
+              () => {
+                var _a;
+                return (_a = transactionalStore.getSelector) == null ? void 0 : _a.call(transactionalStore);
               }
-            }, () => {
-              var _a;
-              return (_a = transactionalStore.getSelector) === null || _a === void 0 ? void 0 : _a.call(transactionalStore);
-            });
+            );
           } else {
             setTimeout(() => this._initSuccess(), 0);
           }
         }
       }
+      get logger() {
+        return this._logger;
+      }
       initialized() {
-        return this._initState === InitState.Initialized;
+        return this._initState === 1;
       }
       waitForInitialization(options) {
         var _a, _b;
-        if ((options === null || options === void 0 ? void 0 : options.timeout) === void 0 && (this._updateProcessor !== void 0 || this._dataSource !== void 0)) {
-          (_a = this._logger) === null || _a === void 0 ? void 0 : _a.warn("The waitForInitialization function was called without a timeout specified. In a future version a default timeout will be applied.");
+        if ((options == null ? void 0 : options.timeout) === void 0 && (this._updateProcessor !== void 0 || this._dataSource !== void 0)) {
+          (_a = this._logger) == null ? void 0 : _a.warn(
+            "The waitForInitialization function was called without a timeout specified. In a future version a default timeout will be applied."
+          );
         }
-        if ((options === null || options === void 0 ? void 0 : options.timeout) !== void 0 && (options === null || options === void 0 ? void 0 : options.timeout) > HIGH_TIMEOUT_THRESHOLD && (this._updateProcessor !== void 0 || this._dataSource !== void 0)) {
-          (_b = this._logger) === null || _b === void 0 ? void 0 : _b.warn(`The waitForInitialization function was called with a timeout greater than ${HIGH_TIMEOUT_THRESHOLD} seconds. We recommend a timeout of less than ${HIGH_TIMEOUT_THRESHOLD} seconds.`);
+        if ((options == null ? void 0 : options.timeout) !== void 0 && (options == null ? void 0 : options.timeout) > HIGH_TIMEOUT_THRESHOLD && (this._updateProcessor !== void 0 || this._dataSource !== void 0)) {
+          (_b = this._logger) == null ? void 0 : _b.warn(
+            `The waitForInitialization function was called with a timeout greater than ${HIGH_TIMEOUT_THRESHOLD} seconds. We recommend a timeout of less than ${HIGH_TIMEOUT_THRESHOLD} seconds.`
+          );
         }
         if (this._initializedPromise) {
-          return this._clientWithTimeout(this._initializedPromise, options === null || options === void 0 ? void 0 : options.timeout, this._logger);
+          return this._clientWithTimeout(this._initializedPromise, options == null ? void 0 : options.timeout, this._logger);
         }
-        if (this._initState === InitState.Initialized) {
+        if (this._initState === 1) {
           this._initializedPromise = Promise.resolve(this);
           return this._initializedPromise;
         }
-        if (this._initState === InitState.Failed) {
+        if (this._initState === 2) {
           this._initializedPromise = Promise.reject(this._rejectionReason);
           return this._initializedPromise;
         }
@@ -29607,106 +27289,222 @@ var require_LDClientImpl = __commonJS({
             this._initReject = reject;
           });
         }
-        return this._clientWithTimeout(this._initializedPromise, options === null || options === void 0 ? void 0 : options.timeout, this._logger);
+        return this._clientWithTimeout(this._initializedPromise, options == null ? void 0 : options.timeout, this._logger);
       }
       variation(key, context, defaultValue, callback) {
         var _a, _b, _c;
-        return this._hookRunner.withEvaluationSeries(key, context, defaultValue, VARIATION_METHOD_NAME, () => new Promise((resolve) => {
-          this._evaluateIfPossible(key, context, defaultValue, this._eventFactoryDefault, (res) => {
-            resolve(res.detail);
-          });
-        }), (_c = (_b = (_a = this._featureStore).getInitMetaData) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.environmentId).then((detail) => {
-          callback === null || callback === void 0 ? void 0 : callback(null, detail.value);
+        return this._hookRunner.withEvaluationSeries(
+          key,
+          context,
+          defaultValue,
+          VARIATION_METHOD_NAME,
+          () => new Promise((resolve) => {
+            this._evaluateIfPossible(
+              key,
+              context,
+              defaultValue,
+              this._eventFactoryDefault,
+              (res) => {
+                resolve(res.detail);
+              }
+            );
+          }),
+          (_c = (_b = (_a = this._featureStore).getInitMetaData) == null ? void 0 : _b.call(_a)) == null ? void 0 : _c.environmentId
+        ).then((detail) => {
+          callback == null ? void 0 : callback(null, detail.value);
           return detail.value;
         });
       }
       variationDetail(key, context, defaultValue, callback) {
         var _a, _b, _c;
-        return this._hookRunner.withEvaluationSeries(key, context, defaultValue, VARIATION_METHOD_DETAIL_NAME, () => new Promise((resolve) => {
-          this._evaluateIfPossible(key, context, defaultValue, this._eventFactoryWithReasons, (res) => {
-            resolve(res.detail);
-            callback === null || callback === void 0 ? void 0 : callback(null, res.detail);
-          });
-        }), (_c = (_b = (_a = this._featureStore).getInitMetaData) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.environmentId);
+        return this._hookRunner.withEvaluationSeries(
+          key,
+          context,
+          defaultValue,
+          VARIATION_METHOD_DETAIL_NAME,
+          () => new Promise((resolve) => {
+            this._evaluateIfPossible(
+              key,
+              context,
+              defaultValue,
+              this._eventFactoryWithReasons,
+              (res) => {
+                resolve(res.detail);
+                callback == null ? void 0 : callback(null, res.detail);
+              }
+            );
+          }),
+          (_c = (_b = (_a = this._featureStore).getInitMetaData) == null ? void 0 : _b.call(_a)) == null ? void 0 : _c.environmentId
+        );
       }
       _typedEval(key, context, defaultValue, eventFactory, methodName, typeChecker) {
         var _a, _b, _c;
-        return this._hookRunner.withEvaluationSeries(key, context, defaultValue, methodName, () => new Promise((resolve) => {
-          this._evaluateIfPossible(key, context, defaultValue, eventFactory, (res) => {
-            const typedRes = {
-              value: res.detail.value,
-              reason: res.detail.reason,
-              variationIndex: res.detail.variationIndex
-            };
-            resolve(typedRes);
-          }, typeChecker);
-        }), (_c = (_b = (_a = this._featureStore).getInitMetaData) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.environmentId);
+        return this._hookRunner.withEvaluationSeries(
+          key,
+          context,
+          defaultValue,
+          methodName,
+          () => new Promise((resolve) => {
+            this._evaluateIfPossible(
+              key,
+              context,
+              defaultValue,
+              eventFactory,
+              (res) => {
+                const typedRes = {
+                  value: res.detail.value,
+                  reason: res.detail.reason,
+                  variationIndex: res.detail.variationIndex
+                };
+                resolve(typedRes);
+              },
+              typeChecker
+            );
+          }),
+          (_c = (_b = (_a = this._featureStore).getInitMetaData) == null ? void 0 : _b.call(_a)) == null ? void 0 : _c.environmentId
+        );
       }
       async boolVariation(key, context, defaultValue) {
-        return (await this._typedEval(key, context, defaultValue, this._eventFactoryDefault, BOOL_VARIATION_METHOD_NAME, (value) => [js_sdk_common_1.TypeValidators.Boolean.is(value), js_sdk_common_1.TypeValidators.Boolean.getType()])).value;
+        return (await this._typedEval(
+          key,
+          context,
+          defaultValue,
+          this._eventFactoryDefault,
+          BOOL_VARIATION_METHOD_NAME,
+          (value) => [import_js_sdk_common20.TypeValidators.Boolean.is(value), import_js_sdk_common20.TypeValidators.Boolean.getType()]
+        )).value;
       }
       async numberVariation(key, context, defaultValue) {
-        return (await this._typedEval(key, context, defaultValue, this._eventFactoryDefault, NUMBER_VARIATION_METHOD_NAME, (value) => [js_sdk_common_1.TypeValidators.Number.is(value), js_sdk_common_1.TypeValidators.Number.getType()])).value;
+        return (await this._typedEval(
+          key,
+          context,
+          defaultValue,
+          this._eventFactoryDefault,
+          NUMBER_VARIATION_METHOD_NAME,
+          (value) => [import_js_sdk_common20.TypeValidators.Number.is(value), import_js_sdk_common20.TypeValidators.Number.getType()]
+        )).value;
       }
       async stringVariation(key, context, defaultValue) {
-        return (await this._typedEval(key, context, defaultValue, this._eventFactoryDefault, STRING_VARIATION_METHOD_NAME, (value) => [js_sdk_common_1.TypeValidators.String.is(value), js_sdk_common_1.TypeValidators.String.getType()])).value;
+        return (await this._typedEval(
+          key,
+          context,
+          defaultValue,
+          this._eventFactoryDefault,
+          STRING_VARIATION_METHOD_NAME,
+          (value) => [import_js_sdk_common20.TypeValidators.String.is(value), import_js_sdk_common20.TypeValidators.String.getType()]
+        )).value;
       }
       jsonVariation(key, context, defaultValue) {
         var _a, _b, _c;
-        return this._hookRunner.withEvaluationSeries(key, context, defaultValue, JSON_VARIATION_METHOD_NAME, () => new Promise((resolve) => {
-          this._evaluateIfPossible(key, context, defaultValue, this._eventFactoryDefault, (res) => {
-            resolve(res.detail);
-          });
-        }), (_c = (_b = (_a = this._featureStore).getInitMetaData) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.environmentId).then((detail) => detail.value);
+        return this._hookRunner.withEvaluationSeries(
+          key,
+          context,
+          defaultValue,
+          JSON_VARIATION_METHOD_NAME,
+          () => new Promise((resolve) => {
+            this._evaluateIfPossible(
+              key,
+              context,
+              defaultValue,
+              this._eventFactoryDefault,
+              (res) => {
+                resolve(res.detail);
+              }
+            );
+          }),
+          (_c = (_b = (_a = this._featureStore).getInitMetaData) == null ? void 0 : _b.call(_a)) == null ? void 0 : _c.environmentId
+        ).then((detail) => detail.value);
       }
       boolVariationDetail(key, context, defaultValue) {
-        return this._typedEval(key, context, defaultValue, this._eventFactoryWithReasons, BOOL_VARIATION_DETAIL_METHOD_NAME, (value) => [js_sdk_common_1.TypeValidators.Boolean.is(value), js_sdk_common_1.TypeValidators.Boolean.getType()]);
+        return this._typedEval(
+          key,
+          context,
+          defaultValue,
+          this._eventFactoryWithReasons,
+          BOOL_VARIATION_DETAIL_METHOD_NAME,
+          (value) => [import_js_sdk_common20.TypeValidators.Boolean.is(value), import_js_sdk_common20.TypeValidators.Boolean.getType()]
+        );
       }
       numberVariationDetail(key, context, defaultValue) {
-        return this._typedEval(key, context, defaultValue, this._eventFactoryWithReasons, NUMBER_VARIATION_DETAIL_METHOD_NAME, (value) => [js_sdk_common_1.TypeValidators.Number.is(value), js_sdk_common_1.TypeValidators.Number.getType()]);
+        return this._typedEval(
+          key,
+          context,
+          defaultValue,
+          this._eventFactoryWithReasons,
+          NUMBER_VARIATION_DETAIL_METHOD_NAME,
+          (value) => [import_js_sdk_common20.TypeValidators.Number.is(value), import_js_sdk_common20.TypeValidators.Number.getType()]
+        );
       }
       stringVariationDetail(key, context, defaultValue) {
-        return this._typedEval(key, context, defaultValue, this._eventFactoryWithReasons, STRING_VARIATION_DETAIL_METHOD_NAME, (value) => [js_sdk_common_1.TypeValidators.String.is(value), js_sdk_common_1.TypeValidators.String.getType()]);
+        return this._typedEval(
+          key,
+          context,
+          defaultValue,
+          this._eventFactoryWithReasons,
+          STRING_VARIATION_DETAIL_METHOD_NAME,
+          (value) => [import_js_sdk_common20.TypeValidators.String.is(value), import_js_sdk_common20.TypeValidators.String.getType()]
+        );
       }
       jsonVariationDetail(key, context, defaultValue) {
         var _a, _b, _c;
-        return this._hookRunner.withEvaluationSeries(key, context, defaultValue, JSON_VARIATION_DETAIL_METHOD_NAME, () => new Promise((resolve) => {
-          this._evaluateIfPossible(key, context, defaultValue, this._eventFactoryWithReasons, (res) => {
-            resolve(res.detail);
-          });
-        }), (_c = (_b = (_a = this._featureStore).getInitMetaData) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.environmentId);
+        return this._hookRunner.withEvaluationSeries(
+          key,
+          context,
+          defaultValue,
+          JSON_VARIATION_DETAIL_METHOD_NAME,
+          () => new Promise((resolve) => {
+            this._evaluateIfPossible(
+              key,
+              context,
+              defaultValue,
+              this._eventFactoryWithReasons,
+              (res) => {
+                resolve(res.detail);
+              }
+            );
+          }),
+          (_c = (_b = (_a = this._featureStore).getInitMetaData) == null ? void 0 : _b.call(_a)) == null ? void 0 : _c.environmentId
+        );
       }
       async _migrationVariationInternal(key, context, defaultValue) {
         var _a;
         const res = await new Promise((resolve) => {
-          this._evaluateIfPossible(key, context, defaultValue, this._eventFactoryWithReasons, ({ detail: detail2 }, flag2) => {
-            if (!(0, api_1.IsMigrationStage)(detail2.value)) {
-              const error2 = new Error(`Unrecognized MigrationState for "${key}"; returning default value.`);
-              this._onError(error2);
-              const reason = {
-                kind: "ERROR",
-                errorKind: ErrorKinds.WrongType
-              };
-              resolve({
-                detail: {
-                  value: defaultValue,
-                  reason
-                },
-                flag: flag2
-              });
-              return;
+          this._evaluateIfPossible(
+            key,
+            context,
+            defaultValue,
+            this._eventFactoryWithReasons,
+            ({ detail: detail2 }, flag2) => {
+              if (!IsMigrationStage(detail2.value)) {
+                const error2 = new Error(
+                  `Unrecognized MigrationState for "${key}"; returning default value.`
+                );
+                this._onError(error2);
+                const reason = {
+                  kind: "ERROR",
+                  errorKind: ErrorKinds3.WrongType
+                };
+                resolve({
+                  detail: {
+                    value: defaultValue,
+                    reason
+                  },
+                  flag: flag2
+                });
+                return;
+              }
+              resolve({ detail: detail2, flag: flag2 });
             }
-            resolve({ detail: detail2, flag: flag2 });
-          });
+          );
         });
         const { detail, flag } = res;
-        const checkRatio = (_a = flag === null || flag === void 0 ? void 0 : flag.migration) === null || _a === void 0 ? void 0 : _a.checkRatio;
-        const samplingRatio = flag === null || flag === void 0 ? void 0 : flag.samplingRatio;
+        const checkRatio = (_a = flag == null ? void 0 : flag.migration) == null ? void 0 : _a.checkRatio;
+        const samplingRatio = flag == null ? void 0 : flag.samplingRatio;
         return {
           detail,
           migration: {
             value: detail.value,
-            tracker: new MigrationOpTracker_1.default(
+            tracker: new MigrationOpTracker(
               key,
               context,
               defaultValue,
@@ -29715,7 +27513,7 @@ var require_LDClientImpl = __commonJS({
               checkRatio,
               // Can be null for compatibility reasons.
               detail.variationIndex === null ? void 0 : detail.variationIndex,
-              flag === null || flag === void 0 ? void 0 : flag.version,
+              flag == null ? void 0 : flag.version,
               samplingRatio,
               this._logger
             )
@@ -29724,57 +27522,88 @@ var require_LDClientImpl = __commonJS({
       }
       async migrationVariation(key, context, defaultValue) {
         var _a, _b, _c;
-        const res = await this._hookRunner.withEvaluationSeriesExtraDetail(key, context, defaultValue, MIGRATION_VARIATION_METHOD_NAME, () => this._migrationVariationInternal(key, context, defaultValue), (_c = (_b = (_a = this._featureStore).getInitMetaData) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.environmentId);
+        const res = await this._hookRunner.withEvaluationSeriesExtraDetail(
+          key,
+          context,
+          defaultValue,
+          MIGRATION_VARIATION_METHOD_NAME,
+          () => this._migrationVariationInternal(key, context, defaultValue),
+          (_c = (_b = (_a = this._featureStore).getInitMetaData) == null ? void 0 : _b.call(_a)) == null ? void 0 : _c.environmentId
+        );
         return res.migration;
       }
       allFlagsState(context, options, callback) {
         var _a, _b, _c;
         if (this._config.offline) {
-          (_a = this._logger) === null || _a === void 0 ? void 0 : _a.info("allFlagsState() called in offline mode. Returning empty state.");
-          const allFlagState = new FlagsStateBuilder_1.default(false, false).build();
-          callback === null || callback === void 0 ? void 0 : callback(null, allFlagState);
+          (_a = this._logger) == null ? void 0 : _a.info("allFlagsState() called in offline mode. Returning empty state.");
+          const allFlagState = new FlagsStateBuilder(false, false).build();
+          callback == null ? void 0 : callback(null, allFlagState);
           return Promise.resolve(allFlagState);
         }
-        const evalContext = js_sdk_common_1.Context.fromLDContext(context);
+        const evalContext = import_js_sdk_common20.Context.fromLDContext(context);
         if (!evalContext.valid) {
-          (_b = this._logger) === null || _b === void 0 ? void 0 : _b.info(`${(_c = evalContext.message) !== null && _c !== void 0 ? _c : "Invalid context."}. Returning empty state.`);
-          return Promise.resolve(new FlagsStateBuilder_1.default(false, false).build());
+          (_c = this._logger) == null ? void 0 : _c.info(`${(_b = evalContext.message) != null ? _b : "Invalid context."}. Returning empty state.`);
+          return Promise.resolve(new FlagsStateBuilder(false, false).build());
         }
         return new Promise((resolve) => {
-          const doEval = (valid) => this._featureStore.all(VersionedDataKinds_1.default.Features, (allFlags) => {
-            const builder = new FlagsStateBuilder_1.default(valid, !!(options === null || options === void 0 ? void 0 : options.withReasons));
-            const clientOnly = !!(options === null || options === void 0 ? void 0 : options.clientSideOnly);
-            const detailsOnlyIfTracked = !!(options === null || options === void 0 ? void 0 : options.detailsOnlyForTrackedFlags);
-            (0, collection_1.allAsync)(Object.values(allFlags), (storeItem, iterCb) => {
-              var _a2;
-              const flag = storeItem;
-              if (clientOnly && !((_a2 = flag.clientSideAvailability) === null || _a2 === void 0 ? void 0 : _a2.usingEnvironmentId)) {
-                iterCb(true);
-                return;
-              }
-              this._evaluator.evaluateCb(flag, evalContext, (res) => {
-                var _a3;
-                if (res.isError) {
-                  this._onError(new Error(`Error for feature flag "${flag.key}" while evaluating all flags: ${res.message}`));
+          const doEval = (valid) => this._featureStore.all(VersionedDataKinds.Features, (allFlags) => {
+            const builder = new FlagsStateBuilder(valid, !!(options == null ? void 0 : options.withReasons));
+            const clientOnly = !!(options == null ? void 0 : options.clientSideOnly);
+            const detailsOnlyIfTracked = !!(options == null ? void 0 : options.detailsOnlyForTrackedFlags);
+            allAsync(
+              Object.values(allFlags),
+              (storeItem, iterCb) => {
+                var _a2;
+                const flag = storeItem;
+                if (clientOnly && !((_a2 = flag.clientSideAvailability) == null ? void 0 : _a2.usingEnvironmentId)) {
+                  iterCb(true);
+                  return;
                 }
-                const requireExperimentData = (0, isExperiment_1.default)(flag, res.detail.reason);
-                builder.addFlag(flag, res.detail.value, (_a3 = res.detail.variationIndex) !== null && _a3 !== void 0 ? _a3 : void 0, res.detail.reason, flag.trackEvents || requireExperimentData, requireExperimentData, detailsOnlyIfTracked, res.prerequisites);
-                iterCb(true);
-              });
-            }, () => {
-              const res = builder.build();
-              callback === null || callback === void 0 ? void 0 : callback(null, res);
-              resolve(res);
-            });
+                this._evaluator.evaluateCb(flag, evalContext, (res) => {
+                  var _a3;
+                  if (res.isError) {
+                    this._onError(
+                      new Error(
+                        `Error for feature flag "${flag.key}" while evaluating all flags: ${res.message}`
+                      )
+                    );
+                  }
+                  const requireExperimentData = isExperiment(flag, res.detail.reason);
+                  builder.addFlag(
+                    flag,
+                    res.detail.value,
+                    (_a3 = res.detail.variationIndex) != null ? _a3 : void 0,
+                    res.detail.reason,
+                    flag.trackEvents || requireExperimentData,
+                    requireExperimentData,
+                    detailsOnlyIfTracked,
+                    res.prerequisites
+                  );
+                  iterCb(true);
+                });
+              },
+              () => {
+                const res = builder.build();
+                callback == null ? void 0 : callback(null, res);
+                resolve(res);
+              }
+            );
           });
           if (!this.initialized()) {
             this._featureStore.initialized((storeInitialized) => {
               var _a2, _b2;
               let valid = true;
               if (storeInitialized) {
-                (_a2 = this._logger) === null || _a2 === void 0 ? void 0 : _a2.warn("Called allFlagsState before client initialization; using last known values from data store");
+                if (!this._allFlagsStateLastKnownValuesWarningLogged) {
+                  this._allFlagsStateLastKnownValuesWarningLogged = true;
+                  (_a2 = this._logger) == null ? void 0 : _a2.warn(
+                    "Called allFlagsState before client initialization; using last known values from data store. This message is logged once."
+                  );
+                }
               } else {
-                (_b2 = this._logger) === null || _b2 === void 0 ? void 0 : _b2.warn("Called allFlagsState before client initialization. Data store not available; returning empty state");
+                (_b2 = this._logger) == null ? void 0 : _b2.warn(
+                  "Called allFlagsState before client initialization. Data store not available; returning empty state"
+                );
                 valid = false;
               }
               doEval(valid);
@@ -29785,14 +27614,14 @@ var require_LDClientImpl = __commonJS({
         });
       }
       secureModeHash(context) {
-        const checkedContext = js_sdk_common_1.Context.fromLDContext(context);
+        const checkedContext = import_js_sdk_common20.Context.fromLDContext(context);
         const key = checkedContext.valid ? checkedContext.canonicalKey : void 0;
         if (!this._platform.crypto.createHmac) {
           throw new Error("Platform must implement createHmac");
         }
         const hmac = this._platform.crypto.createHmac("sha256", this._sdkKey);
         if (key === void 0) {
-          throw new js_sdk_common_1.LDClientError("Could not generate secure mode hash for invalid context");
+          throw new import_js_sdk_common20.LDClientError("Could not generate secure mode hash for invalid context");
         }
         hmac.update(key);
         return hmac.digest("hex");
@@ -29800,8 +27629,8 @@ var require_LDClientImpl = __commonJS({
       close() {
         var _a, _b;
         this._eventProcessor.close();
-        (_a = this._updateProcessor) === null || _a === void 0 ? void 0 : _a.close();
-        (_b = this._dataSource) === null || _b === void 0 ? void 0 : _b.stop();
+        (_a = this._updateProcessor) == null ? void 0 : _a.close();
+        (_b = this._dataSource) == null ? void 0 : _b.stop();
         this._featureStore.close();
         this._bigSegmentsManager.close();
       }
@@ -29810,18 +27639,20 @@ var require_LDClientImpl = __commonJS({
       }
       track(key, context, data, metricValue) {
         var _a, _b;
-        const checkedContext = js_sdk_common_1.Context.fromLDContext(context);
+        const checkedContext = import_js_sdk_common20.Context.fromLDContext(context);
         if (!checkedContext.valid) {
-          (_a = this._logger) === null || _a === void 0 ? void 0 : _a.warn(ClientMessages.MissingContextKeyNoEvent);
+          (_a = this._logger) == null ? void 0 : _a.warn(ClientMessages.MissingContextKeyNoEvent);
           return;
         }
-        if (metricValue !== void 0 && !js_sdk_common_1.TypeValidators.Number.is(metricValue)) {
-          (_b = this._logger) === null || _b === void 0 ? void 0 : _b.warn(ClientMessages.invalidMetricValue(typeof metricValue));
+        if (metricValue !== void 0 && !import_js_sdk_common20.TypeValidators.Number.is(metricValue)) {
+          (_b = this._logger) == null ? void 0 : _b.warn(ClientMessages.invalidMetricValue(typeof metricValue));
         }
-        this._eventProcessor.sendEvent(this._eventFactoryDefault.customEvent(key, checkedContext, data, metricValue));
+        this._eventProcessor.sendEvent(
+          this._eventFactoryDefault.customEvent(key, checkedContext, data, metricValue)
+        );
       }
       trackMigration(event) {
-        const converted = (0, MigrationOpEventConversion_1.default)(event);
+        const converted = MigrationOpEventToInputEvent(event);
         if (!converted) {
           return;
         }
@@ -29829,9 +27660,9 @@ var require_LDClientImpl = __commonJS({
       }
       identify(context) {
         var _a;
-        const checkedContext = js_sdk_common_1.Context.fromLDContext(context);
+        const checkedContext = import_js_sdk_common20.Context.fromLDContext(context);
         if (!checkedContext.valid) {
-          (_a = this._logger) === null || _a === void 0 ? void 0 : _a.warn(ClientMessages.MissingContextKeyNoEvent);
+          (_a = this._logger) == null ? void 0 : _a.warn(ClientMessages.MissingContextKeyNoEvent);
           return;
         }
         this._eventProcessor.sendEvent(this._eventFactoryDefault.identifyEvent(checkedContext));
@@ -29840,9 +27671,9 @@ var require_LDClientImpl = __commonJS({
         try {
           await this._eventProcessor.flush();
         } catch (err) {
-          return callback === null || callback === void 0 ? void 0 : callback(err, false);
+          return callback == null ? void 0 : callback(err, false);
         }
-        return callback === null || callback === void 0 ? void 0 : callback(null, true);
+        return callback == null ? void 0 : callback(null, true);
       }
       addHook(hook) {
         this._hookRunner.addHook(hook);
@@ -29850,64 +27681,90 @@ var require_LDClientImpl = __commonJS({
       _variationInternal(flagKey, context, defaultValue, eventFactory, cb, typeChecker) {
         var _a, _b;
         if (this._config.offline) {
-          (_a = this._logger) === null || _a === void 0 ? void 0 : _a.info("Variation called in offline mode. Returning default value.");
-          cb(EvalResult_1.default.forError(ErrorKinds.ClientNotReady, void 0, defaultValue));
+          (_a = this._logger) == null ? void 0 : _a.info("Variation called in offline mode. Returning default value.");
+          cb(EvalResult.forError(ErrorKinds3.ClientNotReady, void 0, defaultValue));
           return;
         }
-        const evalContext = js_sdk_common_1.Context.fromLDContext(context);
+        const evalContext = import_js_sdk_common20.Context.fromLDContext(context);
         if (!evalContext.valid) {
-          this._onError(new js_sdk_common_1.LDClientError(`${(_b = evalContext.message) !== null && _b !== void 0 ? _b : "Context not valid;"} returning default value.`));
-          cb(EvalResult_1.default.forError(ErrorKinds.UserNotSpecified, void 0, defaultValue));
+          this._onError(
+            new import_js_sdk_common20.LDClientError(
+              `${(_b = evalContext.message) != null ? _b : "Context not valid;"} returning default value.`
+            )
+          );
+          cb(EvalResult.forError(ErrorKinds3.UserNotSpecified, void 0, defaultValue));
           return;
         }
-        this._featureStore.get(VersionedDataKinds_1.default.Features, flagKey, (item) => {
+        this._featureStore.get(VersionedDataKinds.Features, flagKey, (item) => {
           const flag = item;
           if (!flag) {
-            const error2 = new js_sdk_common_1.LDClientError(`Unknown feature flag "${flagKey}"; returning default value`);
+            const error2 = new import_js_sdk_common20.LDClientError(
+              `Unknown feature flag "${flagKey}"; returning default value`
+            );
             this._onError(error2);
-            const result = EvalResult_1.default.forError(ErrorKinds.FlagNotFound, void 0, defaultValue);
-            this._eventProcessor.sendEvent(this._eventFactoryDefault.unknownFlagEvent(flagKey, defaultValue, evalContext));
+            const result = EvalResult.forError(ErrorKinds3.FlagNotFound, void 0, defaultValue);
+            this._eventProcessor.sendEvent(
+              this._eventFactoryDefault.unknownFlagEvent(flagKey, defaultValue, evalContext)
+            );
             cb(result);
             return;
           }
-          this._evaluator.evaluateCb(flag, evalContext, (evalRes) => {
-            var _a2;
-            if (evalRes.detail.variationIndex === void 0 || evalRes.detail.variationIndex === null) {
-              (_a2 = this._logger) === null || _a2 === void 0 ? void 0 : _a2.debug("Result value is null in variation");
-              evalRes.setDefault(defaultValue);
-            }
-            if (typeChecker) {
-              const [matched, type] = typeChecker(evalRes.detail.value);
-              if (!matched) {
-                const errorRes = EvalResult_1.default.forError(ErrorKinds.WrongType, `Did not receive expected type (${type}) evaluating feature flag "${flagKey}"`, defaultValue);
-                this._sendEvalEvent(errorRes, eventFactory, flag, evalContext, defaultValue);
-                cb(errorRes, flag);
-                return;
+          this._evaluator.evaluateCb(
+            flag,
+            evalContext,
+            (evalRes) => {
+              var _a2;
+              if (evalRes.detail.variationIndex === void 0 || evalRes.detail.variationIndex === null) {
+                (_a2 = this._logger) == null ? void 0 : _a2.debug("Result value is null in variation");
+                evalRes.setDefault(defaultValue);
               }
-            }
-            this._sendEvalEvent(evalRes, eventFactory, flag, evalContext, defaultValue);
-            cb(evalRes, flag);
-          }, eventFactory);
+              if (typeChecker) {
+                const [matched, type] = typeChecker(evalRes.detail.value);
+                if (!matched) {
+                  const errorRes = EvalResult.forError(
+                    ErrorKinds3.WrongType,
+                    `Did not receive expected type (${type}) evaluating feature flag "${flagKey}"`,
+                    defaultValue
+                  );
+                  this._sendEvalEvent(errorRes, eventFactory, flag, evalContext, defaultValue);
+                  cb(errorRes, flag);
+                  return;
+                }
+              }
+              this._sendEvalEvent(evalRes, eventFactory, flag, evalContext, defaultValue);
+              cb(evalRes, flag);
+            },
+            eventFactory
+          );
         });
       }
       _sendEvalEvent(evalRes, eventFactory, flag, evalContext, defaultValue) {
         var _a;
-        (_a = evalRes.events) === null || _a === void 0 ? void 0 : _a.forEach((event) => {
-          this._eventProcessor.sendEvent(Object.assign({}, event));
+        (_a = evalRes.events) == null ? void 0 : _a.forEach((event) => {
+          this._eventProcessor.sendEvent(__spreadValues({}, event));
         });
-        this._eventProcessor.sendEvent(eventFactory.evalEventServer(flag, evalContext, evalRes.detail, defaultValue, void 0));
+        this._eventProcessor.sendEvent(
+          eventFactory.evalEventServer(flag, evalContext, evalRes.detail, defaultValue, void 0)
+        );
       }
       _evaluateIfPossible(flagKey, context, defaultValue, eventFactory, cb, typeChecker) {
         if (!this.initialized()) {
           this._featureStore.initialized((storeInitialized) => {
             var _a, _b;
             if (storeInitialized) {
-              (_a = this._logger) === null || _a === void 0 ? void 0 : _a.warn("Variation called before LaunchDarkly client initialization completed (did you wait for the 'ready' event?) - using last known values from feature store");
+              if (!this._lastKnownValuesWarningLogged) {
+                this._lastKnownValuesWarningLogged = true;
+                (_a = this._logger) == null ? void 0 : _a.warn(
+                  "Variation called before LaunchDarkly client initialization completed (did you wait for the 'ready' event?) - using last known values from feature store. This message is logged once."
+                );
+              }
               this._variationInternal(flagKey, context, defaultValue, eventFactory, cb, typeChecker);
               return;
             }
-            (_b = this._logger) === null || _b === void 0 ? void 0 : _b.warn("Variation called before LaunchDarkly client initialization completed (did you wait for the'ready' event?) - using default value");
-            cb(EvalResult_1.default.forError(ErrorKinds.ClientNotReady, void 0, defaultValue));
+            (_b = this._logger) == null ? void 0 : _b.warn(
+              "Variation called before LaunchDarkly client initialization completed (did you wait for the'ready' event?) - using default value"
+            );
+            cb(EvalResult.forError(ErrorKinds3.ClientNotReady, void 0, defaultValue));
           });
           return;
         }
@@ -29919,16 +27776,16 @@ var require_LDClientImpl = __commonJS({
         this._onError(error2);
         this._onFailed(error2);
         if (!this.initialized()) {
-          this._initState = InitState.Failed;
+          this._initState = 2;
           this._rejectionReason = error2;
-          (_a = this._initReject) === null || _a === void 0 ? void 0 : _a.call(this, error2);
+          (_a = this._initReject) == null ? void 0 : _a.call(this, error2);
         }
       }
       _initSuccess() {
         var _a;
         if (!this.initialized()) {
-          this._initState = InitState.Initialized;
-          (_a = this._initResolve) === null || _a === void 0 ? void 0 : _a.call(this, this);
+          this._initState = 1;
+          (_a = this._initResolve) == null ? void 0 : _a.call(this, this);
           this._onReady();
         }
       }
@@ -29946,13 +27803,13 @@ var require_LDClientImpl = __commonJS({
        */
       _clientWithTimeout(basePromise, timeout, logger) {
         if (timeout) {
-          const cancelableTimeout = (0, js_sdk_common_1.cancelableTimedPromise)(timeout, "waitForInitialization");
+          const cancelableTimeout = (0, import_js_sdk_common20.cancelableTimedPromise)(timeout, "waitForInitialization");
           return Promise.race([
             basePromise.then(() => this),
             cancelableTimeout.promise.then(() => this)
           ]).catch((reason) => {
-            if (reason instanceof js_sdk_common_1.LDTimeoutError) {
-              logger === null || logger === void 0 ? void 0 : logger.error(reason.message);
+            if (reason instanceof import_js_sdk_common20.LDTimeoutError) {
+              logger == null ? void 0 : logger.error(reason.message);
             }
             throw reason;
           }).finally(() => cancelableTimeout.cancel());
@@ -29960,18 +27817,6 @@ var require_LDClientImpl = __commonJS({
         return basePromise;
       }
     };
-    exports.default = LDClientImpl;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/Migration.js
-var require_Migration = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/Migration.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.createMigration = exports.LDMigrationError = exports.LDMigrationSuccess = void 0;
-    var api_1 = require_api2();
-    var LDMigrationOptions_1 = require_LDMigrationOptions();
     async function safeCall(method) {
       try {
         const res = await method();
@@ -29989,102 +27834,176 @@ var require_Migration = __commonJS({
         result
       };
     }
-    exports.LDMigrationSuccess = LDMigrationSuccess;
     function LDMigrationError(error2) {
       return {
         success: false,
         error: error2
       };
     }
-    exports.LDMigrationError = LDMigrationError;
     var Migration = class {
       constructor(_client, _config) {
-        var _a, _b;
         this._client = _client;
         this._config = _config;
         this._readTable = {
-          [api_1.LDMigrationStage.Off]: async (context) => this._doSingleOp(context, "old", this._config.readOld.bind(this._config)),
-          [api_1.LDMigrationStage.DualWrite]: async (context) => this._doSingleOp(context, "old", this._config.readOld.bind(this._config)),
-          [api_1.LDMigrationStage.Shadow]: async (context) => {
+          [
+            "off"
+            /* Off */
+          ]: async (context) => this._doSingleOp(context, "old", this._config.readOld.bind(this._config)),
+          [
+            "dualwrite"
+            /* DualWrite */
+          ]: async (context) => this._doSingleOp(context, "old", this._config.readOld.bind(this._config)),
+          [
+            "shadow"
+            /* Shadow */
+          ]: async (context) => {
             const { fromOld, fromNew } = await this._doRead(context);
             this._trackConsistency(context, fromOld, fromNew);
             return fromOld;
           },
-          [api_1.LDMigrationStage.Live]: async (context) => {
+          [
+            "live"
+            /* Live */
+          ]: async (context) => {
             const { fromNew, fromOld } = await this._doRead(context);
             this._trackConsistency(context, fromOld, fromNew);
             return fromNew;
           },
-          [api_1.LDMigrationStage.RampDown]: async (context) => this._doSingleOp(context, "new", this._config.readNew.bind(this._config)),
-          [api_1.LDMigrationStage.Complete]: async (context) => this._doSingleOp(context, "new", this._config.readNew.bind(this._config))
+          [
+            "rampdown"
+            /* RampDown */
+          ]: async (context) => this._doSingleOp(context, "new", this._config.readNew.bind(this._config)),
+          [
+            "complete"
+            /* Complete */
+          ]: async (context) => this._doSingleOp(context, "new", this._config.readNew.bind(this._config))
         };
         this._writeTable = {
-          [api_1.LDMigrationStage.Off]: async (context) => ({
-            authoritative: await this._doSingleOp(context, "old", this._config.writeOld.bind(this._config))
+          [
+            "off"
+            /* Off */
+          ]: async (context) => ({
+            authoritative: await this._doSingleOp(
+              context,
+              "old",
+              this._config.writeOld.bind(this._config)
+            )
           }),
-          [api_1.LDMigrationStage.DualWrite]: async (context) => {
-            const fromOld = await this._doSingleOp(context, "old", this._config.writeOld.bind(this._config));
+          [
+            "dualwrite"
+            /* DualWrite */
+          ]: async (context) => {
+            const fromOld = await this._doSingleOp(
+              context,
+              "old",
+              this._config.writeOld.bind(this._config)
+            );
             if (!fromOld.success) {
               return {
                 authoritative: fromOld
               };
             }
-            const fromNew = await this._doSingleOp(context, "new", this._config.writeNew.bind(this._config));
+            const fromNew = await this._doSingleOp(
+              context,
+              "new",
+              this._config.writeNew.bind(this._config)
+            );
             return {
               authoritative: fromOld,
               nonAuthoritative: fromNew
             };
           },
-          [api_1.LDMigrationStage.Shadow]: async (context) => {
-            const fromOld = await this._doSingleOp(context, "old", this._config.writeOld.bind(this._config));
+          [
+            "shadow"
+            /* Shadow */
+          ]: async (context) => {
+            const fromOld = await this._doSingleOp(
+              context,
+              "old",
+              this._config.writeOld.bind(this._config)
+            );
             if (!fromOld.success) {
               return {
                 authoritative: fromOld
               };
             }
-            const fromNew = await this._doSingleOp(context, "new", this._config.writeNew.bind(this._config));
+            const fromNew = await this._doSingleOp(
+              context,
+              "new",
+              this._config.writeNew.bind(this._config)
+            );
             return {
               authoritative: fromOld,
               nonAuthoritative: fromNew
             };
           },
-          [api_1.LDMigrationStage.Live]: async (context) => {
-            const fromNew = await this._doSingleOp(context, "new", this._config.writeNew.bind(this._config));
+          [
+            "live"
+            /* Live */
+          ]: async (context) => {
+            const fromNew = await this._doSingleOp(
+              context,
+              "new",
+              this._config.writeNew.bind(this._config)
+            );
             if (!fromNew.success) {
               return {
                 authoritative: fromNew
               };
             }
-            const fromOld = await this._doSingleOp(context, "old", this._config.writeOld.bind(this._config));
+            const fromOld = await this._doSingleOp(
+              context,
+              "old",
+              this._config.writeOld.bind(this._config)
+            );
             return {
               authoritative: fromNew,
               nonAuthoritative: fromOld
             };
           },
-          [api_1.LDMigrationStage.RampDown]: async (context) => {
-            const fromNew = await this._doSingleOp(context, "new", this._config.writeNew.bind(this._config));
+          [
+            "rampdown"
+            /* RampDown */
+          ]: async (context) => {
+            const fromNew = await this._doSingleOp(
+              context,
+              "new",
+              this._config.writeNew.bind(this._config)
+            );
             if (!fromNew.success) {
               return {
                 authoritative: fromNew
               };
             }
-            const fromOld = await this._doSingleOp(context, "old", this._config.writeOld.bind(this._config));
+            const fromOld = await this._doSingleOp(
+              context,
+              "old",
+              this._config.writeOld.bind(this._config)
+            );
             return {
               authoritative: fromNew,
               nonAuthoritative: fromOld
             };
           },
-          [api_1.LDMigrationStage.Complete]: async (context) => ({
-            authoritative: await this._doSingleOp(context, "new", this._config.writeNew.bind(this._config))
+          [
+            "complete"
+            /* Complete */
+          ]: async (context) => ({
+            authoritative: await this._doSingleOp(
+              context,
+              "new",
+              this._config.writeNew.bind(this._config)
+            )
           })
         };
+        var _a, _b;
         if (this._config.execution) {
           this._execution = this._config.execution;
         } else {
-          this._execution = new LDMigrationOptions_1.LDConcurrentExecution();
+          this._execution = new LDConcurrentExecution();
         }
-        this._latencyTracking = (_a = this._config.latencyTracking) !== null && _a !== void 0 ? _a : true;
-        this._errorTracking = (_b = this._config.errorTracking) !== null && _b !== void 0 ? _b : true;
+        this._latencyTracking = (_a = this._config.latencyTracking) != null ? _a : true;
+        this._errorTracking = (_b = this._config.errorTracking) != null ? _b : true;
       }
       async read(key, context, defaultStage, payload) {
         const stage = await this._client.migrationVariation(key, context, defaultStage);
@@ -30126,16 +28045,32 @@ var require_Migration = __commonJS({
         return { fromOld, fromNew };
       }
       async _readConcurrent(context) {
-        const fromOldPromise = this._doSingleOp(context, "old", this._config.readOld.bind(this._config));
-        const fromNewPromise = this._doSingleOp(context, "new", this._config.readNew.bind(this._config));
+        const fromOldPromise = this._doSingleOp(
+          context,
+          "old",
+          this._config.readOld.bind(this._config)
+        );
+        const fromNewPromise = this._doSingleOp(
+          context,
+          "new",
+          this._config.readNew.bind(this._config)
+        );
         const [fromOld, fromNew] = await Promise.all([fromOldPromise, fromNewPromise]);
         return { fromOld, fromNew };
       }
       async _readSequentialRandom(context) {
         const randomIndex = Math.floor(Math.random() * 2);
         if (randomIndex === 0) {
-          const fromOld2 = await this._doSingleOp(context, "old", this._config.readOld.bind(this._config));
-          const fromNew2 = await this._doSingleOp(context, "new", this._config.readNew.bind(this._config));
+          const fromOld2 = await this._doSingleOp(
+            context,
+            "old",
+            this._config.readOld.bind(this._config)
+          );
+          const fromNew2 = await this._doSingleOp(
+            context,
+            "new",
+            this._config.readNew.bind(this._config)
+          );
           return { fromOld: fromOld2, fromNew: fromNew2 };
         }
         const fromNew = await this._doSingleOp(context, "new", this._config.readNew.bind(this._config));
@@ -30144,9 +28079,9 @@ var require_Migration = __commonJS({
       }
       async _doRead(context) {
         var _a;
-        if (((_a = this._execution) === null || _a === void 0 ? void 0 : _a.type) === LDMigrationOptions_1.LDExecution.Serial) {
+        if (((_a = this._execution) == null ? void 0 : _a.type) === 0) {
           const serial = this._execution;
-          if (serial.ordering === LDMigrationOptions_1.LDExecutionOrdering.Fixed) {
+          if (serial.ordering === 0) {
             return this._readSequentialFixed(context);
           }
           return this._readSequentialRandom(context);
@@ -30155,11 +28090,15 @@ var require_Migration = __commonJS({
       }
       async _doSingleOp(context, origin, method) {
         context.tracker.invoked(origin);
-        const res = await this._trackLatency(context.tracker, origin, () => safeCall(() => method(context.payload)));
+        const res = await this._trackLatency(
+          context.tracker,
+          origin,
+          () => safeCall(() => method(context.payload))
+        );
         if (!res.success && this._errorTracking) {
           context.tracker.error(origin);
         }
-        return Object.assign({ origin }, res);
+        return __spreadValues({ origin }, res);
       }
       async _trackLatency(tracker, origin, method) {
         if (!this._latencyTracking) {
@@ -30185,16 +28124,13 @@ var require_Migration = __commonJS({
     function createMigration(client, config) {
       return new Migration(client, config);
     }
-    exports.createMigration = createMigration;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/integrations/FileDataSourceFactory.js
-var require_FileDataSourceFactory = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/integrations/FileDataSourceFactory.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var FileDataSource_1 = require_FileDataSource();
+    var integrations_exports = {};
+    __export(integrations_exports, {
+      FileDataSourceFactory: () => FileDataSourceFactory,
+      TestData: () => TestData,
+      TestDataFlagBuilder: () => TestDataFlagBuilder,
+      TestDataRuleBuilder: () => TestDataRuleBuilder
+    });
     var FileDataSourceFactory = class {
       constructor(_options) {
         this._options = _options;
@@ -30216,38 +28152,25 @@ var require_FileDataSourceFactory = __commonJS({
           logger: this._options.logger || ldClientContext.basicConfiguration.logger,
           yamlParser: this._options.yamlParser
         };
-        return new FileDataSource_1.default(updatedOptions, ldClientContext.platform.fileSystem, featureStore, initSuccessHandler, errorHandler);
+        return new FileDataSource(
+          updatedOptions,
+          ldClientContext.platform.fileSystem,
+          featureStore,
+          initSuccessHandler,
+          errorHandler
+        );
       }
       getFactory() {
         return (ldClientContext, featureStore, initSuccessHandler, errorHandler) => this.create(ldClientContext, featureStore, initSuccessHandler, errorHandler);
       }
     };
-    exports.default = FileDataSourceFactory;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/integrations/test_data/booleanVariation.js
-var require_booleanVariation = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/integrations/test_data/booleanVariation.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.variationForBoolean = exports.FALSE_VARIATION_INDEX = exports.TRUE_VARIATION_INDEX = void 0;
-    exports.TRUE_VARIATION_INDEX = 0;
-    exports.FALSE_VARIATION_INDEX = 1;
+    var import_js_sdk_common22 = require_cjs();
+    var TRUE_VARIATION_INDEX = 0;
+    var FALSE_VARIATION_INDEX = 1;
     function variationForBoolean(val) {
-      return val ? exports.TRUE_VARIATION_INDEX : exports.FALSE_VARIATION_INDEX;
+      return val ? TRUE_VARIATION_INDEX : FALSE_VARIATION_INDEX;
     }
-    exports.variationForBoolean = variationForBoolean;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/integrations/test_data/TestDataRuleBuilder.js
-var require_TestDataRuleBuilder = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/integrations/test_data/TestDataRuleBuilder.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var js_sdk_common_1 = require_cjs();
-    var booleanVariation_1 = require_booleanVariation();
+    var import_js_sdk_common21 = require_cjs();
     var TestDataRuleBuilder = class _TestDataRuleBuilder {
       /**
        * @internal
@@ -30282,7 +28205,7 @@ var require_TestDataRuleBuilder = __commonJS({
         this._clauses.push({
           contextKind,
           attribute,
-          attributeReference: new js_sdk_common_1.AttributeReference(attribute),
+          attributeReference: new import_js_sdk_common21.AttributeReference(attribute),
           op: "in",
           values,
           negate: false
@@ -30309,7 +28232,7 @@ var require_TestDataRuleBuilder = __commonJS({
         this._clauses.push({
           contextKind,
           attribute,
-          attributeReference: new js_sdk_common_1.AttributeReference(attribute),
+          attributeReference: new import_js_sdk_common21.AttributeReference(attribute),
           op: "in",
           values,
           negate: true
@@ -30331,9 +28254,9 @@ var require_TestDataRuleBuilder = __commonJS({
        * @return the flag rule builder
        */
       thenReturn(variation) {
-        if (js_sdk_common_1.TypeValidators.Boolean.is(variation)) {
+        if (import_js_sdk_common21.TypeValidators.Boolean.is(variation)) {
           this._flagBuilder.booleanFlag();
-          return this.thenReturn((0, booleanVariation_1.variationForBoolean)(variation));
+          return this.thenReturn(variationForBoolean(variation));
         }
         this._variation = variation;
         this._flagBuilder.addRule(this);
@@ -30356,18 +28279,6 @@ var require_TestDataRuleBuilder = __commonJS({
         return new _TestDataRuleBuilder(this._flagBuilder, this._clauses, this._variation);
       }
     };
-    exports.default = TestDataRuleBuilder;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/integrations/test_data/TestDataFlagBuilder.js
-var require_TestDataFlagBuilder = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/integrations/test_data/TestDataFlagBuilder.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var js_sdk_common_1 = require_cjs();
-    var booleanVariation_1 = require_booleanVariation();
-    var TestDataRuleBuilder_1 = require_TestDataRuleBuilder();
     var TestDataFlagBuilder = class _TestDataFlagBuilder {
       /**
        * @internal
@@ -30396,13 +28307,13 @@ var require_TestDataFlagBuilder = __commonJS({
             this._data.rules = [];
             data.rules.forEach((rule) => {
               var _a;
-              (_a = this._data.rules) === null || _a === void 0 ? void 0 : _a.push(rule.clone());
+              (_a = this._data.rules) == null ? void 0 : _a.push(rule.clone());
             });
           }
         }
       }
       get _isBooleanFlag() {
-        return this._data.variations.length === 2 && this._data.variations[booleanVariation_1.TRUE_VARIATION_INDEX] === true && this._data.variations[booleanVariation_1.FALSE_VARIATION_INDEX] === false;
+        return this._data.variations.length === 2 && this._data.variations[TRUE_VARIATION_INDEX] === true && this._data.variations[FALSE_VARIATION_INDEX] === false;
       }
       /**
        * A shortcut for setting the flag to use the standard boolean configuration.
@@ -30418,7 +28329,7 @@ var require_TestDataFlagBuilder = __commonJS({
         if (this._isBooleanFlag) {
           return this;
         }
-        return this.variations(true, false).fallthroughVariation(booleanVariation_1.TRUE_VARIATION_INDEX).offVariation(booleanVariation_1.FALSE_VARIATION_INDEX);
+        return this.variations(true, false).fallthroughVariation(TRUE_VARIATION_INDEX).offVariation(FALSE_VARIATION_INDEX);
       }
       /**
        * Sets the allowable variation values for the flag.
@@ -30464,8 +28375,8 @@ var require_TestDataFlagBuilder = __commonJS({
        * @return the flag builder
        */
       fallthroughVariation(variation) {
-        if (js_sdk_common_1.TypeValidators.Boolean.is(variation)) {
-          return this.booleanFlag().fallthroughVariation((0, booleanVariation_1.variationForBoolean)(variation));
+        if (import_js_sdk_common22.TypeValidators.Boolean.is(variation)) {
+          return this.booleanFlag().fallthroughVariation(variationForBoolean(variation));
         }
         this._data.fallthroughVariation = variation;
         return this;
@@ -30483,8 +28394,8 @@ var require_TestDataFlagBuilder = __commonJS({
        * @return the flag builder
        */
       offVariation(variation) {
-        if (js_sdk_common_1.TypeValidators.Boolean.is(variation)) {
-          return this.booleanFlag().offVariation((0, booleanVariation_1.variationForBoolean)(variation));
+        if (import_js_sdk_common22.TypeValidators.Boolean.is(variation)) {
+          return this.booleanFlag().offVariation(variationForBoolean(variation));
         }
         this._data.offVariation = variation;
         return this;
@@ -30563,8 +28474,12 @@ var require_TestDataFlagBuilder = __commonJS({
        * @return the flag builder
        */
       variationForContext(contextKind, contextKey, variation) {
-        if (js_sdk_common_1.TypeValidators.Boolean.is(variation)) {
-          return this.booleanFlag().variationForContext(contextKind, contextKey, (0, booleanVariation_1.variationForBoolean)(variation));
+        if (import_js_sdk_common22.TypeValidators.Boolean.is(variation)) {
+          return this.booleanFlag().variationForContext(
+            contextKind,
+            contextKey,
+            variationForBoolean(variation)
+          );
         }
         if (!this._data.targetsByVariation) {
           this._data.targetsByVariation = {};
@@ -30639,7 +28554,7 @@ var require_TestDataFlagBuilder = __commonJS({
        *    or add more tests with another method like `andMatch`
        */
       ifMatch(contextKind, attribute, ...values) {
-        const flagRuleBuilder = new TestDataRuleBuilder_1.default(this);
+        const flagRuleBuilder = new TestDataRuleBuilder(this);
         return flagRuleBuilder.andMatch(contextKind, attribute, ...values);
       }
       /**
@@ -30660,12 +28575,12 @@ var require_TestDataFlagBuilder = __commonJS({
        *    or add more tests with another method like `andNotMatch`
        */
       ifNotMatch(contextKind, attribute, ...values) {
-        const flagRuleBuilder = new TestDataRuleBuilder_1.default(this);
+        const flagRuleBuilder = new TestDataRuleBuilder(this);
         return flagRuleBuilder.andNotMatch(contextKind, attribute, ...values);
       }
       checkRatio(ratio) {
         var _a;
-        this._data.migration = (_a = this._data.migration) !== null && _a !== void 0 ? _a : {};
+        this._data.migration = (_a = this._data.migration) != null ? _a : {};
         this._data.migration.checkRatio = ratio;
         return this;
       }
@@ -30701,25 +28616,29 @@ var require_TestDataFlagBuilder = __commonJS({
         if (this._data.targetsByVariation) {
           const contextTargets = [];
           const userTargets = [];
-          Object.entries(this._data.targetsByVariation).forEach(([variation, contextTargetsForVariation]) => {
-            Object.entries(contextTargetsForVariation).forEach(([contextKind, values]) => {
-              const numberVariation = parseInt(variation, 10);
-              contextTargets.push({
-                contextKind,
-                values: contextKind === "user" ? [] : values,
-                // Iterating the object it will be a string.
-                variation: numberVariation
+          Object.entries(this._data.targetsByVariation).forEach(
+            ([variation, contextTargetsForVariation]) => {
+              Object.entries(contextTargetsForVariation).forEach(([contextKind, values]) => {
+                const numberVariation = parseInt(variation, 10);
+                contextTargets.push({
+                  contextKind,
+                  values: contextKind === "user" ? [] : values,
+                  // Iterating the object it will be a string.
+                  variation: numberVariation
+                });
+                if (contextKind === "user") {
+                  userTargets.push({ values, variation: numberVariation });
+                }
               });
-              if (contextKind === "user") {
-                userTargets.push({ values, variation: numberVariation });
-              }
-            });
-          });
+            }
+          );
           baseFlagObject.targets = userTargets;
           baseFlagObject.contextTargets = contextTargets;
         }
         if (this._data.rules) {
-          baseFlagObject.rules = this._data.rules.map((rule, i) => rule.build(String(i)));
+          baseFlagObject.rules = this._data.rules.map(
+            (rule, i) => rule.build(String(i))
+          );
         }
         return baseFlagObject;
       }
@@ -30736,22 +28655,13 @@ var require_TestDataFlagBuilder = __commonJS({
         return this._key;
       }
     };
-    exports.default = TestDataFlagBuilder;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/integrations/test_data/TestDataSource.js
-var require_TestDataSource = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/integrations/test_data/TestDataSource.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
     var TestDataSource = class {
       constructor(_featureStore, initialFlags, initialSegments, _onStop, _listeners) {
         this._featureStore = _featureStore;
         this._onStop = _onStop;
         this._listeners = _listeners;
-        this._flags = Object.assign({}, initialFlags);
-        this._segments = Object.assign({}, initialSegments);
+        this._flags = __spreadValues({}, initialFlags);
+        this._segments = __spreadValues({}, initialSegments);
       }
       async start() {
         this._listeners.forEach(({ processJson }) => {
@@ -30769,21 +28679,6 @@ var require_TestDataSource = __commonJS({
         return this._featureStore.upsert(kind, value);
       }
     };
-    exports.default = TestDataSource;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/integrations/test_data/TestData.js
-var require_TestData = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/integrations/test_data/TestData.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var createStreamListeners_1 = require_createStreamListeners();
-    var AsyncStoreFacade_1 = require_AsyncStoreFacade();
-    var serialization_1 = require_serialization();
-    var VersionedDataKinds_1 = require_VersionedDataKinds();
-    var TestDataFlagBuilder_1 = require_TestDataFlagBuilder();
-    var TestDataSource_1 = require_TestDataSource();
     var TestData = class {
       constructor() {
         this._currentFlags = {};
@@ -30797,12 +28692,22 @@ var require_TestData = __commonJS({
        */
       getFactory() {
         return (clientContext, featureStore, initSuccessHandler, _errorHandler) => {
-          const listeners = (0, createStreamListeners_1.createStreamListeners)(featureStore, clientContext.basicConfiguration.logger, {
-            put: initSuccessHandler
-          });
-          const newSource = new TestDataSource_1.default(new AsyncStoreFacade_1.default(featureStore), this._currentFlags, this._currentSegments, (tds) => {
-            this._dataSources.splice(this._dataSources.indexOf(tds));
-          }, listeners);
+          const listeners = createStreamListeners(
+            featureStore,
+            clientContext.basicConfiguration.logger,
+            {
+              put: initSuccessHandler
+            }
+          );
+          const newSource = new TestDataSource(
+            new AsyncStoreFacade(featureStore),
+            this._currentFlags,
+            this._currentSegments,
+            (tds) => {
+              this._dataSources.splice(this._dataSources.indexOf(tds));
+            },
+            listeners
+          );
           this._dataSources.push(newSource);
           return newSource;
         };
@@ -30831,7 +28736,7 @@ var require_TestData = __commonJS({
         if (this._flagBuilders[key]) {
           return this._flagBuilders[key].clone();
         }
-        return new TestDataFlagBuilder_1.default(key).booleanFlag();
+        return new TestDataFlagBuilder(key).booleanFlag();
       }
       /**
        * Updates the test data with the specified flag configuration.
@@ -30856,7 +28761,9 @@ var require_TestData = __commonJS({
         const newFlag = flagBuilder.build(oldVersion + 1);
         this._currentFlags[flagKey] = newFlag;
         this._flagBuilders[flagKey] = flagBuilder.clone();
-        return Promise.all(this._dataSources.map((impl) => impl.upsert(VersionedDataKinds_1.default.Features, newFlag)));
+        return Promise.all(
+          this._dataSources.map((impl) => impl.upsert(VersionedDataKinds.Features, newFlag))
+        );
       }
       /**
        * Copies a full feature flag data model object into the test data.
@@ -30879,10 +28786,12 @@ var require_TestData = __commonJS({
       usePreconfiguredFlag(inConfig) {
         const flagConfig = JSON.parse(JSON.stringify(inConfig));
         const oldItem = this._currentFlags[flagConfig.key];
-        const newItem = Object.assign(Object.assign({}, flagConfig), { version: oldItem ? oldItem.version + 1 : flagConfig.version });
-        (0, serialization_1.processFlag)(newItem);
+        const newItem = __spreadProps(__spreadValues({}, flagConfig), { version: oldItem ? oldItem.version + 1 : flagConfig.version });
+        processFlag(newItem);
         this._currentFlags[flagConfig.key] = newItem;
-        return Promise.all(this._dataSources.map((impl) => impl.upsert(VersionedDataKinds_1.default.Features, newItem)));
+        return Promise.all(
+          this._dataSources.map((impl) => impl.upsert(VersionedDataKinds.Features, newItem))
+        );
       }
       /**
        * Copies a full segment data model object into the test data.
@@ -30903,65 +28812,17 @@ var require_TestData = __commonJS({
       usePreconfiguredSegment(inConfig) {
         const segmentConfig = JSON.parse(JSON.stringify(inConfig));
         const oldItem = this._currentSegments[segmentConfig.key];
-        const newItem = Object.assign(Object.assign({}, segmentConfig), { version: oldItem ? oldItem.version + 1 : segmentConfig.version });
-        (0, serialization_1.processSegment)(newItem);
+        const newItem = __spreadProps(__spreadValues({}, segmentConfig), {
+          version: oldItem ? oldItem.version + 1 : segmentConfig.version
+        });
+        processSegment(newItem);
         this._currentSegments[segmentConfig.key] = newItem;
-        return Promise.all(this._dataSources.map((impl) => impl.upsert(VersionedDataKinds_1.default.Segments, newItem)));
+        return Promise.all(
+          this._dataSources.map((impl) => impl.upsert(VersionedDataKinds.Segments, newItem))
+        );
       }
     };
-    exports.default = TestData;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/integrations/test_data/index.js
-var require_test_data = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/integrations/test_data/index.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.TestDataRuleBuilder = exports.TestDataFlagBuilder = exports.TestData = void 0;
-    var TestData_1 = require_TestData();
-    exports.TestData = TestData_1.default;
-    var TestDataFlagBuilder_1 = require_TestDataFlagBuilder();
-    exports.TestDataFlagBuilder = TestDataFlagBuilder_1.default;
-    var TestDataRuleBuilder_1 = require_TestDataRuleBuilder();
-    exports.TestDataRuleBuilder = TestDataRuleBuilder_1.default;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/integrations/index.js
-var require_integrations2 = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/integrations/index.js"(exports) {
-    "use strict";
-    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      var desc = Object.getOwnPropertyDescriptor(m, k);
-      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-        desc = { enumerable: true, get: function() {
-          return m[k];
-        } };
-      }
-      Object.defineProperty(o, k2, desc);
-    }) : (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      o[k2] = m[k];
-    }));
-    var __exportStar = exports && exports.__exportStar || function(m, exports2) {
-      for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports2, p)) __createBinding(exports2, m, p);
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.FileDataSourceFactory = void 0;
-    var FileDataSourceFactory_1 = require_FileDataSourceFactory();
-    exports.FileDataSourceFactory = FileDataSourceFactory_1.default;
-    __exportStar(require_test_data(), exports);
-    __exportStar(require_integrations(), exports);
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/events/NullEventSource.js
-var require_NullEventSource = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/events/NullEventSource.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
+    var platform2 = __toESM2(require_cjs(), 1);
     var NullEventSource = class {
       constructor(url, options) {
         this.handlers = {};
@@ -30976,81 +28837,17 @@ var require_NullEventSource = __commonJS({
         this.closed = true;
       }
       simulateError(error2) {
-        const shouldRetry = this.options.errorFilter(error2);
-        if (!shouldRetry) {
+        const shouldRetry3 = this.options.errorFilter(error2);
+        if (!shouldRetry3) {
           this.closed = true;
         }
       }
     };
-    exports.default = NullEventSource;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/events/index.js
-var require_events2 = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/events/index.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.NullEventSource = void 0;
-    var NullEventSource_1 = require_NullEventSource();
-    exports.NullEventSource = NullEventSource_1.default;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/internal/index.js
-var require_internal = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/internal/index.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.TtlCache = void 0;
-    var TtlCache_1 = require_TtlCache();
-    exports.TtlCache = TtlCache_1.default;
-  }
-});
-
-// node_modules/@launchdarkly/js-server-sdk-common/dist/index.js
-var require_dist = __commonJS({
-  "node_modules/@launchdarkly/js-server-sdk-common/dist/index.js"(exports) {
-    "use strict";
-    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      var desc = Object.getOwnPropertyDescriptor(m, k);
-      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-        desc = { enumerable: true, get: function() {
-          return m[k];
-        } };
-      }
-      Object.defineProperty(o, k2, desc);
-    }) : (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      o[k2] = m[k];
-    }));
-    var __exportStar = exports && exports.__exportStar || function(m, exports2) {
-      for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports2, p)) __createBinding(exports2, m, p);
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.createMigration = exports.LDMigrationSuccess = exports.LDMigrationError = exports.BigSegmentStoreStatusProviderImpl = exports.LDClientImpl = exports.internalServer = exports.platform = exports.integrations = void 0;
-    var BigSegmentStatusProviderImpl_1 = require_BigSegmentStatusProviderImpl();
-    exports.BigSegmentStoreStatusProviderImpl = BigSegmentStatusProviderImpl_1.default;
-    var LDClientImpl_1 = require_LDClientImpl();
-    exports.LDClientImpl = LDClientImpl_1.default;
-    var Migration_1 = require_Migration();
-    Object.defineProperty(exports, "createMigration", { enumerable: true, get: function() {
-      return Migration_1.createMigration;
-    } });
-    Object.defineProperty(exports, "LDMigrationError", { enumerable: true, get: function() {
-      return Migration_1.LDMigrationError;
-    } });
-    Object.defineProperty(exports, "LDMigrationSuccess", { enumerable: true, get: function() {
-      return Migration_1.LDMigrationSuccess;
-    } });
-    exports.integrations = require_integrations2();
-    exports.platform = require_cjs();
-    __exportStar(require_api2(), exports);
-    __exportStar(require_store(), exports);
-    __exportStar(require_events2(), exports);
-    __exportStar(require_cjs(), exports);
-    exports.internalServer = require_internal();
+    __reExport(src_exports, require_cjs(), module.exports);
+    var internal_exports = {};
+    __export(internal_exports, {
+      TtlCache: () => TtlCache
+    });
   }
 });
 
@@ -31210,7 +29007,7 @@ var require_NodeInfo = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     var os5 = __require("os");
     var sdkName = "@launchdarkly/node-server-sdk";
-    var sdkVersion = "9.13.4";
+    var sdkVersion = "9.13.6";
     function processPlatformName(name) {
       switch (name) {
         case "darwin":
