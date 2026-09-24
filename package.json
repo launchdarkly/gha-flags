@@ -30,7 +30,7 @@
     "@launchdarkly/node-server-sdk": "^9.13.4"
   },
   "devDependencies": {
-    "esbuild": "^0.28.1",
+    "esbuild": "^0.28.2",
     "oxfmt": "0.70.0",
     "oxlint": "1.85.0",
     "vitest": "^5.0.1",
