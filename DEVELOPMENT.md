@@ -32,7 +32,7 @@ In order to evaluate the test workflows successfully, your test environment must
 
 ## Build instructions
 
-The action is built using [@vercel/ncc](https://github.com/vercel/ncc).
+The action is built using [esbuild](https://esbuild.github.io/).
 
 ```
 npm run build
