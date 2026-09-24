@@ -2,6 +2,19 @@
 
 All notable changes to this GitHub Action will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [1.1.0](https://github.com/launchdarkly/gha-flags/compare/v1.0.4...v1.1.0) (2026-09-24)
+
+
+### Features
+
+* pretty print evaluation context at info level ([#114](https://github.com/launchdarkly/gha-flags/issues/114)) ([a209d0e](https://github.com/launchdarkly/gha-flags/commit/a209d0e6ce20cea14286cf5b67a09da6f4b73107))
+
+
+### Bug Fixes
+
+* remediate high & critical Dependabot and Wiz vulnerabilities ([#89](https://github.com/launchdarkly/gha-flags/issues/89)) ([7cfef5c](https://github.com/launchdarkly/gha-flags/commit/7cfef5c0fcf63bc225db946fac3d426e28021433))
+* Use native initialization timeout ([#116](https://github.com/launchdarkly/gha-flags/issues/116)) ([095f523](https://github.com/launchdarkly/gha-flags/commit/095f523b5384997127d58d18ad5f0066373294c0))
+
 ## [1.0.4](https://github.com/launchdarkly/gha-flags/compare/v1.0.3...v1.0.4) (2026-03-18)
 
 
