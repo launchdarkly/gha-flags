@@ -6,7 +6,7 @@
   "main": "src/index.js",
   "scripts": {
     "build": "esbuild src/index.js --bundle --platform=node --target=node24 --format=esm --outfile=dist/index.js --banner:js='import{createRequire}from\"module\";const require=createRequire(import.meta.url);'",
-    "docs": "action-docs -u --no-banner && oxfmt README.md",
+    "docs": "node scripts/gen-docs.mjs && oxfmt README.md",
     "lint": "oxlint .",
     "lint:fix": "oxlint . --fix",
     "format": "oxfmt .",
@@ -30,11 +30,11 @@
     "@launchdarkly/node-server-sdk": "^9.13.4"
   },
   "devDependencies": {
-    "action-docs": "^2.5.1",
     "esbuild": "^0.28.1",
     "oxfmt": "0.70.0",
     "oxlint": "1.85.0",
-    "vitest": "^5.0.1"
+    "vitest": "^5.0.1",
+    "yaml": "^2.9.1"
   },
   "overrides": {
     "vite": "^8.0.5"
