@@ -21713,7 +21713,7 @@ var require_cjs = __commonJS({
               this._logger?.debug(`Data follows: ${event.data}`);
               this._errorHandler?.(exports.DataSourceErrorKind.InvalidData, "Malformed data in EventStream.");
             }
-          } else {
+          } else if (eventName !== "error") {
             this._errorHandler?.(exports.DataSourceErrorKind.Unknown, "Event from EventStream missing data.");
           }
         });
@@ -23630,17 +23630,17 @@ var require_dist = __commonJS({
       }
       async init(allData, initMetadata) {
         return promisify((cb) => {
-          this._store.init(allData, cb, initMetadata);
+          this._store.init(allData, () => cb(void 0), initMetadata);
         });
       }
       async delete(kind, key, version) {
         return promisify((cb) => {
-          this._store.delete(kind, key, version, cb);
+          this._store.delete(kind, key, version, () => cb(void 0));
         });
       }
       async upsert(kind, data) {
         return promisify((cb) => {
-          this._store.upsert(kind, data, cb);
+          this._store.upsert(kind, data, () => cb(void 0));
         });
       }
       async initialized() {
@@ -23672,17 +23672,17 @@ var require_dist = __commonJS({
       }
       async init(allData, initMetadata) {
         return promisify((cb) => {
-          this._store.init(allData, cb, initMetadata);
+          this._store.init(allData, () => cb(void 0), initMetadata);
         });
       }
       async delete(kind, key, version) {
         return promisify((cb) => {
-          this._store.delete(kind, key, version, cb);
+          this._store.delete(kind, key, version, () => cb(void 0));
         });
       }
       async upsert(kind, data) {
         return promisify((cb) => {
-          this._store.upsert(kind, data, cb);
+          this._store.upsert(kind, data, () => cb(void 0));
         });
       }
       async initialized() {
@@ -23692,7 +23692,7 @@ var require_dist = __commonJS({
       }
       async applyChanges(basis, data, initMetadata, selector) {
         return promisify((cb) => {
-          this._store.applyChanges(basis, data, cb, initMetadata, selector);
+          this._store.applyChanges(basis, data, () => cb(void 0), initMetadata, selector);
         });
       }
       close() {
@@ -23879,12 +23879,12 @@ var require_dist = __commonJS({
       executePendingUpdates() {
         if (this._queue.length > 0) {
           const [fn, cb] = this._queue[0];
-          const newCb = () => {
+          const newCb = (err) => {
             this._queue.shift();
             if (this._queue.length > 0) {
               setTimeout(() => this.executePendingUpdates(), 0);
             }
-            cb == null ? void 0 : cb();
+            cb == null ? void 0 : cb(err);
           };
           fn(newCb);
         }
@@ -24237,7 +24237,7 @@ var require_dist = __commonJS({
                     this._nonTransPersistenceStore.upsert(
                       nextParams.dataKind,
                       nextParams.item,
-                      resolve
+                      () => resolve()
                     );
                   })
                 ),
@@ -24799,6 +24799,25 @@ var require_dist = __commonJS({
           retryResetIntervalMillis: 60 * 1e3
         });
         this._eventSource = eventSource;
+        eventSource.onclose = () => {
+          var _a2;
+          (_a2 = this._logger) == null ? void 0 : _a2.info("Closed LaunchDarkly stream connection");
+        };
+        eventSource.onerror = () => {
+        };
+        eventSource.onopen = (e) => {
+          var _a2, _b;
+          (_a2 = this._logger) == null ? void 0 : _a2.info("Opened LaunchDarkly stream connection");
+          this._initMetadata = import_js_sdk_common10.internal.initMetadataFromHeaders(e.headers);
+          if (((_b = e.headers) == null ? void 0 : _b[`x-ld-fd-fallback`]) === `true`) {
+            fallbackRequested = true;
+          }
+          statusCallback(import_js_sdk_common10.subsystem.DataSourceState.Valid);
+        };
+        eventSource.onretrying = (e) => {
+          var _a2;
+          (_a2 = this._logger) == null ? void 0 : _a2.info(`Will retry stream connection in ${e.delayMillis} milliseconds`);
+        };
         const payloadReader = new import_js_sdk_common10.internal.PayloadStreamReader(
           eventSource,
           {
@@ -24846,26 +24865,6 @@ var require_dist = __commonJS({
             this.stop();
           }
         });
-        eventSource.onclose = () => {
-          var _a2;
-          (_a2 = this._logger) == null ? void 0 : _a2.info("Closed LaunchDarkly stream connection");
-          statusCallback(import_js_sdk_common10.subsystem.DataSourceState.Closed);
-        };
-        eventSource.onerror = () => {
-        };
-        eventSource.onopen = (e) => {
-          var _a2, _b;
-          (_a2 = this._logger) == null ? void 0 : _a2.info("Opened LaunchDarkly stream connection");
-          this._initMetadata = import_js_sdk_common10.internal.initMetadataFromHeaders(e.headers);
-          if (((_b = e.headers) == null ? void 0 : _b[`x-ld-fd-fallback`]) === `true`) {
-            fallbackRequested = true;
-          }
-          statusCallback(import_js_sdk_common10.subsystem.DataSourceState.Valid);
-        };
-        eventSource.onretrying = (e) => {
-          var _a2;
-          (_a2 = this._logger) == null ? void 0 : _a2.info(`Will retry stream connection in ${e.delayMillis} milliseconds`);
-        };
       }
       stop() {
         var _a;
@@ -29007,7 +29006,7 @@ var require_NodeInfo = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     var os5 = __require("os");
     var sdkName = "@launchdarkly/node-server-sdk";
-    var sdkVersion = "9.13.6";
+    var sdkVersion = "9.13.7";
     function processPlatformName(name) {
       switch (name) {
         case "darwin":
