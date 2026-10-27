@@ -20140,6 +20140,337 @@ var require_cjs = __commonJS({
       DataSourceErrorKind["ErrorResponse"] = "ERROR_RESPONSE";
       DataSourceErrorKind["InvalidData"] = "INVALID_DATA";
     })(exports.DataSourceErrorKind || (exports.DataSourceErrorKind = {}));
+    var LDUnexpectedResponseError = class extends Error {
+      constructor(message) {
+        super(message);
+        this.name = "LaunchDarklyUnexpectedResponseError";
+      }
+    };
+    var LDClientError = class extends Error {
+      constructor(message) {
+        super(message);
+        this.name = "LaunchDarklyClientError";
+      }
+    };
+    var LDTimeoutError = class extends Error {
+      constructor(message) {
+        super(message);
+        this.name = "LaunchDarklyTimeoutError";
+      }
+    };
+    var NORMAL_4XX_STATUSES = [400, 408, 429];
+    function classifyHttpStatus(status) {
+      if (status >= 400 && status < 500 && !NORMAL_4XX_STATUSES.includes(status)) {
+        return "unexpected";
+      }
+      return "normal";
+    }
+    function classifyTransportFailure() {
+      return "normal";
+    }
+    function isHttpRecoverable(status) {
+      return classifyHttpStatus(status) === "normal";
+    }
+    function isHttpLocallyRecoverable(status) {
+      if (status === 413) {
+        return true;
+      }
+      return isHttpRecoverable(status);
+    }
+    function cancelableTimedPromise(t, taskName) {
+      let timeout;
+      let resolve;
+      const promise = new Promise((_res, reject) => {
+        resolve = _res;
+        timeout = setTimeout(() => {
+          const e = `${taskName} timed out after ${t} seconds.`;
+          reject(new LDTimeoutError(e));
+        }, t * 1e3);
+      });
+      return {
+        promise,
+        cancel: () => {
+          resolve();
+          clearTimeout(timeout);
+        }
+      };
+    }
+    function clone(obj) {
+      if (obj === void 0 || obj === null) {
+        return obj;
+      }
+      return JSON.parse(JSON.stringify(obj));
+    }
+    function secondsToMillis(sec) {
+      return Math.trunc(sec * 1e3);
+    }
+    var debounce = (fn, delayMs = 5e3) => {
+      let timer;
+      return (...args) => {
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          fn(...args);
+        }, delayMs);
+      };
+    };
+    var isEmptyObject = (obj) => JSON.stringify(obj) === "{}";
+    var deepCompact = (obj, ignoreKeys) => {
+      if (!obj) {
+        return obj;
+      }
+      return Object.entries(obj).reduce((acc, [key, value]) => {
+        if (Boolean(value) && !isEmptyObject(value) && !ignoreKeys?.includes(key)) {
+          acc[key] = typeof value === "object" ? deepCompact(value, ignoreKeys) : value;
+        }
+        return acc;
+      }, {});
+    };
+    function fastDeepEqual(a, b) {
+      if (a === b)
+        return true;
+      if (a && b && typeof a == "object" && typeof b == "object") {
+        if (a.constructor !== b.constructor)
+          return false;
+        var length, i, keys;
+        if (Array.isArray(a)) {
+          length = a.length;
+          if (length != b.length)
+            return false;
+          for (i = length; i-- !== 0; )
+            if (!fastDeepEqual(a[i], b[i]))
+              return false;
+          return true;
+        }
+        if (a instanceof Map && b instanceof Map) {
+          if (a.size !== b.size)
+            return false;
+          for (i of a.entries())
+            if (!b.has(i[0]))
+              return false;
+          for (i of a.entries())
+            if (!fastDeepEqual(i[1], b.get(i[0])))
+              return false;
+          return true;
+        }
+        if (a instanceof Set && b instanceof Set) {
+          if (a.size !== b.size)
+            return false;
+          for (i of a.entries())
+            if (!b.has(i[0]))
+              return false;
+          return true;
+        }
+        if (ArrayBuffer.isView(a) && ArrayBuffer.isView(b)) {
+          length = a.length;
+          if (length != b.length)
+            return false;
+          for (i = length; i-- !== 0; ) {
+            if (a[i] !== b[i])
+              return false;
+          }
+          return true;
+        }
+        if (a.constructor === RegExp)
+          return a.source === b.source && a.flags === b.flags;
+        if (a.valueOf !== Object.prototype.valueOf)
+          return a.valueOf() === b.valueOf();
+        if (a.toString !== Object.prototype.toString)
+          return a.toString() === b.toString();
+        keys = Object.keys(a);
+        length = keys.length;
+        if (length !== Object.keys(b).length)
+          return false;
+        for (i = length; i-- !== 0; )
+          if (!Object.prototype.hasOwnProperty.call(b, keys[i]))
+            return false;
+        for (i = length; i-- !== 0; ) {
+          var key = keys[i];
+          if (!fastDeepEqual(a[key], b[key]))
+            return false;
+        }
+        return true;
+      }
+      return a !== a && b !== b;
+    }
+    function defaultHeaders(sdkKey, info2, tags, includeAuthorizationHeader = true, userAgentHeaderName = "user-agent", instanceId) {
+      const { userAgentBase, version, wrapperName, wrapperVersion } = info2.sdkData();
+      const headers = {
+        [userAgentHeaderName]: `${userAgentBase ?? "NodeJSClient"}/${version}`
+      };
+      if (includeAuthorizationHeader) {
+        headers.authorization = sdkKey;
+      }
+      if (wrapperName) {
+        headers["x-launchdarkly-wrapper"] = wrapperVersion ? `${wrapperName}/${wrapperVersion}` : wrapperName;
+      }
+      if (tags?.value) {
+        headers["x-launchdarkly-tags"] = tags.value;
+      }
+      if (instanceId) {
+        headers["x-launchdarkly-instance-id"] = instanceId;
+      }
+      return headers;
+    }
+    function httpErrorMessage(err, context, retryMessage) {
+      let desc;
+      if (err.status) {
+        desc = `error ${err.status}${err.status === 401 ? " (invalid SDK key)" : ""}`;
+      } else {
+        desc = `I/O error (${err.message || "unknown error"})`;
+      }
+      const action = retryMessage ?? "giving up permanently";
+      return `Received ${desc} for ${context} - ${action}`;
+    }
+    function shouldRetry({ status }) {
+      return status ? isHttpRecoverable(status) : true;
+    }
+    var base64UrlEncode = (s, encoding) => encoding.btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    var noop = () => {
+    };
+    var sleep = async (delayMillis = 1e3) => new Promise((resolve) => {
+      setTimeout(resolve, delayMillis);
+    });
+    var useWallClock;
+    function monotonicNow() {
+      if (useWallClock === void 0) {
+        const perf = globalThis?.performance;
+        useWallClock = !(perf && typeof perf.now === "function");
+      }
+      return useWallClock ? Date.now() : globalThis.performance.now();
+    }
+    var timedPromise = (t, taskName) => new Promise((_res, reject) => {
+      setTimeout(() => {
+        const e = `${taskName} timed out after ${t} seconds.`;
+        reject(new LDTimeoutError(e));
+      }, t * 1e3);
+    });
+    function createAfterHealthyFor(healthyForMs, clock = monotonicNow) {
+      let healthySinceMs;
+      return {
+        noteHealthy() {
+          if (healthySinceMs === void 0) {
+            healthySinceMs = clock();
+          }
+        },
+        noteFailure() {
+          healthySinceMs = void 0;
+        },
+        isSatisfied() {
+          return healthySinceMs !== void 0 && clock() - healthySinceMs >= healthyForMs;
+        }
+      };
+    }
+    function createAfterConsecutiveSuccesses(count) {
+      let successes = 0;
+      return {
+        noteHealthy() {
+          successes += 1;
+        },
+        noteFailure() {
+          successes = 0;
+        },
+        isSatisfied() {
+          return successes >= count;
+        }
+      };
+    }
+    var EXTENDED_INITIAL_DELAY_MS = 5 * 60 * 1e3;
+    var EXTENDED_CEILING_MS = 60 * 60 * 1e3;
+    var STREAMING_NORMAL_CEILING_MS = 30 * 1e3;
+    var STREAMING_RESET_INTERVAL_MS = 60 * 1e3;
+    var DEFAULT_STREAMING_INITIAL_DELAY_MS = 1e3;
+    var POLLING_RESET_SUCCESSES = 2;
+    var DEFAULT_POLL_INTERVAL_MS = 30 * 1e3;
+    function positiveFiniteOrDefault(value, defaultValueMs, name, logger) {
+      if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+        return value;
+      }
+      logger?.warn(`${name} must be a positive, finite number of milliseconds; using the default of ${defaultValueMs}`);
+      return defaultValueMs;
+    }
+    function createRetryState(config) {
+      const normalInitialDelayMs = config.normalInitialDelayMs;
+      const normalCeilingMs = config.normalCeilingMs;
+      const extendedInitialDelayMs = config.extendedInitialDelayMs;
+      const extendedCeilingMs = config.extendedCeilingMs;
+      const operatingCadenceMs = config.operatingCadenceMs ?? 0;
+      const { resetPolicy } = config;
+      const random = config.random ?? Math.random;
+      let attempts = 0;
+      let extended = false;
+      let minDelayMs = normalInitialDelayMs;
+      let maxDelayMs = normalCeilingMs;
+      let serverDirectedBaseMs;
+      let nextDelayMs = operatingCadenceMs;
+      function resetIfDue() {
+        if (!resetPolicy.isSatisfied()) {
+          return;
+        }
+        attempts = 0;
+        extended = false;
+        minDelayMs = normalInitialDelayMs;
+        maxDelayMs = normalCeilingMs;
+      }
+      return {
+        get nextDelay() {
+          return nextDelayMs;
+        },
+        recordFailure(kind) {
+          resetIfDue();
+          resetPolicy.noteFailure();
+          if (kind === "unexpected" && !extended) {
+            extended = true;
+            minDelayMs = extendedInitialDelayMs;
+            maxDelayMs = Math.max(extendedCeilingMs, extendedInitialDelayMs);
+            attempts = 1;
+          } else {
+            attempts += 1;
+          }
+          const base = serverDirectedBaseMs ?? minDelayMs;
+          let target = 0;
+          if (base > 0) {
+            const exponent = attempts - 1;
+            target = base >= maxDelayMs / 2 ** exponent ? maxDelayMs : base * 2 ** exponent;
+          }
+          const jitter = random() * target / 2;
+          nextDelayMs = Math.max(target - jitter, operatingCadenceMs);
+        },
+        recordSuccess() {
+          resetPolicy.noteHealthy();
+          resetIfDue();
+          nextDelayMs = operatingCadenceMs;
+        },
+        applyServerDirectedRetry(delayMs) {
+          if (typeof delayMs !== "number" || !Number.isFinite(delayMs) || delayMs < 0) {
+            return;
+          }
+          serverDirectedBaseMs = delayMs;
+          attempts = 0;
+        }
+      };
+    }
+    function forStreaming(initialReconnectDelayMs, logger) {
+      const validated = positiveFiniteOrDefault(initialReconnectDelayMs, DEFAULT_STREAMING_INITIAL_DELAY_MS, "initialReconnectDelayMs", logger);
+      return createRetryState({
+        normalInitialDelayMs: validated,
+        normalCeilingMs: STREAMING_NORMAL_CEILING_MS,
+        extendedInitialDelayMs: Math.max(EXTENDED_INITIAL_DELAY_MS, validated),
+        extendedCeilingMs: EXTENDED_CEILING_MS,
+        resetPolicy: createAfterHealthyFor(STREAMING_RESET_INTERVAL_MS),
+        operatingCadenceMs: 0
+      });
+    }
+    function forPolling(pollIntervalMs, logger) {
+      const validated = positiveFiniteOrDefault(pollIntervalMs, DEFAULT_POLL_INTERVAL_MS, "pollIntervalMs", logger);
+      return createRetryState({
+        normalInitialDelayMs: validated,
+        normalCeilingMs: validated,
+        extendedInitialDelayMs: Math.max(EXTENDED_INITIAL_DELAY_MS, validated),
+        extendedCeilingMs: EXTENDED_CEILING_MS,
+        resetPolicy: createAfterConsecutiveSuccesses(POLLING_RESET_SUCCESSES),
+        operatingCadenceMs: validated
+      });
+    }
     exports.AutoEnvAttributes = void 0;
     (function(AutoEnvAttributes) {
       AutoEnvAttributes[AutoEnvAttributes["Disabled"] = 0] = "Disabled";
@@ -20232,8 +20563,9 @@ var require_cjs = __commonJS({
       c: () => ""
     };
     function format(...args) {
-      const formatString = args.shift();
+      const formatString = args[0];
       if (TypeValidators.String.is(formatString)) {
+        args.shift();
         let out = "";
         let i = 0;
         while (i < formatString.length) {
@@ -20251,6 +20583,9 @@ var require_cjs = __commonJS({
                 out += `%${nextChar}`;
               }
               i += 2;
+            } else {
+              out += "%";
+              i += 1;
             }
           } else {
             out += char;
@@ -20523,195 +20858,6 @@ var require_cjs = __commonJS({
       const canonicalizedPath = canonicalizePath(path);
       return getWithParams(`${endpoints.events}/${canonicalizedPath}`, parameters);
     }
-    var LDUnexpectedResponseError = class extends Error {
-      constructor(message) {
-        super(message);
-        this.name = "LaunchDarklyUnexpectedResponseError";
-      }
-    };
-    var LDClientError = class extends Error {
-      constructor(message) {
-        super(message);
-        this.name = "LaunchDarklyClientError";
-      }
-    };
-    var LDTimeoutError = class extends Error {
-      constructor(message) {
-        super(message);
-        this.name = "LaunchDarklyTimeoutError";
-      }
-    };
-    function isHttpRecoverable(status) {
-      if (status >= 400 && status < 500) {
-        return status === 400 || status === 408 || status === 429;
-      }
-      return true;
-    }
-    function isHttpLocallyRecoverable(status) {
-      if (status === 413) {
-        return true;
-      }
-      return isHttpRecoverable(status);
-    }
-    function cancelableTimedPromise(t, taskName) {
-      let timeout;
-      let resolve;
-      const promise = new Promise((_res, reject) => {
-        resolve = _res;
-        timeout = setTimeout(() => {
-          const e = `${taskName} timed out after ${t} seconds.`;
-          reject(new LDTimeoutError(e));
-        }, t * 1e3);
-      });
-      return {
-        promise,
-        cancel: () => {
-          resolve();
-          clearTimeout(timeout);
-        }
-      };
-    }
-    function clone(obj) {
-      if (obj === void 0 || obj === null) {
-        return obj;
-      }
-      return JSON.parse(JSON.stringify(obj));
-    }
-    function secondsToMillis(sec) {
-      return Math.trunc(sec * 1e3);
-    }
-    var debounce = (fn, delayMs = 5e3) => {
-      let timer;
-      return (...args) => {
-        clearTimeout(timer);
-        timer = setTimeout(() => {
-          fn(...args);
-        }, delayMs);
-      };
-    };
-    var isEmptyObject = (obj) => JSON.stringify(obj) === "{}";
-    var deepCompact = (obj, ignoreKeys) => {
-      if (!obj) {
-        return obj;
-      }
-      return Object.entries(obj).reduce((acc, [key, value]) => {
-        if (Boolean(value) && !isEmptyObject(value) && !ignoreKeys?.includes(key)) {
-          acc[key] = typeof value === "object" ? deepCompact(value, ignoreKeys) : value;
-        }
-        return acc;
-      }, {});
-    };
-    function fastDeepEqual(a, b) {
-      if (a === b)
-        return true;
-      if (a && b && typeof a == "object" && typeof b == "object") {
-        if (a.constructor !== b.constructor)
-          return false;
-        var length, i, keys;
-        if (Array.isArray(a)) {
-          length = a.length;
-          if (length != b.length)
-            return false;
-          for (i = length; i-- !== 0; )
-            if (!fastDeepEqual(a[i], b[i]))
-              return false;
-          return true;
-        }
-        if (a instanceof Map && b instanceof Map) {
-          if (a.size !== b.size)
-            return false;
-          for (i of a.entries())
-            if (!b.has(i[0]))
-              return false;
-          for (i of a.entries())
-            if (!fastDeepEqual(i[1], b.get(i[0])))
-              return false;
-          return true;
-        }
-        if (a instanceof Set && b instanceof Set) {
-          if (a.size !== b.size)
-            return false;
-          for (i of a.entries())
-            if (!b.has(i[0]))
-              return false;
-          return true;
-        }
-        if (ArrayBuffer.isView(a) && ArrayBuffer.isView(b)) {
-          length = a.length;
-          if (length != b.length)
-            return false;
-          for (i = length; i-- !== 0; ) {
-            if (a[i] !== b[i])
-              return false;
-          }
-          return true;
-        }
-        if (a.constructor === RegExp)
-          return a.source === b.source && a.flags === b.flags;
-        if (a.valueOf !== Object.prototype.valueOf)
-          return a.valueOf() === b.valueOf();
-        if (a.toString !== Object.prototype.toString)
-          return a.toString() === b.toString();
-        keys = Object.keys(a);
-        length = keys.length;
-        if (length !== Object.keys(b).length)
-          return false;
-        for (i = length; i-- !== 0; )
-          if (!Object.prototype.hasOwnProperty.call(b, keys[i]))
-            return false;
-        for (i = length; i-- !== 0; ) {
-          var key = keys[i];
-          if (!fastDeepEqual(a[key], b[key]))
-            return false;
-        }
-        return true;
-      }
-      return a !== a && b !== b;
-    }
-    function defaultHeaders(sdkKey, info2, tags, includeAuthorizationHeader = true, userAgentHeaderName = "user-agent", instanceId) {
-      const { userAgentBase, version, wrapperName, wrapperVersion } = info2.sdkData();
-      const headers = {
-        [userAgentHeaderName]: `${userAgentBase ?? "NodeJSClient"}/${version}`
-      };
-      if (includeAuthorizationHeader) {
-        headers.authorization = sdkKey;
-      }
-      if (wrapperName) {
-        headers["x-launchdarkly-wrapper"] = wrapperVersion ? `${wrapperName}/${wrapperVersion}` : wrapperName;
-      }
-      if (tags?.value) {
-        headers["x-launchdarkly-tags"] = tags.value;
-      }
-      if (instanceId) {
-        headers["x-launchdarkly-instance-id"] = instanceId;
-      }
-      return headers;
-    }
-    function httpErrorMessage(err, context, retryMessage) {
-      let desc;
-      if (err.status) {
-        desc = `error ${err.status}${err.status === 401 ? " (invalid SDK key)" : ""}`;
-      } else {
-        desc = `I/O error (${err.message || "unknown error"})`;
-      }
-      const action = retryMessage ?? "giving up permanently";
-      return `Received ${desc} for ${context} - ${action}`;
-    }
-    function shouldRetry({ status }) {
-      return status ? isHttpRecoverable(status) : true;
-    }
-    var base64UrlEncode = (s, encoding) => encoding.btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-    var noop = () => {
-    };
-    var sleep = async (delayMillis = 1e3) => new Promise((resolve) => {
-      setTimeout(resolve, delayMillis);
-    });
-    var timedPromise = (t, taskName) => new Promise((_res, reject) => {
-      setTimeout(() => {
-        const e = `${taskName} timed out after ${t} seconds.`;
-        reject(new LDTimeoutError(e));
-      }, t * 1e3);
-    });
     var DiagnosticsManager = class {
       constructor(sdkKey, _platform, _diagnosticInitConfig) {
         this._platform = _platform;
@@ -21820,12 +21966,19 @@ var require_cjs = __commonJS({
     exports.TypeValidators = TypeValidators;
     exports.base64UrlEncode = base64UrlEncode;
     exports.cancelableTimedPromise = cancelableTimedPromise;
+    exports.classifyHttpStatus = classifyHttpStatus;
+    exports.classifyTransportFailure = classifyTransportFailure;
     exports.clone = clone;
+    exports.createAfterConsecutiveSuccesses = createAfterConsecutiveSuccesses;
+    exports.createAfterHealthyFor = createAfterHealthyFor;
+    exports.createRetryState = createRetryState;
     exports.createSafeLogger = createSafeLogger;
     exports.debounce = debounce;
     exports.deepCompact = deepCompact;
     exports.defaultHeaders = defaultHeaders;
     exports.fastDeepEqual = fastDeepEqual;
+    exports.forPolling = forPolling;
+    exports.forStreaming = forStreaming;
     exports.getEventsUri = getEventsUri;
     exports.getPollingUri = getPollingUri;
     exports.getStreamingUri = getStreamingUri;
@@ -21834,6 +21987,7 @@ var require_cjs = __commonJS({
     exports.isHttpLocallyRecoverable = isHttpLocallyRecoverable;
     exports.isHttpRecoverable = isHttpRecoverable;
     exports.isNullish = isNullish;
+    exports.monotonicNow = monotonicNow;
     exports.noop = noop;
     exports.secondsToMillis = secondsToMillis;
     exports.shouldRetry = shouldRetry;
@@ -22393,7 +22547,7 @@ var require_dist = __commonJS({
         this._lastStatus = status;
       }
     };
-    var import_js_sdk_common20 = require_cjs();
+    var import_js_sdk_common23 = require_cjs();
     var LDMigrationStage = /* @__PURE__ */ ((LDMigrationStage3) => {
       LDMigrationStage3["Off"] = "off";
       LDMigrationStage3["DualWrite"] = "dualwrite";
@@ -22776,29 +22930,22 @@ var require_dist = __commonJS({
       if (value === null || value === void 0) {
         return value;
       }
-      if (value.generated_includedSet) {
-        value.included = [...value.generated_includedSet];
-        delete value.generated_includedSet;
+      if (value.generated_includedSet || value.generated_excludedSet) {
+        const copy = __spreadValues({}, value);
+        if (copy.generated_includedSet) {
+          copy.included = [...copy.generated_includedSet];
+          delete copy.generated_includedSet;
+        }
+        if (copy.generated_excludedSet) {
+          copy.excluded = [...copy.generated_excludedSet];
+          delete copy.generated_excludedSet;
+        }
+        return copy;
       }
-      if (value.generated_excludedSet) {
-        value.excluded = [...value.generated_excludedSet];
-        delete value.generated_excludedSet;
-      }
-      if (value.includedContexts) {
-        value.includedContexts.forEach((target) => {
-          if (target.generated_valuesSet) {
-            target.values = [...target.generated_valuesSet];
-          }
-          delete target.generated_valuesSet;
-        });
-      }
-      if (value.excludedContexts) {
-        value.excludedContexts.forEach((target) => {
-          if (target.generated_valuesSet) {
-            target.values = [...target.generated_valuesSet];
-          }
-          delete target.generated_valuesSet;
-        });
+      if (value.generated_valuesSet) {
+        const copy = __spreadProps(__spreadValues({}, value), { values: [...value.generated_valuesSet] });
+        delete copy.generated_valuesSet;
+        return copy;
       }
       return value;
     }
@@ -23606,7 +23753,7 @@ var require_dist = __commonJS({
         this._stopped = true;
       }
     };
-    var import_js_sdk_common6 = require_cjs();
+    var import_js_sdk_common9 = require_cjs();
     function promisify(method) {
       return new Promise((resolve) => {
         method((val) => {
@@ -23703,6 +23850,7 @@ var require_dist = __commonJS({
         return (_b = (_a = this._store).getInitMetaData) == null ? void 0 : _b.call(_a);
       }
     };
+    var import_js_sdk_common6 = require_cjs();
     function isStale(record) {
       return Date.now() > record.expiration;
     }
@@ -23866,27 +24014,96 @@ var require_dist = __commonJS({
       result.sort((i1, i2) => i1.key.priority - i2.key.priority);
       return result;
     }
+    function toError(reason, fallbackMessage) {
+      if (reason instanceof Error) {
+        try {
+          String(reason.message);
+          return reason;
+        } catch (e) {
+          return new Error(fallbackMessage);
+        }
+      }
+      try {
+        return new Error(String(reason));
+      } catch (e) {
+        return new Error(fallbackMessage);
+      }
+    }
+    var DEFAULT_SLOW_UPDATE_WARNING_MS = 3e4;
+    var QUEUE_FAILURE_FALLBACK_MESSAGE = "The queued store operation failed with a reason that could not be described.";
     var UpdateQueue = class {
-      constructor() {
+      constructor(_logger, _slowUpdateWarningMs = DEFAULT_SLOW_UPDATE_WARNING_MS) {
+        this._logger = _logger;
+        this._slowUpdateWarningMs = _slowUpdateWarningMs;
         this._queue = [];
+        this._closed = false;
       }
       enqueue(updateFn, cb) {
+        if (this._closed) {
+          cb == null ? void 0 : cb(new Error("The store is closed."));
+          return;
+        }
         this._queue.push([updateFn, cb]);
         if (this._queue.length === 1) {
           this.executePendingUpdates();
         }
       }
+      /**
+       * Stops the queue: the executing update is abandoned, its warning timer is
+       * cleared, and every waiting update is failed without invoking its store call.
+       */
+      close() {
+        var _a;
+        if (this._closed) {
+          return;
+        }
+        this._closed = true;
+        (_a = this._abandonCurrent) == null ? void 0 : _a.call(this);
+        this._abandonCurrent = void 0;
+        if (this._timer) {
+          clearTimeout(this._timer);
+          this._timer = void 0;
+        }
+        const pending = this._queue;
+        this._queue = [];
+        pending.forEach(([, cb]) => cb == null ? void 0 : cb(new Error("The store is closed.")));
+      }
       executePendingUpdates() {
-        if (this._queue.length > 0) {
-          const [fn, cb] = this._queue[0];
-          const newCb = (err) => {
-            this._queue.shift();
-            if (this._queue.length > 0) {
-              setTimeout(() => this.executePendingUpdates(), 0);
-            }
-            cb == null ? void 0 : cb(err);
-          };
-          fn(newCb);
+        if (this._closed || this._queue.length === 0) {
+          return;
+        }
+        const [fn, cb] = this._queue[0];
+        let settled = false;
+        this._abandonCurrent = () => {
+          settled = true;
+        };
+        const complete = (err) => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          this._abandonCurrent = void 0;
+          if (this._timer) {
+            clearTimeout(this._timer);
+            this._timer = void 0;
+          }
+          this._queue.shift();
+          if (this._queue.length > 0) {
+            setTimeout(() => this.executePendingUpdates(), 0);
+          }
+          cb == null ? void 0 : cb(err);
+        };
+        this._timer = setTimeout(() => {
+          var _a;
+          this._timer = void 0;
+          (_a = this._logger) == null ? void 0 : _a.warn(
+            `A store operation did not complete within ${this._slowUpdateWarningMs / 1e3} seconds. Later store operations wait for it, so the store receives writes in order.`
+          );
+        }, this._slowUpdateWarningMs);
+        try {
+          fn(complete, () => settled);
+        } catch (reason) {
+          complete(toError(reason, QUEUE_FAILURE_FALLBACK_MESSAGE));
         }
       }
     };
@@ -23923,12 +24140,15 @@ var require_dist = __commonJS({
         item: deserializedItem.item
       };
     }
+    var ERROR_LOG_INTERVAL_MS = 1e4;
     var PersistentDataStoreWrapper = class {
       constructor(_core, ttl, _logger) {
         this._core = _core;
         this._logger = _logger;
         this._isInitialized = false;
-        this._queue = new UpdateQueue();
+        this._lastErrorLogMs = -Infinity;
+        var _a;
+        this._queue = new UpdateQueue(_logger);
         if (ttl) {
           this._itemCache = new TtlCache({
             ttl,
@@ -23939,32 +24159,64 @@ var require_dist = __commonJS({
             checkInterval: defaultCheckInterval
           });
         }
+        const coreIsStoreAvailable = (_a = _core.isStoreAvailable) == null ? void 0 : _a.bind(_core);
+        if (coreIsStoreAvailable) {
+          this.isStoreAvailable = coreIsStoreAvailable;
+        }
       }
       init(allData, callback) {
-        this._queue.enqueue((cb) => {
-          const afterStoreInit = () => {
-            this._isInitialized = true;
-            if (this._itemCache) {
-              this._itemCache.clear();
-              this._allItemsCache.clear();
-              Object.keys(allData).forEach((kindNamespace) => {
-                const kind = persistentStoreKinds[kindNamespace];
-                const items = allData[kindNamespace];
-                this._allItemsCache.set(allForKindCacheKey(kind), items);
-                Object.keys(items).forEach((key) => {
-                  const itemForKey = items[key];
-                  const itemDescriptor = {
-                    version: itemForKey.version,
-                    item: itemForKey
-                  };
-                  this._itemCache.set(cacheKey(kind, key), itemDescriptor);
+        this._queue.enqueue(
+          (cb, isAbandoned) => {
+            const afterStoreInit = (err) => {
+              var _a, _b;
+              if (isAbandoned()) {
+                cb(err);
+                return;
+              }
+              if (err) {
+                this._logStoreError(err);
+                this._isInitialized = false;
+                (_a = this._itemCache) == null ? void 0 : _a.clear();
+                (_b = this._allItemsCache) == null ? void 0 : _b.clear();
+                cb(err);
+                return;
+              }
+              this._isInitialized = true;
+              if (this._itemCache) {
+                this._itemCache.clear();
+                this._allItemsCache.clear();
+                Object.keys(allData).forEach((kindNamespace) => {
+                  const kind = persistentStoreKinds[kindNamespace];
+                  const items = allData[kindNamespace];
+                  const filteredItems = {};
+                  Object.keys(items).forEach((key) => {
+                    const itemForKey = items[key];
+                    const itemDescriptor = {
+                      version: itemForKey.version,
+                      item: itemForKey
+                    };
+                    this._itemCache.set(cacheKey(kind, key), itemDescriptor);
+                    if (!itemForKey.deleted) {
+                      filteredItems[key] = itemForKey;
+                    }
+                  });
+                  this._allItemsCache.set(allForKindCacheKey(kind), filteredItems);
                 });
-              });
+              }
+              cb();
+            };
+            this._core.init(sortDataSet(allData), afterStoreInit);
+          },
+          (err) => {
+            var _a, _b;
+            if (err) {
+              this._isInitialized = false;
+              (_a = this._itemCache) == null ? void 0 : _a.clear();
+              (_b = this._allItemsCache) == null ? void 0 : _b.clear();
             }
-            cb();
-          };
-          this._core.init(sortDataSet(allData), afterStoreInit);
-        }, callback);
+            callback(err);
+          }
+        );
       }
       get(kind, key, callback) {
         if (this._itemCache) {
@@ -24030,7 +24282,7 @@ var require_dist = __commonJS({
         });
       }
       upsert(kind, data, callback) {
-        this._queue.enqueue((cb) => {
+        this._queue.enqueue((cb, isAbandoned) => {
           if (this._allItemsCache) {
             this._allItemsCache.clear();
           }
@@ -24040,25 +24292,27 @@ var require_dist = __commonJS({
             data.key,
             persistKind.serialize(data),
             (err, updatedDescriptor) => {
-              var _a, _b, _c;
+              var _a, _b;
+              if (isAbandoned()) {
+                cb(err);
+                return;
+              }
               if (err) {
-                (_a = this._logger) == null ? void 0 : _a.error(
-                  `Persistent store returned error: ${err instanceof Error ? err.message : err}`
-                );
+                this._logStoreError(err);
               }
               if (!err && updatedDescriptor) {
                 if (updatedDescriptor.serializedItem) {
                   const value = deserialize(persistKind, updatedDescriptor);
-                  (_b = this._itemCache) == null ? void 0 : _b.set(cacheKey(kind, data.key), value);
+                  (_a = this._itemCache) == null ? void 0 : _a.set(cacheKey(kind, data.key), value);
                 } else if (updatedDescriptor.deleted) {
-                  (_c = this._itemCache) == null ? void 0 : _c.set(data.key, {
+                  (_b = this._itemCache) == null ? void 0 : _b.set(data.key, {
                     key: data.key,
                     version: updatedDescriptor.version,
                     deleted: true
                   });
                 }
               }
-              cb();
+              cb(err);
             }
           );
         }, callback);
@@ -24066,8 +24320,25 @@ var require_dist = __commonJS({
       delete(kind, key, version, callback) {
         this.upsert(kind, { key, version, deleted: true }, callback);
       }
+      /**
+       * Logs a store write error, at error level at most once per interval and at
+       * debug level otherwise, so a store that fails every write cannot flood the log.
+       */
+      _logStoreError(err) {
+        var _a, _b;
+        const reason = toError(err, "unknown");
+        const message = `Persistent store returned error: ${reason.message}`;
+        const now = (0, import_js_sdk_common6.monotonicNow)();
+        if (now - this._lastErrorLogMs >= ERROR_LOG_INTERVAL_MS) {
+          this._lastErrorLogMs = now;
+          (_a = this._logger) == null ? void 0 : _a.error(message);
+        } else {
+          (_b = this._logger) == null ? void 0 : _b.debug(message);
+        }
+      }
       close() {
         var _a, _b;
+        this._queue.close();
         (_a = this._itemCache) == null ? void 0 : _a.close();
         (_b = this._allItemsCache) == null ? void 0 : _b.close();
         this._core.close();
@@ -24076,6 +24347,7 @@ var require_dist = __commonJS({
         return this._core.getDescription();
       }
     };
+    var import_js_sdk_common8 = require_cjs();
     var InMemoryFeatureStore = class {
       constructor() {
         this._allData = {};
@@ -24103,6 +24375,20 @@ var require_dist = __commonJS({
           }
         });
         callback == null ? void 0 : callback(result);
+      }
+      /**
+       * Get a snapshot of all data in the store, for every kind, including tombstones for
+       * deleted items. The snapshot does not change when the store changes later.
+       *
+       * This method is for SDK internal use. It supports rewriting the full data set into a
+       * persistent store.
+       */
+      getAllRaw() {
+        const snapshot = {};
+        Object.entries(this._allData).forEach(([namespace, items]) => {
+          snapshot[namespace] = __spreadValues({}, items);
+        });
+        return snapshot;
       }
       init(allData, callback, initMetadata) {
         this.applyChanges(true, allData, callback, initMetadata);
@@ -24178,10 +24464,106 @@ var require_dist = __commonJS({
         return this._selector;
       }
     };
+    var import_js_sdk_common7 = require_cjs();
+    var SupervisedOperation = class {
+      constructor() {
+        this._inFlight = false;
+        this._generation = 0;
+        this._startedAt = 0;
+      }
+      get inFlight() {
+        return this._inFlight;
+      }
+      /** Starts a new attempt and returns its generation. */
+      begin() {
+        this._generation += 1;
+        this._inFlight = true;
+        this._startedAt = (0, import_js_sdk_common7.monotonicNow)();
+        return this._generation;
+      }
+      /**
+       * Records the answer of the given attempt. Returns false for a stale or
+       * duplicate answer, which the caller must ignore.
+       */
+      settle(generation) {
+        if (!this.isCurrent(generation)) {
+          return false;
+        }
+        this._inFlight = false;
+        return true;
+      }
+      /** True while the given attempt is the outstanding one. */
+      isCurrent(generation) {
+        return generation === this._generation && this._inFlight;
+      }
+      /** Invalidates the outstanding attempt, so a late answer is ignored. */
+      invalidate() {
+        this._generation += 1;
+        this._inFlight = false;
+      }
+      /**
+       * Invalidates the outstanding attempt once it is past its deadline. Returns
+       * whether it was released.
+       */
+      releaseIfHung(timeoutMs) {
+        if ((0, import_js_sdk_common7.monotonicNow)() - this._startedAt < timeoutMs) {
+          return false;
+        }
+        this.invalidate();
+        return true;
+      }
+    };
+    var RECOVERY_POLL_INTERVAL_MS = 500;
+    var WRITE_BACK_INITIAL_BACKOFF_MS = 1e3;
+    var WRITE_BACK_BACKOFF_RESET_MS = 3e4;
+    var WRITE_BACK_SUCCESS_EMBARGO_MS = 1e3;
+    var PROBE_HUNG_TIMEOUT_MS = 3e4;
+    var SLOW_WRITE_BACK_WARNING_MS = 3e4;
+    function isPromiseLike(value) {
+      return typeof value === "object" && value !== null && typeof value.then === "function";
+    }
+    var STORE_FAILURE_FALLBACK_MESSAGE = "Persistent store operation failed with a reason that could not be described.";
+    function once(fn) {
+      let settled = false;
+      return (err) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        fn(err);
+      };
+    }
+    function invokeStoreCall(call, onFailure) {
+      try {
+        const result = call();
+        if (isPromiseLike(result)) {
+          result.then(
+            void 0,
+            (reason) => onFailure(toError(reason, STORE_FAILURE_FALLBACK_MESSAGE), "rejection")
+          );
+        }
+      } catch (reason) {
+        onFailure(toError(reason, STORE_FAILURE_FALLBACK_MESSAGE), "sync-throw");
+      }
+    }
     var TransactionalFeatureStore = class {
-      constructor(_nonTransPersistenceStore) {
-        this._nonTransPersistenceStore = _nonTransPersistenceStore;
-        this._activeStore = this._nonTransPersistenceStore;
+      constructor(_basePersistenceStore, _logger, _backoff = new import_js_sdk_common8.DefaultBackoff(
+        WRITE_BACK_INITIAL_BACKOFF_MS,
+        WRITE_BACK_BACKOFF_RESET_MS
+      )) {
+        this._basePersistenceStore = _basePersistenceStore;
+        this._logger = _logger;
+        this._backoff = _backoff;
+        this._persistenceAvailable = true;
+        this._probe = new SupervisedOperation();
+        this._writeBackOp = new SupervisedOperation();
+        this._writeBackEmbargoUntil = 0;
+        this._writeFailedDuringWriteBack = false;
+        this._writeBackCallOutstanding = false;
+        this._failureLoggedThisOutage = false;
+        this._slowWriteBackWarnedThisOutage = false;
+        this._closed = false;
+        this._activeStore = this._basePersistenceStore;
         this._memoryStore = new InMemoryFeatureStore();
       }
       get(kind, key, callback) {
@@ -24221,9 +24603,20 @@ var require_dist = __commonJS({
           basis,
           data,
           () => {
+            if (this._closed) {
+              callback();
+              return;
+            }
             if (basis) {
               this._activeStore = this._memoryStore;
-              this._nonTransPersistenceStore.init(data, callback);
+              const settleOnce = once((err) => {
+                try {
+                  this._handleWriteResult(err, true);
+                } finally {
+                  callback();
+                }
+              });
+              invokeStoreCall(() => this._basePersistenceStore.init(data, settleOnce), settleOnce);
             } else {
               const params = [];
               Object.entries(data).forEach(([namespace, items]) => {
@@ -24234,15 +24627,26 @@ var require_dist = __commonJS({
               params.reduce(
                 (previousPromise, nextParams) => previousPromise.then(
                   () => new Promise((resolve) => {
-                    this._nonTransPersistenceStore.upsert(
-                      nextParams.dataKind,
-                      nextParams.item,
-                      () => resolve()
+                    const settleOnce = once((err) => {
+                      try {
+                        this._handleWriteResult(err, false);
+                      } finally {
+                        resolve();
+                      }
+                    });
+                    invokeStoreCall(
+                      () => this._basePersistenceStore.upsert(
+                        nextParams.dataKind,
+                        nextParams.item,
+                        settleOnce
+                      ),
+                      settleOnce
                     );
                   })
                 ),
                 Promise.resolve()
-              ).then(callback);
+              ).catch(() => {
+              }).then(callback);
             }
           },
           initMetadata,
@@ -24253,15 +24657,23 @@ var require_dist = __commonJS({
         this._activeStore.initialized(callback);
       }
       close() {
-        this._nonTransPersistenceStore.close();
+        if (this._closed) {
+          return;
+        }
+        this._closed = true;
+        this._stopRecoveryPolling();
+        this._cancelEmbargoRetry();
+        this._cancelSlowWriteBackWarning();
+        this._basePersistenceStore.close();
         this._memoryStore.close();
       }
       getDescription() {
         return "transactional persistent store";
       }
-      // applyChanges always writes here first, so the memory store has the latest
-      // metadata/selector even while _activeStore still points at the persistence
-      // store; the plain LDFeatureStore contract has no equivalent to read them from
+      // applyChanges always writes to the memory store first, so it always has the
+      // latest metadata and selector, even while _activeStore still points at the
+      // persistence store. The plain LDFeatureStore contract has no way to read them
+      // from there.
       getInitMetaData() {
         var _a, _b;
         return (_b = (_a = this._memoryStore).getInitMetaData) == null ? void 0 : _b.call(_a);
@@ -24270,8 +24682,304 @@ var require_dist = __commonJS({
         var _a, _b;
         return (_b = (_a = this._memoryStore).getSelector) == null ? void 0 : _b.call(_a);
       }
+      /**
+       * Record the result of a mirrored write to the persistence store.
+       *
+       * The first failed write marks the store unavailable. A successful write while the
+       * store is unavailable starts recovery.
+       *
+       * A basis write already wrote the full data set, so it recovers directly. Any
+       * other write starts a write-back of the full in-memory data set instead.
+       */
+      _handleWriteResult(err, isBasisWrite) {
+        if (this._closed) {
+          return;
+        }
+        if (err) {
+          if (this._writeBackOp.inFlight) {
+            this._writeFailedDuringWriteBack = true;
+          }
+          this._markUnavailable();
+        } else if (!this._persistenceAvailable) {
+          if (isBasisWrite) {
+            this._markAvailable();
+          } else {
+            this._attemptRecovery();
+          }
+        }
+      }
+      _markUnavailable() {
+        var _a, _b;
+        if (!this._persistenceAvailable) {
+          return;
+        }
+        this._persistenceAvailable = false;
+        this._probe.invalidate();
+        this._writeBackOp.invalidate();
+        this._failureLoggedThisOutage = false;
+        this._slowWriteBackWarnedThisOutage = false;
+        (_a = this._logger) == null ? void 0 : _a.warn(
+          "Persistent store is unavailable. Updates will be kept in memory until it recovers."
+        );
+        if (typeof this._basePersistenceStore.isStoreAvailable !== "function") {
+          (_b = this._logger) == null ? void 0 : _b.warn(
+            "The persistent store has no availability check. Recovery relies on later successful writes and timed retries."
+          );
+        }
+        this._startRecoveryPolling();
+      }
+      _markAvailable() {
+        var _a;
+        if (this._persistenceAvailable) {
+          return;
+        }
+        this._persistenceAvailable = true;
+        this._backoff.success((0, import_js_sdk_common8.monotonicNow)());
+        this._failureLoggedThisOutage = false;
+        this._slowWriteBackWarnedThisOutage = false;
+        this._writeFailedDuringWriteBack = false;
+        this._probe.invalidate();
+        this._writeBackOp.invalidate();
+        this._writeBackEmbargoUntil = (0, import_js_sdk_common8.monotonicNow)() + WRITE_BACK_SUCCESS_EMBARGO_MS;
+        this._stopRecoveryPolling();
+        this._cancelEmbargoRetry();
+        this._cancelSlowWriteBackWarning();
+        (_a = this._logger) == null ? void 0 : _a.info("Persistent store is available again.");
+      }
+      /**
+       * Poll the persistence store availability check, when it has one, until the store
+       * recovers. Stores without an availability check recover through the next successful
+       * mirrored write instead. The check is read-only. A write is never used as a check.
+       */
+      _startRecoveryPolling() {
+        if (this._pollHandle || this._closed) {
+          return;
+        }
+        if (typeof this._basePersistenceStore.isStoreAvailable !== "function") {
+          return;
+        }
+        this._pollHandle = setInterval(() => {
+          var _a;
+          if (this._writeBackCallOutstanding) {
+            return;
+          }
+          if (this._probe.inFlight) {
+            if (!this._releaseProbeIfHung()) {
+              return;
+            }
+          }
+          if (this._persistenceAvailable) {
+            return;
+          }
+          if ((0, import_js_sdk_common8.monotonicNow)() < this._writeBackEmbargoUntil) {
+            return;
+          }
+          const probe = (_a = this._basePersistenceStore.isStoreAvailable) == null ? void 0 : _a.bind(this._basePersistenceStore);
+          if (!probe) {
+            return;
+          }
+          const generation = this._probe.begin();
+          const onAnswer = (isAvailable) => {
+            if (!this._probe.settle(generation)) {
+              return;
+            }
+            if (this._closed) {
+              return;
+            }
+            if (isAvailable) {
+              this._attemptRecovery();
+            }
+          };
+          invokeStoreCall(
+            () => probe(onAnswer),
+            (err, channel) => {
+              var _a2, _b;
+              if (!this._probe.settle(generation)) {
+                return;
+              }
+              if (channel === "sync-throw") {
+                (_a2 = this._logger) == null ? void 0 : _a2.debug(`Persistent store availability check failed: ${err}`);
+                return;
+              }
+              if (this._closed) {
+                return;
+              }
+              (_b = this._logger) == null ? void 0 : _b.debug(`Persistent store availability check rejected: ${err}`);
+            }
+          );
+        }, RECOVERY_POLL_INTERVAL_MS);
+      }
+      _stopRecoveryPolling() {
+        if (this._pollHandle) {
+          clearInterval(this._pollHandle);
+          this._pollHandle = void 0;
+        }
+      }
+      /**
+       * Schedules the next write-back attempt at the embargo deadline.
+       *
+       * Without this timer, a recovery signal that arrived during the embargo, or a
+       * failed write-back with no follow-up write, could leave no later trigger: a
+       * store without an availability check has no poller, and a poller's probe can
+       * disagree with the write path. At most one timer runs. Recovery and close
+       * cancel it. A duplicate trigger with the poll tick is harmless: whichever
+       * fires second finds the attempt already in flight or the store recovered.
+       */
+      _scheduleEmbargoRetry() {
+        if (this._embargoRetryHandle || this._closed) {
+          return;
+        }
+        this._embargoRetryHandle = setTimeout(
+          () => {
+            this._embargoRetryHandle = void 0;
+            this._attemptRecovery();
+          },
+          Math.max(this._writeBackEmbargoUntil - (0, import_js_sdk_common8.monotonicNow)(), 0)
+        );
+      }
+      _cancelEmbargoRetry() {
+        if (this._embargoRetryHandle) {
+          clearTimeout(this._embargoRetryHandle);
+          this._embargoRetryHandle = void 0;
+        }
+      }
+      /**
+       * Arms a one-shot timer that warns when the write-back's store call is slow to
+       * answer. The call is never abandoned: recovery waits for its answer, however
+       * long it takes. The timer only logs. It changes no state.
+       */
+      _armSlowWriteBackWarning() {
+        if (this._closed) {
+          return;
+        }
+        this._cancelSlowWriteBackWarning();
+        this._slowWriteBackWarningHandle = setTimeout(() => {
+          var _a, _b;
+          this._slowWriteBackWarningHandle = void 0;
+          if (!this._writeBackCallOutstanding) {
+            return;
+          }
+          const message = "A write-back to the persistent store is taking a long time. Recovery continues when it answers.";
+          if (!this._slowWriteBackWarnedThisOutage) {
+            this._slowWriteBackWarnedThisOutage = true;
+            (_a = this._logger) == null ? void 0 : _a.warn(message);
+          } else {
+            (_b = this._logger) == null ? void 0 : _b.debug(message);
+          }
+        }, SLOW_WRITE_BACK_WARNING_MS);
+      }
+      _cancelSlowWriteBackWarning() {
+        if (this._slowWriteBackWarningHandle) {
+          clearTimeout(this._slowWriteBackWarningHandle);
+          this._slowWriteBackWarningHandle = void 0;
+        }
+      }
+      /**
+       * Abandons the outstanding availability probe once it is past its deadline.
+       *
+       * Bumps the generation so a late answer is ignored, and clears the in-flight flag
+       * so a fresh probe can be issued. Returns whether it was released.
+       */
+      _releaseProbeIfHung() {
+        var _a;
+        if (!this._probe.releaseIfHung(PROBE_HUNG_TIMEOUT_MS)) {
+          return false;
+        }
+        (_a = this._logger) == null ? void 0 : _a.debug(
+          "A persistent store availability check did not complete in time. Retrying."
+        );
+        return true;
+      }
+      _attemptRecovery() {
+        if (this._writeBackCallOutstanding) {
+          return;
+        }
+        if (this._persistenceAvailable) {
+          return;
+        }
+        if ((0, import_js_sdk_common8.monotonicNow)() < this._writeBackEmbargoUntil) {
+          this._scheduleEmbargoRetry();
+          return;
+        }
+        const generation = this._writeBackOp.begin();
+        this._writeBack(generation);
+      }
+      /**
+       * Write the full in-memory data set, including tombstones, to the persistence store.
+       * The caller must begin the attempt on _writeBackOp and pass its generation.
+       */
+      _writeBack(generation) {
+        if (this._closed) {
+          this._writeBackOp.settle(generation);
+          return;
+        }
+        if (this._activeStore !== this._memoryStore) {
+          this._markAvailable();
+          return;
+        }
+        this._writeFailedDuringWriteBack = false;
+        const onSettled = (err) => {
+          this._writeBackCallOutstanding = false;
+          this._cancelSlowWriteBackWarning();
+          if (!this._writeBackOp.settle(generation)) {
+            if (!this._closed) {
+              this._attemptRecovery();
+            }
+            return;
+          }
+          if (this._closed) {
+            return;
+          }
+          if (err) {
+            this._handleWriteBackFailure();
+            return;
+          }
+          if (this._writeFailedDuringWriteBack) {
+            this._writeBackEmbargoUntil = (0, import_js_sdk_common8.monotonicNow)() + WRITE_BACK_SUCCESS_EMBARGO_MS;
+            this._attemptRecovery();
+            return;
+          }
+          this._markAvailable();
+        };
+        const settleOnce = once(onSettled);
+        this._writeBackCallOutstanding = true;
+        this._armSlowWriteBackWarning();
+        invokeStoreCall(
+          () => this._basePersistenceStore.init(this._memoryStore.getAllRaw(), settleOnce),
+          settleOnce
+        );
+      }
+      /**
+       * Backs off the next write-back attempt after a failed one, and schedules that
+       * attempt at the backoff deadline.
+       */
+      _armFailureEmbargo() {
+        this._writeBackEmbargoUntil = (0, import_js_sdk_common8.monotonicNow)() + this._backoff.fail((0, import_js_sdk_common8.monotonicNow)());
+        this._scheduleEmbargoRetry();
+      }
+      /**
+       * Records a failed write-back attempt: backs off the next attempt and logs.
+       *
+       * Only the first failure of an outage logs at error level. Later failures in the
+       * same outage log at debug level, so an unhealthy store cannot flood the log
+       * every poll tick.
+       */
+      _handleWriteBackFailure() {
+        var _a, _b;
+        if (this._persistenceAvailable) {
+          return;
+        }
+        this._armFailureEmbargo();
+        const message = "Failed to write the in-memory data to the persistent store. The persistent store remains unavailable.";
+        if (!this._failureLoggedThisOutage) {
+          this._failureLoggedThisOutage = true;
+          (_a = this._logger) == null ? void 0 : _a.error(message);
+        } else {
+          (_b = this._logger) == null ? void 0 : _b.debug(message);
+        }
+      }
     };
-    var { initMetadataFromHeaders: initMetadataFromHeaders2 } = import_js_sdk_common6.internal;
+    var { initMetadataFromHeaders: initMetadataFromHeaders2 } = import_js_sdk_common9.internal;
     var PollingProcessor = class {
       constructor(_requestor, _pollInterval, _featureStore, _logger, _initSuccessHandler = () => {
       }, _errorHandler) {
@@ -24282,68 +24990,71 @@ var require_dist = __commonJS({
         this._initSuccessHandler = _initSuccessHandler;
         this._errorHandler = _errorHandler;
         this._stopped = false;
+        this._retryState = (0, import_js_sdk_common9.forPolling)(1e3 * this._pollInterval);
+      }
+      _scheduleNextPoll() {
+        var _a;
+        const delay = this._retryState.nextDelay;
+        (_a = this._logger) == null ? void 0 : _a.debug("Scheduling next poll in %d ms", delay);
+        this._timeoutHandle = setTimeout(() => {
+          this._poll();
+        }, delay);
       }
       _poll() {
         var _a;
         if (this._stopped) {
           return;
         }
-        const reportJsonError2 = (data) => {
-          var _a2, _b, _c;
-          (_a2 = this._logger) == null ? void 0 : _a2.error("Polling received invalid data");
-          (_b = this._logger) == null ? void 0 : _b.debug(`Invalid JSON follows: ${data}`);
-          (_c = this._errorHandler) == null ? void 0 : _c.call(
-            this,
-            new import_js_sdk_common6.LDPollingError(
-              import_js_sdk_common6.DataSourceErrorKind.InvalidData,
-              "Malformed JSON data in polling response"
-            )
-          );
-        };
-        const startTime = Date.now();
         (_a = this._logger) == null ? void 0 : _a.debug("Polling LaunchDarkly for feature flag updates");
         this._requestor.requestAllData((err, body, headers) => {
           var _a2, _b, _c, _d;
-          const elapsed = Date.now() - startTime;
-          const sleepFor = Math.max(this._pollInterval * 1e3 - elapsed, 0);
-          (_a2 = this._logger) == null ? void 0 : _a2.debug("Elapsed: %d ms, sleeping for %d ms", elapsed, sleepFor);
+          if (this._stopped) {
+            return;
+          }
           if (err) {
             const { status } = err;
-            if (status && !(0, import_js_sdk_common6.isHttpRecoverable)(status)) {
-              const message = (0, import_js_sdk_common6.httpErrorMessage)(err, "polling request");
-              (_b = this._logger) == null ? void 0 : _b.error(message);
-              (_c = this._errorHandler) == null ? void 0 : _c.call(
-                this,
-                new import_js_sdk_common6.LDPollingError(import_js_sdk_common6.DataSourceErrorKind.ErrorResponse, message, status)
-              );
-              return;
-            }
-            (_d = this._logger) == null ? void 0 : _d.warn((0, import_js_sdk_common6.httpErrorMessage)(err, "polling request", "will retry"));
-          } else if (body) {
-            const parsed = deserializePoll(body);
-            if (!parsed) {
-              reportJsonError2(body);
+            const kind = status !== void 0 ? (0, import_js_sdk_common9.classifyHttpStatus)(status) : (0, import_js_sdk_common9.classifyTransportFailure)();
+            this._retryState.recordFailure(kind);
+            const message = (0, import_js_sdk_common9.httpErrorMessage)(err, "polling request", "will retry");
+            if (kind === "unexpected") {
+              (_a2 = this._logger) == null ? void 0 : _a2.error(message);
             } else {
-              const initData = {
-                [VersionedDataKinds.Features.namespace]: parsed.flags,
-                [VersionedDataKinds.Segments.namespace]: parsed.segments
-              };
-              this._featureStore.init(
-                initData,
-                () => {
-                  this._initSuccessHandler();
-                  this._timeoutHandle = setTimeout(() => {
-                    this._poll();
-                  }, sleepFor);
-                },
-                initMetadataFromHeaders2(headers)
-              );
+              (_b = this._logger) == null ? void 0 : _b.warn(message);
+            }
+            this._scheduleNextPoll();
+            return;
+          }
+          if (body) {
+            let parsed;
+            try {
+              parsed = deserializePoll(body);
+            } catch (e) {
+              parsed = void 0;
+            }
+            if (!parsed) {
+              this._retryState.recordFailure("normal");
+              (_c = this._logger) == null ? void 0 : _c.error("Polling received invalid data");
+              (_d = this._logger) == null ? void 0 : _d.debug(`Invalid JSON follows: ${body}`);
+              this._scheduleNextPoll();
               return;
             }
+            const initData = {
+              [VersionedDataKinds.Features.namespace]: parsed.flags,
+              [VersionedDataKinds.Segments.namespace]: parsed.segments
+            };
+            this._featureStore.init(
+              initData,
+              () => {
+                this._retryState.recordSuccess();
+                this._initSuccessHandler();
+                this._scheduleNextPoll();
+              },
+              initMetadataFromHeaders2(headers)
+            );
+            return;
           }
-          this._timeoutHandle = setTimeout(() => {
-            this._poll();
-          }, sleepFor);
+          this._retryState.recordSuccess();
+          this._scheduleNextPoll();
         });
       }
       start() {
@@ -24360,7 +25071,7 @@ var require_dist = __commonJS({
         this.stop();
       }
     };
-    var import_js_sdk_common7 = require_cjs();
+    var import_js_sdk_common10 = require_cjs();
     function selectorAsQueryParams(selector) {
       if (!selector) {
         return [];
@@ -24373,7 +25084,7 @@ var require_dist = __commonJS({
       ];
     }
     function processFDv1FlagsAndSegments(payloadProcessor, data) {
-      const adaptor = import_js_sdk_common7.internal.FDv1PayloadAdaptor(payloadProcessor);
+      const adaptor = import_js_sdk_common10.internal.FDv1PayloadAdaptor(payloadProcessor);
       adaptor.useSelector("FDv1Fallback").processFullTransfer(data);
     }
     var PollingProcessorFDv2 = class {
@@ -24407,34 +25118,34 @@ var require_dist = __commonJS({
           const sleepFor = Math.max(this._pollInterval * 1e3 - elapsed, 0);
           const emitFallback = () => {
             var _a3;
-            const fallbackErr = err instanceof import_js_sdk_common7.LDFlagDeliveryFallbackError ? err : new import_js_sdk_common7.LDFlagDeliveryFallbackError(
-              import_js_sdk_common7.DataSourceErrorKind.ErrorResponse,
-              err ? (0, import_js_sdk_common7.httpErrorMessage)(err, "polling request", "falling back to FDv1") : `Response header indicates to fallback to FDv1`,
+            const fallbackErr = err instanceof import_js_sdk_common10.LDFlagDeliveryFallbackError ? err : new import_js_sdk_common10.LDFlagDeliveryFallbackError(
+              import_js_sdk_common10.DataSourceErrorKind.ErrorResponse,
+              err ? (0, import_js_sdk_common10.httpErrorMessage)(err, "polling request", "falling back to FDv1") : `Response header indicates to fallback to FDv1`,
               err == null ? void 0 : err.status
             );
             (_a3 = this._logger) == null ? void 0 : _a3.warn(fallbackErr.message);
-            statusCallback(import_js_sdk_common7.subsystem.DataSourceState.Closed, fallbackErr);
+            statusCallback(import_js_sdk_common10.subsystem.DataSourceState.Closed, fallbackErr);
           };
           (_a2 = this._logger) == null ? void 0 : _a2.debug("Elapsed: %d ms, sleeping for %d ms", elapsed, sleepFor);
           if (err) {
-            if (fallbackToFDv1 || err instanceof import_js_sdk_common7.LDFlagDeliveryFallbackError) {
+            if (fallbackToFDv1 || err instanceof import_js_sdk_common10.LDFlagDeliveryFallbackError) {
               emitFallback();
               return;
             }
             const { status } = err;
-            if (status && !(0, import_js_sdk_common7.isHttpRecoverable)(status)) {
-              const message2 = (0, import_js_sdk_common7.httpErrorMessage)(err, "polling request");
+            if (status && !(0, import_js_sdk_common10.isHttpRecoverable)(status)) {
+              const message2 = (0, import_js_sdk_common10.httpErrorMessage)(err, "polling request");
               (_b = this._logger) == null ? void 0 : _b.error(message2);
               statusCallback(
-                import_js_sdk_common7.subsystem.DataSourceState.Closed,
-                new import_js_sdk_common7.LDPollingError(import_js_sdk_common7.DataSourceErrorKind.ErrorResponse, message2, status, false)
+                import_js_sdk_common10.subsystem.DataSourceState.Closed,
+                new import_js_sdk_common10.LDPollingError(import_js_sdk_common10.DataSourceErrorKind.ErrorResponse, message2, status, false)
               );
               return;
             }
-            const message = (0, import_js_sdk_common7.httpErrorMessage)(err, "polling request", "will retry");
+            const message = (0, import_js_sdk_common10.httpErrorMessage)(err, "polling request", "will retry");
             statusCallback(
-              import_js_sdk_common7.subsystem.DataSourceState.Interrupted,
-              new import_js_sdk_common7.LDPollingError(import_js_sdk_common7.DataSourceErrorKind.ErrorResponse, message, status)
+              import_js_sdk_common10.subsystem.DataSourceState.Interrupted,
+              new import_js_sdk_common10.LDPollingError(import_js_sdk_common10.DataSourceErrorKind.ErrorResponse, message, status)
             );
             (_c = this._logger) == null ? void 0 : _c.warn(message);
             this._timeoutHandle = setTimeout(() => {
@@ -24442,10 +25153,10 @@ var require_dist = __commonJS({
             }, sleepFor);
             return;
           }
-          const initMetadata = import_js_sdk_common7.internal.initMetadataFromHeaders(headers);
+          const initMetadata = import_js_sdk_common10.internal.initMetadataFromHeaders(headers);
           if (body) {
             try {
-              const payloadProcessor = new import_js_sdk_common7.internal.PayloadProcessor(
+              const payloadProcessor = new import_js_sdk_common10.internal.PayloadProcessor(
                 {
                   flag: (flag) => {
                     processFlag(flag);
@@ -24462,8 +25173,8 @@ var require_dist = __commonJS({
                     return;
                   }
                   statusCallback(
-                    import_js_sdk_common7.subsystem.DataSourceState.Interrupted,
-                    new import_js_sdk_common7.LDPollingError(errorKind, message)
+                    import_js_sdk_common10.subsystem.DataSourceState.Interrupted,
+                    new import_js_sdk_common10.LDPollingError(errorKind, message)
                   );
                 },
                 this._logger
@@ -24491,7 +25202,7 @@ var require_dist = __commonJS({
               if (fallbackToFDv1) {
                 return;
               }
-              statusCallback(import_js_sdk_common7.subsystem.DataSourceState.Valid);
+              statusCallback(import_js_sdk_common10.subsystem.DataSourceState.Valid);
             } catch (e) {
               (_e = this._logger) == null ? void 0 : _e.error("Response contained invalid data");
               (_f = this._logger) == null ? void 0 : _f.debug(`${err} - Body follows: ${body}`);
@@ -24500,9 +25211,9 @@ var require_dist = __commonJS({
                 return;
               }
               statusCallback(
-                import_js_sdk_common7.subsystem.DataSourceState.Interrupted,
-                new import_js_sdk_common7.LDPollingError(
-                  import_js_sdk_common7.DataSourceErrorKind.InvalidData,
+                import_js_sdk_common10.subsystem.DataSourceState.Interrupted,
+                new import_js_sdk_common10.LDPollingError(
+                  import_js_sdk_common10.DataSourceErrorKind.InvalidData,
                   "Malformed data in polling response"
                 )
               );
@@ -24518,7 +25229,7 @@ var require_dist = __commonJS({
       }
       start(dataCallback, statusCallback, selectorGetter) {
         this._statusCallback = statusCallback;
-        statusCallback(import_js_sdk_common7.subsystem.DataSourceState.Initializing);
+        statusCallback(import_js_sdk_common10.subsystem.DataSourceState.Initializing);
         this._poll(dataCallback, statusCallback, selectorGetter);
       }
       stop() {
@@ -24527,12 +25238,12 @@ var require_dist = __commonJS({
           clearTimeout(this._timeoutHandle);
           this._timeoutHandle = void 0;
         }
-        (_a = this._statusCallback) == null ? void 0 : _a.call(this, import_js_sdk_common7.subsystem.DataSourceState.Closed);
+        (_a = this._statusCallback) == null ? void 0 : _a.call(this, import_js_sdk_common10.subsystem.DataSourceState.Closed);
         this._stopped = true;
         this._statusCallback = void 0;
       }
     };
-    var import_js_sdk_common8 = require_cjs();
+    var import_js_sdk_common11 = require_cjs();
     var Requestor = class {
       constructor(config, _requests, baseHeaders, _path = "/sdk/latest-all", _logger, serviceEndpointsOverride) {
         this._requests = _requests;
@@ -24571,7 +25282,7 @@ var require_dist = __commonJS({
           headers: this._headers,
           timeout: this._timeoutMs
         };
-        const uri = (0, import_js_sdk_common8.getPollingUri)(this._serviceEndpoints, this._path, queryParams);
+        const uri = (0, import_js_sdk_common11.getPollingUri)(this._serviceEndpoints, this._path, queryParams);
         (_a = this._logger) == null ? void 0 : _a.debug(`Requestor making request to uri: ${uri}`);
         try {
           const { res, body } = await this._requestWithETagCache(uri, options);
@@ -24579,12 +25290,12 @@ var require_dist = __commonJS({
           const fallbackToFDv1 = res.headers.get(`x-ld-fd-fallback`) === `true`;
           const responseHeaders = Object.fromEntries(res.headers.entries());
           if (res.status !== 200 && res.status !== 304) {
-            const err = fallbackToFDv1 ? new import_js_sdk_common8.LDFlagDeliveryFallbackError(
-              import_js_sdk_common8.DataSourceErrorKind.ErrorResponse,
+            const err = fallbackToFDv1 ? new import_js_sdk_common11.LDFlagDeliveryFallbackError(
+              import_js_sdk_common11.DataSourceErrorKind.ErrorResponse,
               `Response header indicates to fallback to FDv1.`,
               res.status
-            ) : new import_js_sdk_common8.LDPollingError(
-              import_js_sdk_common8.DataSourceErrorKind.ErrorResponse,
+            ) : new import_js_sdk_common11.LDPollingError(
+              import_js_sdk_common11.DataSourceErrorKind.ErrorResponse,
               `Unexpected status code: ${res.status}`,
               res.status
             );
@@ -24596,31 +25307,26 @@ var require_dist = __commonJS({
         }
       }
     };
-    var import_js_sdk_common9 = require_cjs();
-    var reportJsonError = (type, data, logger, errorHandler) => {
-      logger == null ? void 0 : logger.error(`Stream received invalid data in "${type}" message`);
-      logger == null ? void 0 : logger.debug(`Invalid JSON follows: ${data}`);
-      errorHandler == null ? void 0 : errorHandler(
-        new import_js_sdk_common9.LDStreamingError(import_js_sdk_common9.DataSourceErrorKind.InvalidData, "Malformed JSON data in event stream")
-      );
-    };
+    var import_js_sdk_common12 = require_cjs();
     var StreamingProcessor = class {
       constructor(clientContext, streamUriPath, parameters, _listeners, baseHeaders, _diagnosticsManager, _errorHandler, _streamInitialReconnectDelay = 1) {
         this._listeners = _listeners;
         this._diagnosticsManager = _diagnosticsManager;
         this._errorHandler = _errorHandler;
         this._streamInitialReconnectDelay = _streamInitialReconnectDelay;
+        this._stopped = false;
         const { basicConfiguration, platform: platform22 } = clientContext;
         const { logger } = basicConfiguration;
         const { requests } = platform22;
         this._headers = __spreadValues({}, baseHeaders);
         this._logger = logger;
         this._requests = requests;
-        this._streamUri = (0, import_js_sdk_common9.getStreamingUri)(
+        this._streamUri = (0, import_js_sdk_common12.getStreamingUri)(
           basicConfiguration.serviceEndpoints,
           streamUriPath,
           parameters
         );
+        this._retryState = (0, import_js_sdk_common12.forStreaming)(1e3 * this._streamInitialReconnectDelay);
       }
       _logConnectionStarted() {
         this._connectionAttemptStartTime = Date.now();
@@ -24636,38 +25342,55 @@ var require_dist = __commonJS({
         this._connectionAttemptStartTime = void 0;
       }
       /**
-       * This is a wrapper around the passed errorHandler which adds additional
-       * diagnostics and logging logic.
+       * Records a connection failure and logs it. The retry state decides the
+       * wait; a server-directed `retry:` value, if any, has already been applied
+       * to it through the injected strategy.
        *
-       * @param err The error to be logged and handled.
-       * @return boolean whether to retry the connection.
+       * @param err The error to be recorded and logged.
        *
        * @private
        */
       _retryAndHandleError(err) {
-        var _a, _b, _c;
-        if (!(0, import_js_sdk_common9.shouldRetry)(err)) {
-          this._logConnectionResult(false);
-          (_a = this._errorHandler) == null ? void 0 : _a.call(
-            this,
-            new import_js_sdk_common9.LDStreamingError(import_js_sdk_common9.DataSourceErrorKind.ErrorResponse, err.message, err.status)
-          );
-          (_b = this._logger) == null ? void 0 : _b.error((0, import_js_sdk_common9.httpErrorMessage)(err, "streaming request"));
-          return false;
-        }
-        (_c = this._logger) == null ? void 0 : _c.warn((0, import_js_sdk_common9.httpErrorMessage)(err, "streaming request", "will retry"));
+        var _a, _b;
+        const kind = err.status !== void 0 ? (0, import_js_sdk_common12.classifyHttpStatus)(err.status) : (0, import_js_sdk_common12.classifyTransportFailure)();
+        this._retryState.recordFailure(kind);
         this._logConnectionResult(false);
+        const message = (0, import_js_sdk_common12.httpErrorMessage)(err, "streaming request", "will retry");
+        if (kind === "unexpected") {
+          (_a = this._logger) == null ? void 0 : _a.error(message);
+        } else {
+          (_b = this._logger) == null ? void 0 : _b.warn(message);
+        }
         this._logConnectionStarted();
-        return true;
+      }
+      _restartForInvalidData() {
+        if (this._stopped || !this._eventSource) {
+          return;
+        }
+        this._retryState.recordFailure("normal");
+        this._eventSource.close();
+        this._eventSource = void 0;
+        this._reconnectTimeout = setTimeout(() => {
+          if (!this._stopped) {
+            this.start();
+          }
+        }, this._retryState.nextDelay);
       }
       start() {
         this._logConnectionStarted();
+        const retryDelayStrategy = {
+          nextRetryDelay: () => this._retryState.nextDelay,
+          setGoodSince: () => this._retryState.recordSuccess(),
+          setBaseDelay: (baseDelayMs) => this._retryState.applyServerDirectedRetry(baseDelayMs)
+        };
         const eventSource = this._requests.createEventSource(this._streamUri, {
           headers: this._headers,
-          errorFilter: (error2) => this._retryAndHandleError(error2),
-          initialRetryDelayMillis: 1e3 * this._streamInitialReconnectDelay,
+          errorFilter: (error2) => {
+            this._retryAndHandleError(error2);
+            return true;
+          },
           readTimeoutMillis: 5 * 60 * 1e3,
-          retryResetIntervalMillis: 60 * 1e3
+          retryDelayStrategy
         });
         this._eventSource = eventSource;
         eventSource.onclose = () => {
@@ -24687,31 +25410,38 @@ var require_dist = __commonJS({
         };
         this._listeners.forEach(({ deserializeData, processJson }, eventName) => {
           eventSource.addEventListener(eventName, (event) => {
-            var _a, _b;
+            var _a, _b, _c, _d;
             (_a = this._logger) == null ? void 0 : _a.debug(`Received ${eventName} event`);
             if (event == null ? void 0 : event.data) {
               this._logConnectionResult(true);
               const { data } = event;
-              const dataJson = deserializeData(data);
+              let dataJson;
+              try {
+                dataJson = deserializeData(data);
+              } catch (e) {
+                dataJson = void 0;
+              }
               if (!dataJson) {
-                reportJsonError(eventName, data, this._logger, this._errorHandler);
+                (_b = this._logger) == null ? void 0 : _b.error(`Stream received invalid data in "${eventName}" message`);
+                (_c = this._logger) == null ? void 0 : _c.debug(`Invalid JSON follows: ${data}`);
+                this._restartForInvalidData();
                 return;
               }
               processJson(dataJson, this._initHeaders);
             } else {
-              (_b = this._errorHandler) == null ? void 0 : _b.call(
-                this,
-                new import_js_sdk_common9.LDStreamingError(
-                  import_js_sdk_common9.DataSourceErrorKind.Unknown,
-                  "Unexpected payload from event stream"
-                )
-              );
+              (_d = this._logger) == null ? void 0 : _d.error("Unexpected payload from event stream");
+              this._restartForInvalidData();
             }
           });
         });
       }
       stop() {
         var _a;
+        if (this._reconnectTimeout) {
+          clearTimeout(this._reconnectTimeout);
+          this._reconnectTimeout = void 0;
+        }
+        this._stopped = true;
         (_a = this._eventSource) == null ? void 0 : _a.close();
         this._eventSource = void 0;
       }
@@ -24719,7 +25449,7 @@ var require_dist = __commonJS({
         this.stop();
       }
     };
-    var import_js_sdk_common10 = require_cjs();
+    var import_js_sdk_common13 = require_cjs();
     var StreamingProcessorFDv2 = class {
       constructor(clientContext, _streamUriPath, _parameters, baseHeaders, _diagnosticsManager, _streamInitialReconnectDelay = 1, serviceEndpointsOverride) {
         this._streamUriPath = _streamUriPath;
@@ -24759,36 +25489,36 @@ var require_dist = __commonJS({
       _retryAndHandleError(err, statusCallback) {
         var _a, _b, _c;
         if (((_a = err.headers) == null ? void 0 : _a[`x-ld-fd-fallback`]) === `true`) {
-          const fallbackErr = new import_js_sdk_common10.LDFlagDeliveryFallbackError(
-            import_js_sdk_common10.DataSourceErrorKind.ErrorResponse,
+          const fallbackErr = new import_js_sdk_common13.LDFlagDeliveryFallbackError(
+            import_js_sdk_common13.DataSourceErrorKind.ErrorResponse,
             `Response header indicates to fallback to FDv1`,
             err.status
           );
-          statusCallback(import_js_sdk_common10.subsystem.DataSourceState.Closed, fallbackErr);
+          statusCallback(import_js_sdk_common13.subsystem.DataSourceState.Closed, fallbackErr);
           return false;
         }
-        if (!(0, import_js_sdk_common10.shouldRetry)(err)) {
-          (_b = this._logger) == null ? void 0 : _b.error((0, import_js_sdk_common10.httpErrorMessage)(err, "streaming request"));
+        if (!(0, import_js_sdk_common13.shouldRetry)(err)) {
+          (_b = this._logger) == null ? void 0 : _b.error((0, import_js_sdk_common13.httpErrorMessage)(err, "streaming request"));
           this._logConnectionResult(false);
           statusCallback(
-            import_js_sdk_common10.subsystem.DataSourceState.Closed,
-            new import_js_sdk_common10.LDStreamingError(import_js_sdk_common10.DataSourceErrorKind.ErrorResponse, err.message, err.status, false)
+            import_js_sdk_common13.subsystem.DataSourceState.Closed,
+            new import_js_sdk_common13.LDStreamingError(import_js_sdk_common13.DataSourceErrorKind.ErrorResponse, err.message, err.status, false)
           );
           return false;
         }
-        (_c = this._logger) == null ? void 0 : _c.warn((0, import_js_sdk_common10.httpErrorMessage)(err, "streaming request", "will retry"));
+        (_c = this._logger) == null ? void 0 : _c.warn((0, import_js_sdk_common13.httpErrorMessage)(err, "streaming request", "will retry"));
         this._logConnectionResult(false);
         this._logConnectionAttempt();
-        statusCallback(import_js_sdk_common10.subsystem.DataSourceState.Interrupted);
+        statusCallback(import_js_sdk_common13.subsystem.DataSourceState.Interrupted);
         return true;
       }
       start(dataCallback, statusCallback, selectorGetter) {
         var _a;
         this._logConnectionAttempt();
-        statusCallback(import_js_sdk_common10.subsystem.DataSourceState.Initializing);
+        statusCallback(import_js_sdk_common13.subsystem.DataSourceState.Initializing);
         const selector = selectorGetter == null ? void 0 : selectorGetter();
         const params = selector ? [...this._parameters, { key: "basis", value: selector }] : this._parameters;
-        const uri = (0, import_js_sdk_common10.getStreamingUri)(this._serviceEndpoints, this._streamUriPath, params);
+        const uri = (0, import_js_sdk_common13.getStreamingUri)(this._serviceEndpoints, this._streamUriPath, params);
         (_a = this._logger) == null ? void 0 : _a.debug(`Streaming processor opening event source to uri: ${uri}`);
         let fallbackRequested = false;
         const eventSource = this._requests.createEventSource(uri, {
@@ -24808,17 +25538,17 @@ var require_dist = __commonJS({
         eventSource.onopen = (e) => {
           var _a2, _b;
           (_a2 = this._logger) == null ? void 0 : _a2.info("Opened LaunchDarkly stream connection");
-          this._initMetadata = import_js_sdk_common10.internal.initMetadataFromHeaders(e.headers);
+          this._initMetadata = import_js_sdk_common13.internal.initMetadataFromHeaders(e.headers);
           if (((_b = e.headers) == null ? void 0 : _b[`x-ld-fd-fallback`]) === `true`) {
             fallbackRequested = true;
           }
-          statusCallback(import_js_sdk_common10.subsystem.DataSourceState.Valid);
+          statusCallback(import_js_sdk_common13.subsystem.DataSourceState.Valid);
         };
         eventSource.onretrying = (e) => {
           var _a2;
           (_a2 = this._logger) == null ? void 0 : _a2.info(`Will retry stream connection in ${e.delayMillis} milliseconds`);
         };
-        const payloadReader = new import_js_sdk_common10.internal.PayloadStreamReader(
+        const payloadReader = new import_js_sdk_common13.internal.PayloadStreamReader(
           eventSource,
           {
             flag: (flag) => {
@@ -24833,16 +25563,16 @@ var require_dist = __commonJS({
           (errorKind, message) => {
             var _a2;
             if (fallbackRequested) {
-              const fallbackErr = new import_js_sdk_common10.LDFlagDeliveryFallbackError(
-                import_js_sdk_common10.DataSourceErrorKind.ErrorResponse,
+              const fallbackErr = new import_js_sdk_common13.LDFlagDeliveryFallbackError(
+                import_js_sdk_common13.DataSourceErrorKind.ErrorResponse,
                 `Response header indicates to fallback to FDv1`
               );
               (_a2 = this._logger) == null ? void 0 : _a2.warn(fallbackErr.message);
-              statusCallback(import_js_sdk_common10.subsystem.DataSourceState.Closed, fallbackErr);
+              statusCallback(import_js_sdk_common13.subsystem.DataSourceState.Closed, fallbackErr);
             } else {
               statusCallback(
-                import_js_sdk_common10.subsystem.DataSourceState.Interrupted,
-                new import_js_sdk_common10.LDStreamingError(errorKind, message)
+                import_js_sdk_common13.subsystem.DataSourceState.Interrupted,
+                new import_js_sdk_common13.LDStreamingError(errorKind, message)
               );
             }
             this.stop();
@@ -24975,41 +25705,41 @@ var require_dist = __commonJS({
         });
       }
     };
-    var import_js_sdk_common12 = require_cjs();
-    var import_js_sdk_common11 = require_cjs();
+    var import_js_sdk_common15 = require_cjs();
+    var import_js_sdk_common14 = require_cjs();
     var validations = {
-      baseUri: import_js_sdk_common11.TypeValidators.String,
-      streamUri: import_js_sdk_common11.TypeValidators.String,
-      eventsUri: import_js_sdk_common11.TypeValidators.String,
-      timeout: import_js_sdk_common11.TypeValidators.numberWithMin(1),
-      capacity: import_js_sdk_common11.TypeValidators.Number,
-      logger: import_js_sdk_common11.TypeValidators.Object,
-      featureStore: import_js_sdk_common11.TypeValidators.ObjectOrFactory,
-      dataSystem: import_js_sdk_common11.TypeValidators.Object,
-      bigSegments: import_js_sdk_common11.TypeValidators.Object,
-      updateProcessor: import_js_sdk_common11.TypeValidators.ObjectOrFactory,
-      flushInterval: import_js_sdk_common11.TypeValidators.Number,
-      pollInterval: import_js_sdk_common11.TypeValidators.numberWithMin(30),
-      proxyOptions: import_js_sdk_common11.TypeValidators.Object,
-      offline: import_js_sdk_common11.TypeValidators.Boolean,
-      stream: import_js_sdk_common11.TypeValidators.Boolean,
-      streamInitialReconnectDelay: import_js_sdk_common11.TypeValidators.Number,
-      useLdd: import_js_sdk_common11.TypeValidators.Boolean,
-      sendEvents: import_js_sdk_common11.TypeValidators.Boolean,
-      allAttributesPrivate: import_js_sdk_common11.TypeValidators.Boolean,
-      privateAttributes: import_js_sdk_common11.TypeValidators.StringArray,
-      contextKeysCapacity: import_js_sdk_common11.TypeValidators.Number,
-      contextKeysFlushInterval: import_js_sdk_common11.TypeValidators.Number,
-      tlsParams: import_js_sdk_common11.TypeValidators.Object,
-      diagnosticOptOut: import_js_sdk_common11.TypeValidators.Boolean,
-      diagnosticRecordingInterval: import_js_sdk_common11.TypeValidators.numberWithMin(60),
-      wrapperName: import_js_sdk_common11.TypeValidators.String,
-      wrapperVersion: import_js_sdk_common11.TypeValidators.String,
-      application: import_js_sdk_common11.TypeValidators.Object,
-      payloadFilterKey: import_js_sdk_common11.TypeValidators.stringMatchingRegex(/^[a-zA-Z0-9](\w|\.|-)*$/),
-      hooks: import_js_sdk_common11.TypeValidators.createTypeArray("Hook[]", {}),
-      enableEventCompression: import_js_sdk_common11.TypeValidators.Boolean,
-      dataSourceOptionsType: import_js_sdk_common11.TypeValidators.String
+      baseUri: import_js_sdk_common14.TypeValidators.String,
+      streamUri: import_js_sdk_common14.TypeValidators.String,
+      eventsUri: import_js_sdk_common14.TypeValidators.String,
+      timeout: import_js_sdk_common14.TypeValidators.numberWithMin(1),
+      capacity: import_js_sdk_common14.TypeValidators.Number,
+      logger: import_js_sdk_common14.TypeValidators.Object,
+      featureStore: import_js_sdk_common14.TypeValidators.ObjectOrFactory,
+      dataSystem: import_js_sdk_common14.TypeValidators.Object,
+      bigSegments: import_js_sdk_common14.TypeValidators.Object,
+      updateProcessor: import_js_sdk_common14.TypeValidators.ObjectOrFactory,
+      flushInterval: import_js_sdk_common14.TypeValidators.Number,
+      pollInterval: import_js_sdk_common14.TypeValidators.numberWithMin(30),
+      proxyOptions: import_js_sdk_common14.TypeValidators.Object,
+      offline: import_js_sdk_common14.TypeValidators.Boolean,
+      stream: import_js_sdk_common14.TypeValidators.Boolean,
+      streamInitialReconnectDelay: import_js_sdk_common14.TypeValidators.Number,
+      useLdd: import_js_sdk_common14.TypeValidators.Boolean,
+      sendEvents: import_js_sdk_common14.TypeValidators.Boolean,
+      allAttributesPrivate: import_js_sdk_common14.TypeValidators.Boolean,
+      privateAttributes: import_js_sdk_common14.TypeValidators.StringArray,
+      contextKeysCapacity: import_js_sdk_common14.TypeValidators.Number,
+      contextKeysFlushInterval: import_js_sdk_common14.TypeValidators.Number,
+      tlsParams: import_js_sdk_common14.TypeValidators.Object,
+      diagnosticOptOut: import_js_sdk_common14.TypeValidators.Boolean,
+      diagnosticRecordingInterval: import_js_sdk_common14.TypeValidators.numberWithMin(60),
+      wrapperName: import_js_sdk_common14.TypeValidators.String,
+      wrapperVersion: import_js_sdk_common14.TypeValidators.String,
+      application: import_js_sdk_common14.TypeValidators.Object,
+      payloadFilterKey: import_js_sdk_common14.TypeValidators.stringMatchingRegex(/^[a-zA-Z0-9](\w|\.|-)*$/),
+      hooks: import_js_sdk_common14.TypeValidators.createTypeArray("Hook[]", {}),
+      enableEventCompression: import_js_sdk_common14.TypeValidators.Boolean,
+      dataSourceOptionsType: import_js_sdk_common14.TypeValidators.String
     };
     var DEFAULT_POLL_INTERVAL = 30;
     var DEFAULT_STREAM_RECONNECT_DELAY = 1;
@@ -25032,7 +25762,7 @@ var require_dist = __commonJS({
     var defaultValues = {
       baseUri: "https://sdk.launchdarkly.com",
       streamUri: "https://stream.launchdarkly.com",
-      eventsUri: import_js_sdk_common11.ServiceEndpoints.DEFAULT_EVENTS,
+      eventsUri: import_js_sdk_common14.ServiceEndpoints.DEFAULT_EVENTS,
       stream: true,
       streamInitialReconnectDelay: DEFAULT_STREAM_RECONNECT_DELAY,
       sendEvents: true,
@@ -25062,15 +25792,15 @@ var require_dist = __commonJS({
         if (validator) {
           if (!validator.is(optionValue)) {
             if (validator.getType() === "boolean") {
-              errors.push(import_js_sdk_common11.OptionMessages.wrongOptionTypeBoolean(optionName, typeof optionValue));
+              errors.push(import_js_sdk_common14.OptionMessages.wrongOptionTypeBoolean(optionName, typeof optionValue));
               validatedOptions[optionName] = !!optionValue;
-            } else if (validator instanceof import_js_sdk_common11.NumberWithMinimum && import_js_sdk_common11.TypeValidators.Number.is(optionValue)) {
+            } else if (validator instanceof import_js_sdk_common14.NumberWithMinimum && import_js_sdk_common14.TypeValidators.Number.is(optionValue)) {
               const { min } = validator;
-              errors.push(import_js_sdk_common11.OptionMessages.optionBelowMinimum(optionName, optionValue, min));
+              errors.push(import_js_sdk_common14.OptionMessages.optionBelowMinimum(optionName, optionValue, min));
               validatedOptions[optionName] = min;
             } else {
               errors.push(
-                import_js_sdk_common11.OptionMessages.wrongOptionType(optionName, validator.getType(), typeof optionValue)
+                import_js_sdk_common14.OptionMessages.wrongOptionType(optionName, validator.getType(), typeof optionValue)
               );
               validatedOptions[optionName] = defaultValues[optionName];
             }
@@ -25078,7 +25808,7 @@ var require_dist = __commonJS({
             validatedOptions[optionName] = optionValue;
           }
         } else {
-          (_a = options.logger) == null ? void 0 : _a.warn(import_js_sdk_common11.OptionMessages.unknownOption(optionName));
+          (_a = options.logger) == null ? void 0 : _a.warn(import_js_sdk_common14.OptionMessages.unknownOption(optionName));
         }
       });
       return { errors, validatedOptions };
@@ -25093,18 +25823,18 @@ var require_dist = __commonJS({
         return;
       }
       if (!streamingEndpointSpecified && validatedOptions.stream) {
-        (_a = validatedOptions.logger) == null ? void 0 : _a.warn(import_js_sdk_common11.OptionMessages.partialEndpoint("streamUri"));
+        (_a = validatedOptions.logger) == null ? void 0 : _a.warn(import_js_sdk_common14.OptionMessages.partialEndpoint("streamUri"));
       }
       if (!pollingEndpointSpecified) {
-        (_b = validatedOptions.logger) == null ? void 0 : _b.warn(import_js_sdk_common11.OptionMessages.partialEndpoint("baseUri"));
+        (_b = validatedOptions.logger) == null ? void 0 : _b.warn(import_js_sdk_common14.OptionMessages.partialEndpoint("baseUri"));
       }
       if (!eventEndpointSpecified && validatedOptions.sendEvents) {
-        (_c = validatedOptions.logger) == null ? void 0 : _c.warn(import_js_sdk_common11.OptionMessages.partialEndpoint("eventsUri"));
+        (_c = validatedOptions.logger) == null ? void 0 : _c.warn(import_js_sdk_common14.OptionMessages.partialEndpoint("eventsUri"));
       }
     }
     var fdv1FallbackValidations = {
-      baseUri: import_js_sdk_common11.TypeValidators.String,
-      pollInterval: import_js_sdk_common11.TypeValidators.numberWithMin(30)
+      baseUri: import_js_sdk_common14.TypeValidators.String,
+      pollInterval: import_js_sdk_common14.TypeValidators.numberWithMin(30)
     };
     function validateFDv1FallbackOptions(options) {
       const errors = [];
@@ -25113,14 +25843,14 @@ var require_dist = __commonJS({
         const optionValue = options[optionName];
         const validator = fdv1FallbackValidations[optionName];
         if (!validator) {
-          errors.push(import_js_sdk_common11.OptionMessages.unknownOption(`dataSystem.fdv1Fallback.${optionName}`));
+          errors.push(import_js_sdk_common14.OptionMessages.unknownOption(`dataSystem.fdv1Fallback.${optionName}`));
           return;
         }
         if (!validator.is(optionValue)) {
-          if (validator instanceof import_js_sdk_common11.NumberWithMinimum && import_js_sdk_common11.TypeValidators.Number.is(optionValue)) {
+          if (validator instanceof import_js_sdk_common14.NumberWithMinimum && import_js_sdk_common14.TypeValidators.Number.is(optionValue)) {
             const { min } = validator;
             errors.push(
-              import_js_sdk_common11.OptionMessages.optionBelowMinimum(
+              import_js_sdk_common14.OptionMessages.optionBelowMinimum(
                 `dataSystem.fdv1Fallback.${optionName}`,
                 optionValue,
                 min
@@ -25129,7 +25859,7 @@ var require_dist = __commonJS({
             validatedOptions[optionName] = min;
           } else {
             errors.push(
-              import_js_sdk_common11.OptionMessages.wrongOptionType(
+              import_js_sdk_common14.OptionMessages.wrongOptionType(
                 `dataSystem.fdv1Fallback.${optionName}`,
                 validator.getType(),
                 typeof optionValue
@@ -25147,15 +25877,15 @@ var require_dist = __commonJS({
         return [];
       }
       delete validatedDataSource.baseUri;
-      return [import_js_sdk_common11.OptionMessages.unknownOption("dataSystem.dataSource.baseUri")];
+      return [import_js_sdk_common14.OptionMessages.unknownOption("dataSystem.dataSource.baseUri")];
     }
     function validateDataSystemOptions(options) {
       const allErrors = [];
       const validatedOptions = __spreadValues({}, options);
-      if (options.persistentStore && !import_js_sdk_common11.TypeValidators.ObjectOrFactory.is(options.persistentStore)) {
+      if (options.persistentStore && !import_js_sdk_common14.TypeValidators.ObjectOrFactory.is(options.persistentStore)) {
         validatedOptions.persistentStore = void 0;
         allErrors.push(
-          import_js_sdk_common11.OptionMessages.wrongOptionType(
+          import_js_sdk_common14.OptionMessages.wrongOptionType(
             "persistentStore",
             "LDFeatureStore",
             typeof options.persistentStore
@@ -25163,7 +25893,7 @@ var require_dist = __commonJS({
         );
       }
       if (options.fdv1Fallback !== void 0 && options.fdv1Fallback !== null) {
-        if (import_js_sdk_common11.TypeValidators.Object.is(options.fdv1Fallback)) {
+        if (import_js_sdk_common14.TypeValidators.Object.is(options.fdv1Fallback)) {
           const { errors: fbErrors, validatedOptions: fbValidated } = validateFDv1FallbackOptions(
             options.fdv1Fallback
           );
@@ -25172,7 +25902,7 @@ var require_dist = __commonJS({
         } else {
           validatedOptions.fdv1Fallback = void 0;
           allErrors.push(
-            import_js_sdk_common11.OptionMessages.wrongOptionType(
+            import_js_sdk_common14.OptionMessages.wrongOptionType(
               "dataSystem.fdv1Fallback",
               "FDv1FallbackConfiguration",
               typeof options.fdv1Fallback
@@ -25207,7 +25937,7 @@ var require_dist = __commonJS({
         } else {
           validatedDataSourceOptions = defaultStandardDataSourceOptions;
           errors = [
-            import_js_sdk_common11.OptionMessages.wrongOptionType(
+            import_js_sdk_common14.OptionMessages.wrongOptionType(
               "dataSource",
               "DataSourceOptions",
               typeof options.dataSource
@@ -25250,17 +25980,17 @@ var require_dist = __commonJS({
               let store;
               if (persistentStore === void 0) {
                 store = new InMemoryFeatureStore();
-              } else if (import_js_sdk_common11.TypeValidators.Function.is(persistentStore)) {
+              } else if (import_js_sdk_common14.TypeValidators.Function.is(persistentStore)) {
                 store = persistentStore(
                   clientContext
                 );
               } else {
                 store = persistentStore;
               }
-              if (import_js_sdk_common11.TypeValidators.Function.is(store.applyChanges)) {
+              if (import_js_sdk_common14.TypeValidators.Function.is(store.applyChanges)) {
                 return store;
               }
-              return new TransactionalFeatureStore(store);
+              return new TransactionalFeatureStore(store, this.logger);
             }
           };
           dsErrors.forEach((error2) => {
@@ -25268,7 +25998,7 @@ var require_dist = __commonJS({
             (_a2 = this.logger) == null ? void 0 : _a2.warn(error2);
           });
         }
-        this.serviceEndpoints = new import_js_sdk_common11.ServiceEndpoints(
+        this.serviceEndpoints = new import_js_sdk_common14.ServiceEndpoints(
           validatedOptions.streamUri,
           validatedOptions.baseUri,
           validatedOptions.eventsUri,
@@ -25297,14 +26027,14 @@ var require_dist = __commonJS({
         this.wrapperName = validatedOptions.wrapperName;
         this.payloadFilterKey = validatedOptions.payloadFilterKey;
         this.wrapperVersion = validatedOptions.wrapperVersion;
-        this.tags = new import_js_sdk_common11.ApplicationTags(validatedOptions);
+        this.tags = new import_js_sdk_common14.ApplicationTags(validatedOptions);
         this.diagnosticRecordingInterval = validatedOptions.diagnosticRecordingInterval;
-        if (import_js_sdk_common11.TypeValidators.Function.is(validatedOptions.updateProcessor)) {
+        if (import_js_sdk_common14.TypeValidators.Function.is(validatedOptions.updateProcessor)) {
           this.updateProcessorFactory = validatedOptions.updateProcessor;
         } else {
           this.updateProcessorFactory = () => validatedOptions.updateProcessor;
         }
-        if (import_js_sdk_common11.TypeValidators.Function.is(validatedOptions.featureStore)) {
+        if (import_js_sdk_common14.TypeValidators.Function.is(validatedOptions.featureStore)) {
           this.featureStoreFactory = validatedOptions.featureStore;
         } else {
           this.featureStoreFactory = () => validatedOptions.featureStore;
@@ -25320,20 +26050,20 @@ var require_dist = __commonJS({
       let pollingIntervalMillis;
       if ((_a = config.dataSystem) == null ? void 0 : _a.dataSource) {
         if ((isStandardOptions(config.dataSystem.dataSource) || isPollingOnlyOptions(config.dataSystem.dataSource)) && config.dataSystem.dataSource.pollInterval) {
-          pollingIntervalMillis = (0, import_js_sdk_common12.secondsToMillis)(config.dataSystem.dataSource.pollInterval);
+          pollingIntervalMillis = (0, import_js_sdk_common15.secondsToMillis)(config.dataSystem.dataSource.pollInterval);
         }
       } else {
-        pollingIntervalMillis = (0, import_js_sdk_common12.secondsToMillis)(config.pollInterval);
+        pollingIntervalMillis = (0, import_js_sdk_common15.secondsToMillis)(config.pollInterval);
       }
       let reconnectTimeMillis;
       if ((_b = config.dataSystem) == null ? void 0 : _b.dataSource) {
         if ((isStandardOptions(config.dataSystem.dataSource) || isStreamingOnlyOptions(config.dataSystem.dataSource)) && config.dataSystem.dataSource.streamInitialReconnectDelay) {
-          reconnectTimeMillis = (0, import_js_sdk_common12.secondsToMillis)(
+          reconnectTimeMillis = (0, import_js_sdk_common15.secondsToMillis)(
             config.dataSystem.dataSource.streamInitialReconnectDelay
           );
         }
       } else {
-        reconnectTimeMillis = (0, import_js_sdk_common12.secondsToMillis)(config.streamInitialReconnectDelay);
+        reconnectTimeMillis = (0, import_js_sdk_common15.secondsToMillis)(config.streamInitialReconnectDelay);
       }
       let streamDisabled;
       if ((_c = config.dataSystem) == null ? void 0 : _c.dataSource) {
@@ -25348,12 +26078,12 @@ var require_dist = __commonJS({
         eventsCapacity: config.eventsCapacity,
         // Node doesn't distinguish between these two kinds of timeouts. It is unlikely other web
         // based implementations would be able to either.
-        connectTimeoutMillis: (0, import_js_sdk_common12.secondsToMillis)(config.timeout),
-        socketTimeoutMillis: (0, import_js_sdk_common12.secondsToMillis)(config.timeout),
-        eventsFlushIntervalMillis: (0, import_js_sdk_common12.secondsToMillis)(config.flushInterval)
+        connectTimeoutMillis: (0, import_js_sdk_common15.secondsToMillis)(config.timeout),
+        socketTimeoutMillis: (0, import_js_sdk_common15.secondsToMillis)(config.timeout),
+        eventsFlushIntervalMillis: (0, import_js_sdk_common15.secondsToMillis)(config.flushInterval)
       }, pollingIntervalMillis ? { pollingIntervalMillis } : null), reconnectTimeMillis ? { reconnectTimeMillis } : null), {
-        contextKeysFlushIntervalMillis: (0, import_js_sdk_common12.secondsToMillis)(config.contextKeysFlushInterval),
-        diagnosticRecordingIntervalMillis: (0, import_js_sdk_common12.secondsToMillis)(config.diagnosticRecordingInterval),
+        contextKeysFlushIntervalMillis: (0, import_js_sdk_common15.secondsToMillis)(config.contextKeysFlushInterval),
+        diagnosticRecordingIntervalMillis: (0, import_js_sdk_common15.secondsToMillis)(config.diagnosticRecordingInterval),
         streamingDisabled: streamDisabled,
         usingRelayDaemon: (_f = (_e = config.dataSystem) == null ? void 0 : _e.useLdd) != null ? _f : config.useLdd,
         offline: config.offline,
@@ -25468,7 +26198,7 @@ var require_dist = __commonJS({
         });
       }
     };
-    var import_js_sdk_common16 = require_cjs();
+    var import_js_sdk_common19 = require_cjs();
     function valueForBucketing(value) {
       if (typeof value === "string") {
         return value;
@@ -25517,18 +26247,18 @@ var require_dist = __commonJS({
         return [hashVal / 1152921504606847e3, true];
       }
     };
-    var import_js_sdk_common14 = require_cjs();
-    var import_js_sdk_common13 = require_cjs();
-    var { ErrorKinds } = import_js_sdk_common13.internal;
-    var KEY_ATTR_REF = new import_js_sdk_common13.AttributeReference("key");
+    var import_js_sdk_common17 = require_cjs();
+    var import_js_sdk_common16 = require_cjs();
+    var { ErrorKinds } = import_js_sdk_common16.internal;
+    var KEY_ATTR_REF = new import_js_sdk_common16.AttributeReference("key");
     function getVariation(flag, index, reason) {
-      if (import_js_sdk_common13.TypeValidators.Number.is(index) && index >= 0 && index < flag.variations.length) {
+      if (import_js_sdk_common16.TypeValidators.Number.is(index) && index >= 0 && index < flag.variations.length) {
         return EvalResult.forSuccess(flag.variations[index], reason, index);
       }
       return EvalResult.forError(ErrorKinds.MalformedFlag, "Invalid variation index in flag");
     }
     function getOffVariation(flag, reason) {
-      if (!import_js_sdk_common13.TypeValidators.Number.is(flag.offVariation)) {
+      if (!import_js_sdk_common16.TypeValidators.Number.is(flag.offVariation)) {
         return EvalResult.forSuccess(null, reason);
       }
       return getVariation(flag, flag.offVariation, reason);
@@ -25553,7 +26283,7 @@ var require_dist = __commonJS({
         return firstResult(flag.targets, (target) => evalTarget(flag, target, context));
       }
       return firstResult(flag.contextTargets, (target) => {
-        if (!target.contextKind || target.contextKind === import_js_sdk_common14.Context.UserKind) {
+        if (!target.contextKind || target.contextKind === import_js_sdk_common17.Context.UserKind) {
           const userTarget = (flag.targets || []).find((ut) => ut.variation === target.variation);
           if (userTarget) {
             return evalTarget(flag, userTarget, context);
@@ -25567,10 +26297,10 @@ var require_dist = __commonJS({
       return `${segment.key}.g${segment.generation}`;
     }
     var import_parse = __toESM2(require_parse2(), 1);
-    var import_js_sdk_common15 = require_cjs();
+    var import_js_sdk_common18 = require_cjs();
     var VERSION_COMPONENTS_REGEX = /^\d+(\.\d+)?(\.\d+)?/;
     function parseSemver(input) {
-      if (import_js_sdk_common15.TypeValidators.String.is(input) && !input.startsWith("v")) {
+      if (import_js_sdk_common18.TypeValidators.String.is(input) && !input.startsWith("v")) {
         const parsed = (0, import_parse.default)(input);
         if (parsed) {
           return parsed;
@@ -25622,19 +26352,19 @@ var require_dist = __commonJS({
     }
     var operators = {
       in: (a, b) => a === b,
-      endsWith: makeOperator((a, b) => a.endsWith(b), import_js_sdk_common15.TypeValidators.String),
-      startsWith: makeOperator((a, b) => a.startsWith(b), import_js_sdk_common15.TypeValidators.String),
+      endsWith: makeOperator((a, b) => a.endsWith(b), import_js_sdk_common18.TypeValidators.String),
+      startsWith: makeOperator((a, b) => a.startsWith(b), import_js_sdk_common18.TypeValidators.String),
       matches: makeOperator(
         (value, pattern) => safeRegexMatch(pattern, value),
-        import_js_sdk_common15.TypeValidators.String
+        import_js_sdk_common18.TypeValidators.String
       ),
-      contains: makeOperator((a, b) => a.indexOf(b) > -1, import_js_sdk_common15.TypeValidators.String),
-      lessThan: makeOperator((a, b) => a < b, import_js_sdk_common15.TypeValidators.Number),
-      lessThanOrEqual: makeOperator((a, b) => a <= b, import_js_sdk_common15.TypeValidators.Number),
-      greaterThan: makeOperator((a, b) => a > b, import_js_sdk_common15.TypeValidators.Number),
-      greaterThanOrEqual: makeOperator((a, b) => a >= b, import_js_sdk_common15.TypeValidators.Number),
-      before: makeOperator((a, b) => a < b, import_js_sdk_common15.TypeValidators.Date, parseDate),
-      after: makeOperator((a, b) => a > b, import_js_sdk_common15.TypeValidators.Date, parseDate),
+      contains: makeOperator((a, b) => a.indexOf(b) > -1, import_js_sdk_common18.TypeValidators.String),
+      lessThan: makeOperator((a, b) => a < b, import_js_sdk_common18.TypeValidators.Number),
+      lessThanOrEqual: makeOperator((a, b) => a <= b, import_js_sdk_common18.TypeValidators.Number),
+      greaterThan: makeOperator((a, b) => a > b, import_js_sdk_common18.TypeValidators.Number),
+      greaterThanOrEqual: makeOperator((a, b) => a >= b, import_js_sdk_common18.TypeValidators.Number),
+      before: makeOperator((a, b) => a < b, import_js_sdk_common18.TypeValidators.Date, parseDate),
+      after: makeOperator((a, b) => a > b, import_js_sdk_common18.TypeValidators.Date, parseDate),
       semVerEqual: semVerOperator((a, b) => a.compare(b) === 0),
       semVerLessThan: semVerOperator((a, b) => a.compare(b) < 0),
       semVerGreaterThan: semVerOperator((a, b) => a.compare(b) > 0)
@@ -25724,7 +26454,7 @@ var require_dist = __commonJS({
       }
       return void 0;
     }
-    var { ErrorKinds: ErrorKinds2 } = import_js_sdk_common16.internal;
+    var { ErrorKinds: ErrorKinds2 } = import_js_sdk_common19.internal;
     var bigSegmentsStatusPriority = {
       HEALTHY: 1,
       STALE: 2,
@@ -26201,7 +26931,7 @@ var require_dist = __commonJS({
         this._contextKeysCache.clear();
       }
     };
-    var import_js_sdk_common17 = require_cjs();
+    var import_js_sdk_common20 = require_cjs();
     function isExperiment(flag, reason) {
       if (reason) {
         if (reason.inExperiment) {
@@ -26223,7 +26953,7 @@ var require_dist = __commonJS({
       }
       return false;
     }
-    var EventFactory = class extends import_js_sdk_common17.internal.EventFactoryBase {
+    var EventFactory = class extends import_js_sdk_common20.internal.EventFactoryBase {
       evalEventServer(flag, context, detail, defaultVal, prereqOfFlag) {
         var _a;
         const addExperimentData = isExperiment(flag, detail.reason);
@@ -26395,9 +27125,9 @@ var require_dist = __commonJS({
         this._hooks.push(hook);
       }
     };
-    var import_js_sdk_common18 = require_cjs();
+    var import_js_sdk_common21 = require_cjs();
     function isOperation(value) {
-      if (!import_js_sdk_common18.TypeValidators.String.is(value)) {
+      if (!import_js_sdk_common21.TypeValidators.String.is(value)) {
         return false;
       }
       return value === "read" || value === "write";
@@ -26417,10 +27147,10 @@ var require_dist = __commonJS({
     function areValidNumbers(values) {
       const oldValue = values.old;
       const newValue = values.new;
-      if (oldValue !== void 0 && !import_js_sdk_common18.TypeValidators.Number.is(oldValue)) {
+      if (oldValue !== void 0 && !import_js_sdk_common21.TypeValidators.Number.is(oldValue)) {
         return false;
       }
-      if (newValue !== void 0 && !import_js_sdk_common18.TypeValidators.Number.is(newValue)) {
+      if (newValue !== void 0 && !import_js_sdk_common21.TypeValidators.Number.is(newValue)) {
         return false;
       }
       return true;
@@ -26428,20 +27158,20 @@ var require_dist = __commonJS({
     function areValidBooleans(values) {
       const oldValue = values.old;
       const newValue = values.new;
-      if (oldValue !== void 0 && !import_js_sdk_common18.TypeValidators.Boolean.is(oldValue)) {
+      if (oldValue !== void 0 && !import_js_sdk_common21.TypeValidators.Boolean.is(oldValue)) {
         return false;
       }
-      if (newValue !== void 0 && !import_js_sdk_common18.TypeValidators.Boolean.is(newValue)) {
+      if (newValue !== void 0 && !import_js_sdk_common21.TypeValidators.Boolean.is(newValue)) {
         return false;
       }
       return true;
     }
     function validateMeasurement(measurement) {
-      if (!import_js_sdk_common18.TypeValidators.String.is(measurement.key) || measurement.key === "") {
+      if (!import_js_sdk_common21.TypeValidators.String.is(measurement.key) || measurement.key === "") {
         return void 0;
       }
       if (isLatencyMeasurement(measurement)) {
-        if (!import_js_sdk_common18.TypeValidators.Object.is(measurement.values)) {
+        if (!import_js_sdk_common21.TypeValidators.Object.is(measurement.values)) {
           return void 0;
         }
         if (!areValidNumbers(measurement.values)) {
@@ -26456,7 +27186,7 @@ var require_dist = __commonJS({
         };
       }
       if (isErrorMeasurement(measurement)) {
-        if (!import_js_sdk_common18.TypeValidators.Object.is(measurement.values)) {
+        if (!import_js_sdk_common21.TypeValidators.Object.is(measurement.values)) {
           return void 0;
         }
         if (!areValidBooleans(measurement.values)) {
@@ -26471,7 +27201,7 @@ var require_dist = __commonJS({
         };
       }
       if (isConsistencyMeasurement(measurement)) {
-        if (!import_js_sdk_common18.TypeValidators.Boolean.is(measurement.value) || !import_js_sdk_common18.TypeValidators.Number.is(measurement.samplingRatio)) {
+        if (!import_js_sdk_common21.TypeValidators.Boolean.is(measurement.value) || !import_js_sdk_common21.TypeValidators.Number.is(measurement.samplingRatio)) {
           return void 0;
         }
         return {
@@ -26481,7 +27211,7 @@ var require_dist = __commonJS({
         };
       }
       if (isInvokedMeasurement(measurement)) {
-        if (!import_js_sdk_common18.TypeValidators.Object.is(measurement.values)) {
+        if (!import_js_sdk_common21.TypeValidators.Object.is(measurement.values)) {
           return void 0;
         }
         if (!areValidBooleans(measurement.values)) {
@@ -26501,13 +27231,13 @@ var require_dist = __commonJS({
       return measurements.map(validateMeasurement).filter((value) => value !== void 0);
     }
     function validateEvaluation(evaluation) {
-      if (!import_js_sdk_common18.TypeValidators.String.is(evaluation.key) || evaluation.key === "") {
+      if (!import_js_sdk_common21.TypeValidators.String.is(evaluation.key) || evaluation.key === "") {
         return void 0;
       }
-      if (!import_js_sdk_common18.TypeValidators.Object.is(evaluation.reason)) {
+      if (!import_js_sdk_common21.TypeValidators.Object.is(evaluation.reason)) {
         return void 0;
       }
-      if (!import_js_sdk_common18.TypeValidators.String.is(evaluation.reason.kind) || evaluation.reason.kind === "") {
+      if (!import_js_sdk_common21.TypeValidators.String.is(evaluation.reason.kind) || evaluation.reason.kind === "") {
         return void 0;
       }
       const validated = {
@@ -26520,28 +27250,28 @@ var require_dist = __commonJS({
       };
       const inReason = evaluation.reason;
       const outReason = validated.reason;
-      if (import_js_sdk_common18.TypeValidators.String.is(inReason.errorKind)) {
+      if (import_js_sdk_common21.TypeValidators.String.is(inReason.errorKind)) {
         outReason.errorKind = inReason.errorKind;
       }
-      if (import_js_sdk_common18.TypeValidators.String.is(inReason.ruleId)) {
+      if (import_js_sdk_common21.TypeValidators.String.is(inReason.ruleId)) {
         outReason.ruleId = inReason.ruleId;
       }
-      if (import_js_sdk_common18.TypeValidators.String.is(inReason.prerequisiteKey)) {
+      if (import_js_sdk_common21.TypeValidators.String.is(inReason.prerequisiteKey)) {
         outReason.prerequisiteKey = inReason.prerequisiteKey;
       }
-      if (import_js_sdk_common18.TypeValidators.Boolean.is(inReason.inExperiment)) {
+      if (import_js_sdk_common21.TypeValidators.Boolean.is(inReason.inExperiment)) {
         outReason.inExperiment = inReason.inExperiment;
       }
-      if (import_js_sdk_common18.TypeValidators.Number.is(inReason.ruleIndex)) {
+      if (import_js_sdk_common21.TypeValidators.Number.is(inReason.ruleIndex)) {
         outReason.ruleIndex = inReason.ruleIndex;
       }
-      if (import_js_sdk_common18.TypeValidators.String.is(inReason.bigSegmentsStatus)) {
+      if (import_js_sdk_common21.TypeValidators.String.is(inReason.bigSegmentsStatus)) {
         outReason.bigSegmentsStatus = inReason.bigSegmentsStatus;
       }
-      if (evaluation.variation !== void 0 && import_js_sdk_common18.TypeValidators.Number.is(evaluation.variation)) {
+      if (evaluation.variation !== void 0 && import_js_sdk_common21.TypeValidators.Number.is(evaluation.variation)) {
         validated.variation = evaluation.variation;
       }
-      if (evaluation.version !== void 0 && import_js_sdk_common18.TypeValidators.Number.is(evaluation.version)) {
+      if (evaluation.version !== void 0 && import_js_sdk_common21.TypeValidators.Number.is(evaluation.version)) {
         validated.version = evaluation.version;
       }
       return validated;
@@ -26554,18 +27284,18 @@ var require_dist = __commonJS({
       if (!isOperation(inEvent.operation)) {
         return void 0;
       }
-      if (!import_js_sdk_common18.TypeValidators.Number.is(inEvent.creationDate)) {
+      if (!import_js_sdk_common21.TypeValidators.Number.is(inEvent.creationDate)) {
         return void 0;
       }
       const contextKeysOrContext = {};
-      if (import_js_sdk_common18.TypeValidators.Object.is(inEvent.context)) {
-        const context = import_js_sdk_common18.Context.fromLDContext(inEvent.context);
+      if (import_js_sdk_common21.TypeValidators.Object.is(inEvent.context)) {
+        const context = import_js_sdk_common21.Context.fromLDContext(inEvent.context);
         if (context.valid) {
           contextKeysOrContext.context = context;
         }
-      } else if (import_js_sdk_common18.TypeValidators.Object.is(inEvent.contextKeys)) {
-        if (Object.keys(inEvent.contextKeys).every((key) => import_js_sdk_common18.TypeValidators.Kind.is(key)) && Object.values(inEvent.contextKeys).every(
-          (value) => import_js_sdk_common18.TypeValidators.String.is(value) && value !== ""
+      } else if (import_js_sdk_common21.TypeValidators.Object.is(inEvent.contextKeys)) {
+        if (Object.keys(inEvent.contextKeys).every((key) => import_js_sdk_common21.TypeValidators.Kind.is(key)) && Object.values(inEvent.contextKeys).every(
+          (value) => import_js_sdk_common21.TypeValidators.String.is(value) && value !== ""
         )) {
           contextKeysOrContext.contextKeys = __spreadValues({}, inEvent.contextKeys);
         }
@@ -26574,7 +27304,7 @@ var require_dist = __commonJS({
         return void 0;
       }
       const samplingRatio = (_a = inEvent.samplingRatio) != null ? _a : 1;
-      if (!import_js_sdk_common18.TypeValidators.Number.is(samplingRatio)) {
+      if (!import_js_sdk_common21.TypeValidators.Number.is(samplingRatio)) {
         return void 0;
       }
       const evaluation = validateEvaluation(inEvent.evaluation);
@@ -26591,7 +27321,7 @@ var require_dist = __commonJS({
         samplingRatio
       });
     }
-    var import_js_sdk_common19 = require_cjs();
+    var import_js_sdk_common22 = require_cjs();
     function isPopulated(data) {
       return !Number.isNaN(data);
     }
@@ -26629,7 +27359,7 @@ var require_dist = __commonJS({
       }
       consistency(check) {
         var _a, _b;
-        if (import_js_sdk_common19.internal.shouldSample((_a = this._checkRatio) != null ? _a : 1)) {
+        if (import_js_sdk_common22.internal.shouldSample((_a = this._checkRatio) != null ? _a : 1)) {
           try {
             const res = check();
             this._consistencyCheck = res ? 1 : 0;
@@ -26648,7 +27378,7 @@ var require_dist = __commonJS({
       }
       createEvent() {
         var _a, _b, _c, _d, _e;
-        if (!import_js_sdk_common19.TypeValidators.String.is(this._flagKey) || this._flagKey === "") {
+        if (!import_js_sdk_common22.TypeValidators.String.is(this._flagKey) || this._flagKey === "") {
           (_a = this._logger) == null ? void 0 : _a.error("The flag key for a migration operation must be a non-empty string.");
           return void 0;
         }
@@ -26656,7 +27386,7 @@ var require_dist = __commonJS({
           (_b = this._logger) == null ? void 0 : _b.error('The operation must be set using "op" before an event can be created.');
           return void 0;
         }
-        if (!import_js_sdk_common19.Context.fromLDContext(this._context).valid) {
+        if (!import_js_sdk_common22.Context.fromLDContext(this._context).valid) {
           (_c = this._logger) == null ? void 0 : _c.error(
             "The migration was not done against a valid context and cannot generate an event."
           );
@@ -26790,7 +27520,7 @@ var require_dist = __commonJS({
         }
       }
     };
-    var { ClientMessages, ErrorKinds: ErrorKinds3, NullEventProcessor } = import_js_sdk_common20.internal;
+    var { ClientMessages, ErrorKinds: ErrorKinds3, NullEventProcessor } = import_js_sdk_common23.internal;
     var HIGH_TIMEOUT_THRESHOLD = 60;
     var BOOL_VARIATION_METHOD_NAME = "LDClient.boolVariation";
     var NUMBER_VARIATION_METHOD_NAME = "LDClient.numberVariation";
@@ -26811,7 +27541,7 @@ var require_dist = __commonJS({
         throw new Error("You must configure the client with an SDK key");
       }
       const { logger } = config;
-      const baseHeaders = (0, import_js_sdk_common20.defaultHeaders)(
+      const baseHeaders = (0, import_js_sdk_common23.defaultHeaders)(
         sdkKey,
         platform22.info,
         config.tags,
@@ -26819,12 +27549,12 @@ var require_dist = __commonJS({
         userAgentHeaderName,
         instanceId
       );
-      const clientContext = new import_js_sdk_common20.ClientContext(sdkKey, config, platform22);
+      const clientContext = new import_js_sdk_common23.ClientContext(sdkKey, config, platform22);
       const featureStore = config.featureStoreFactory(clientContext);
       const dataSourceUpdates = new DataSourceUpdates(featureStore, hasEventListeners, onUpdate);
       let diagnosticsManager;
       if (config.sendEvents && !config.offline && !config.diagnosticOptOut) {
-        diagnosticsManager = new import_js_sdk_common20.internal.DiagnosticsManager(
+        diagnosticsManager = new import_js_sdk_common23.internal.DiagnosticsManager(
           sdkKey,
           platform22,
           createDiagnosticsInitConfig_default(config, platform22, featureStore)
@@ -26834,7 +27564,7 @@ var require_dist = __commonJS({
       if (!config.sendEvents || config.offline) {
         eventProcessor = new NullEventProcessor();
       } else {
-        eventProcessor = new import_js_sdk_common20.internal.EventProcessor(
+        eventProcessor = new import_js_sdk_common23.internal.EventProcessor(
           // Server-side SDKs redact anonymous context attributes on all inlined events (feature,
           // custom, migration op), not just feature events.
           __spreadProps(__spreadValues({}, config), { redactAnonymousAllEvents: true }),
@@ -26909,7 +27639,7 @@ var require_dist = __commonJS({
     }
     function scopedServiceEndpoints(base, overrides) {
       var _a, _b;
-      return new import_js_sdk_common20.ServiceEndpoints(
+      return new import_js_sdk_common23.ServiceEndpoints(
         (_a = overrides.streaming) != null ? _a : base.streaming,
         (_b = overrides.polling) != null ? _b : base.polling,
         base.events,
@@ -26932,7 +27662,7 @@ var require_dist = __commonJS({
           "Payload filtering is not supported with the FDv2 data system; the configured payload filter has no effect on FDv2 requests"
         );
       }
-      const baseHeaders = (0, import_js_sdk_common20.defaultHeaders)(
+      const baseHeaders = (0, import_js_sdk_common23.defaultHeaders)(
         sdkKey,
         platform22.info,
         config.tags,
@@ -26940,7 +27670,7 @@ var require_dist = __commonJS({
         userAgentHeaderName,
         instanceId
       );
-      const clientContext = new import_js_sdk_common20.ClientContext(sdkKey, config, platform22);
+      const clientContext = new import_js_sdk_common23.ClientContext(sdkKey, config, platform22);
       const dataSystem = config.dataSystem;
       const featureStore = dataSystem.featureStoreFactory(clientContext);
       const dataSourceUpdates = new TransactionalDataSourceUpdates(
@@ -26950,7 +27680,7 @@ var require_dist = __commonJS({
       );
       let diagnosticsManager;
       if (config.sendEvents && !config.offline && !config.diagnosticOptOut) {
-        diagnosticsManager = new import_js_sdk_common20.internal.DiagnosticsManager(
+        diagnosticsManager = new import_js_sdk_common23.internal.DiagnosticsManager(
           sdkKey,
           platform22,
           createDiagnosticsInitConfig_default(config, platform22, featureStore)
@@ -26960,7 +27690,7 @@ var require_dist = __commonJS({
       if (!config.sendEvents || config.offline) {
         eventProcessor = new NullEventProcessor();
       } else {
-        eventProcessor = new import_js_sdk_common20.internal.EventProcessor(
+        eventProcessor = new import_js_sdk_common23.internal.EventProcessor(
           // Server-side SDKs redact anonymous context attributes on all inlined events (feature,
           // custom, migration op), not just feature events.
           __spreadProps(__spreadValues({}, config), { redactAnonymousAllEvents: true }),
@@ -27131,7 +27861,7 @@ var require_dist = __commonJS({
             )
           );
         }
-        dataSource = new import_js_sdk_common20.CompositeDataSource(
+        dataSource = new import_js_sdk_common23.CompositeDataSource(
           initializers,
           synchronizers,
           fdv1FallbackSynchronizers,
@@ -27239,7 +27969,7 @@ var require_dist = __commonJS({
                 payloadListener == null ? void 0 : payloadListener(payload);
               },
               (state, err) => {
-                if (state === import_js_sdk_common20.subsystem.DataSourceState.Closed && err) {
+                if (state === import_js_sdk_common23.subsystem.DataSourceState.Closed && err) {
                   this._dataSourceErrorHandler(err);
                 }
               },
@@ -27370,7 +28100,7 @@ var require_dist = __commonJS({
           defaultValue,
           this._eventFactoryDefault,
           BOOL_VARIATION_METHOD_NAME,
-          (value) => [import_js_sdk_common20.TypeValidators.Boolean.is(value), import_js_sdk_common20.TypeValidators.Boolean.getType()]
+          (value) => [import_js_sdk_common23.TypeValidators.Boolean.is(value), import_js_sdk_common23.TypeValidators.Boolean.getType()]
         )).value;
       }
       async numberVariation(key, context, defaultValue) {
@@ -27380,7 +28110,7 @@ var require_dist = __commonJS({
           defaultValue,
           this._eventFactoryDefault,
           NUMBER_VARIATION_METHOD_NAME,
-          (value) => [import_js_sdk_common20.TypeValidators.Number.is(value), import_js_sdk_common20.TypeValidators.Number.getType()]
+          (value) => [import_js_sdk_common23.TypeValidators.Number.is(value), import_js_sdk_common23.TypeValidators.Number.getType()]
         )).value;
       }
       async stringVariation(key, context, defaultValue) {
@@ -27390,7 +28120,7 @@ var require_dist = __commonJS({
           defaultValue,
           this._eventFactoryDefault,
           STRING_VARIATION_METHOD_NAME,
-          (value) => [import_js_sdk_common20.TypeValidators.String.is(value), import_js_sdk_common20.TypeValidators.String.getType()]
+          (value) => [import_js_sdk_common23.TypeValidators.String.is(value), import_js_sdk_common23.TypeValidators.String.getType()]
         )).value;
       }
       jsonVariation(key, context, defaultValue) {
@@ -27421,7 +28151,7 @@ var require_dist = __commonJS({
           defaultValue,
           this._eventFactoryWithReasons,
           BOOL_VARIATION_DETAIL_METHOD_NAME,
-          (value) => [import_js_sdk_common20.TypeValidators.Boolean.is(value), import_js_sdk_common20.TypeValidators.Boolean.getType()]
+          (value) => [import_js_sdk_common23.TypeValidators.Boolean.is(value), import_js_sdk_common23.TypeValidators.Boolean.getType()]
         );
       }
       numberVariationDetail(key, context, defaultValue) {
@@ -27431,7 +28161,7 @@ var require_dist = __commonJS({
           defaultValue,
           this._eventFactoryWithReasons,
           NUMBER_VARIATION_DETAIL_METHOD_NAME,
-          (value) => [import_js_sdk_common20.TypeValidators.Number.is(value), import_js_sdk_common20.TypeValidators.Number.getType()]
+          (value) => [import_js_sdk_common23.TypeValidators.Number.is(value), import_js_sdk_common23.TypeValidators.Number.getType()]
         );
       }
       stringVariationDetail(key, context, defaultValue) {
@@ -27441,7 +28171,7 @@ var require_dist = __commonJS({
           defaultValue,
           this._eventFactoryWithReasons,
           STRING_VARIATION_DETAIL_METHOD_NAME,
-          (value) => [import_js_sdk_common20.TypeValidators.String.is(value), import_js_sdk_common20.TypeValidators.String.getType()]
+          (value) => [import_js_sdk_common23.TypeValidators.String.is(value), import_js_sdk_common23.TypeValidators.String.getType()]
         );
       }
       jsonVariationDetail(key, context, defaultValue) {
@@ -27539,7 +28269,7 @@ var require_dist = __commonJS({
           callback == null ? void 0 : callback(null, allFlagState);
           return Promise.resolve(allFlagState);
         }
-        const evalContext = import_js_sdk_common20.Context.fromLDContext(context);
+        const evalContext = import_js_sdk_common23.Context.fromLDContext(context);
         if (!evalContext.valid) {
           (_c = this._logger) == null ? void 0 : _c.info(`${(_b = evalContext.message) != null ? _b : "Invalid context."}. Returning empty state.`);
           return Promise.resolve(new FlagsStateBuilder(false, false).build());
@@ -27613,14 +28343,14 @@ var require_dist = __commonJS({
         });
       }
       secureModeHash(context) {
-        const checkedContext = import_js_sdk_common20.Context.fromLDContext(context);
+        const checkedContext = import_js_sdk_common23.Context.fromLDContext(context);
         const key = checkedContext.valid ? checkedContext.canonicalKey : void 0;
         if (!this._platform.crypto.createHmac) {
           throw new Error("Platform must implement createHmac");
         }
         const hmac = this._platform.crypto.createHmac("sha256", this._sdkKey);
         if (key === void 0) {
-          throw new import_js_sdk_common20.LDClientError("Could not generate secure mode hash for invalid context");
+          throw new import_js_sdk_common23.LDClientError("Could not generate secure mode hash for invalid context");
         }
         hmac.update(key);
         return hmac.digest("hex");
@@ -27638,12 +28368,12 @@ var require_dist = __commonJS({
       }
       track(key, context, data, metricValue) {
         var _a, _b;
-        const checkedContext = import_js_sdk_common20.Context.fromLDContext(context);
+        const checkedContext = import_js_sdk_common23.Context.fromLDContext(context);
         if (!checkedContext.valid) {
           (_a = this._logger) == null ? void 0 : _a.warn(ClientMessages.MissingContextKeyNoEvent);
           return;
         }
-        if (metricValue !== void 0 && !import_js_sdk_common20.TypeValidators.Number.is(metricValue)) {
+        if (metricValue !== void 0 && !import_js_sdk_common23.TypeValidators.Number.is(metricValue)) {
           (_b = this._logger) == null ? void 0 : _b.warn(ClientMessages.invalidMetricValue(typeof metricValue));
         }
         this._eventProcessor.sendEvent(
@@ -27659,7 +28389,7 @@ var require_dist = __commonJS({
       }
       identify(context) {
         var _a;
-        const checkedContext = import_js_sdk_common20.Context.fromLDContext(context);
+        const checkedContext = import_js_sdk_common23.Context.fromLDContext(context);
         if (!checkedContext.valid) {
           (_a = this._logger) == null ? void 0 : _a.warn(ClientMessages.MissingContextKeyNoEvent);
           return;
@@ -27684,10 +28414,10 @@ var require_dist = __commonJS({
           cb(EvalResult.forError(ErrorKinds3.ClientNotReady, void 0, defaultValue));
           return;
         }
-        const evalContext = import_js_sdk_common20.Context.fromLDContext(context);
+        const evalContext = import_js_sdk_common23.Context.fromLDContext(context);
         if (!evalContext.valid) {
           this._onError(
-            new import_js_sdk_common20.LDClientError(
+            new import_js_sdk_common23.LDClientError(
               `${(_b = evalContext.message) != null ? _b : "Context not valid;"} returning default value.`
             )
           );
@@ -27697,7 +28427,7 @@ var require_dist = __commonJS({
         this._featureStore.get(VersionedDataKinds.Features, flagKey, (item) => {
           const flag = item;
           if (!flag) {
-            const error2 = new import_js_sdk_common20.LDClientError(
+            const error2 = new import_js_sdk_common23.LDClientError(
               `Unknown feature flag "${flagKey}"; returning default value`
             );
             this._onError(error2);
@@ -27802,12 +28532,12 @@ var require_dist = __commonJS({
        */
       _clientWithTimeout(basePromise, timeout, logger) {
         if (timeout) {
-          const cancelableTimeout = (0, import_js_sdk_common20.cancelableTimedPromise)(timeout, "waitForInitialization");
+          const cancelableTimeout = (0, import_js_sdk_common23.cancelableTimedPromise)(timeout, "waitForInitialization");
           return Promise.race([
             basePromise.then(() => this),
             cancelableTimeout.promise.then(() => this)
           ]).catch((reason) => {
-            if (reason instanceof import_js_sdk_common20.LDTimeoutError) {
+            if (reason instanceof import_js_sdk_common23.LDTimeoutError) {
               logger == null ? void 0 : logger.error(reason.message);
             }
             throw reason;
@@ -27816,6 +28546,7 @@ var require_dist = __commonJS({
         return basePromise;
       }
     };
+    var import_js_sdk_common24 = require_cjs();
     async function safeCall(method) {
       try {
         const res = await method();
@@ -28103,18 +28834,9 @@ var require_dist = __commonJS({
         if (!this._latencyTracking) {
           return method();
         }
-        let start;
-        let end;
-        let result;
-        if (typeof performance !== "undefined") {
-          start = performance.now();
-          result = await method();
-          end = performance.now();
-        } else {
-          start = Date.now();
-          result = await method();
-          end = Date.now();
-        }
+        const start = (0, import_js_sdk_common24.monotonicNow)();
+        const result = await method();
+        const end = (0, import_js_sdk_common24.monotonicNow)();
         const latency = end - start;
         tracker.latency(origin, latency);
         return result;
@@ -28163,13 +28885,13 @@ var require_dist = __commonJS({
         return (ldClientContext, featureStore, initSuccessHandler, errorHandler) => this.create(ldClientContext, featureStore, initSuccessHandler, errorHandler);
       }
     };
-    var import_js_sdk_common22 = require_cjs();
+    var import_js_sdk_common26 = require_cjs();
     var TRUE_VARIATION_INDEX = 0;
     var FALSE_VARIATION_INDEX = 1;
     function variationForBoolean(val) {
       return val ? TRUE_VARIATION_INDEX : FALSE_VARIATION_INDEX;
     }
-    var import_js_sdk_common21 = require_cjs();
+    var import_js_sdk_common25 = require_cjs();
     var TestDataRuleBuilder = class _TestDataRuleBuilder {
       /**
        * @internal
@@ -28204,7 +28926,7 @@ var require_dist = __commonJS({
         this._clauses.push({
           contextKind,
           attribute,
-          attributeReference: new import_js_sdk_common21.AttributeReference(attribute),
+          attributeReference: new import_js_sdk_common25.AttributeReference(attribute),
           op: "in",
           values,
           negate: false
@@ -28231,7 +28953,7 @@ var require_dist = __commonJS({
         this._clauses.push({
           contextKind,
           attribute,
-          attributeReference: new import_js_sdk_common21.AttributeReference(attribute),
+          attributeReference: new import_js_sdk_common25.AttributeReference(attribute),
           op: "in",
           values,
           negate: true
@@ -28253,7 +28975,7 @@ var require_dist = __commonJS({
        * @return the flag rule builder
        */
       thenReturn(variation) {
-        if (import_js_sdk_common21.TypeValidators.Boolean.is(variation)) {
+        if (import_js_sdk_common25.TypeValidators.Boolean.is(variation)) {
           this._flagBuilder.booleanFlag();
           return this.thenReturn(variationForBoolean(variation));
         }
@@ -28374,7 +29096,7 @@ var require_dist = __commonJS({
        * @return the flag builder
        */
       fallthroughVariation(variation) {
-        if (import_js_sdk_common22.TypeValidators.Boolean.is(variation)) {
+        if (import_js_sdk_common26.TypeValidators.Boolean.is(variation)) {
           return this.booleanFlag().fallthroughVariation(variationForBoolean(variation));
         }
         this._data.fallthroughVariation = variation;
@@ -28393,7 +29115,7 @@ var require_dist = __commonJS({
        * @return the flag builder
        */
       offVariation(variation) {
-        if (import_js_sdk_common22.TypeValidators.Boolean.is(variation)) {
+        if (import_js_sdk_common26.TypeValidators.Boolean.is(variation)) {
           return this.booleanFlag().offVariation(variationForBoolean(variation));
         }
         this._data.offVariation = variation;
@@ -28473,7 +29195,7 @@ var require_dist = __commonJS({
        * @return the flag builder
        */
       variationForContext(contextKind, contextKey, variation) {
-        if (import_js_sdk_common22.TypeValidators.Boolean.is(variation)) {
+        if (import_js_sdk_common26.TypeValidators.Boolean.is(variation)) {
           return this.booleanFlag().variationForContext(
             contextKind,
             contextKey,
@@ -28836,8 +29558,8 @@ var require_dist = __commonJS({
         this.closed = true;
       }
       simulateError(error2) {
-        const shouldRetry3 = this.options.errorFilter(error2);
-        if (!shouldRetry3) {
+        const shouldRetry2 = this.options.errorFilter(error2);
+        if (!shouldRetry2) {
           this.closed = true;
         }
       }
@@ -29006,7 +29728,7 @@ var require_NodeInfo = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     var os5 = __require("os");
     var sdkName = "@launchdarkly/node-server-sdk";
-    var sdkVersion = "9.13.7";
+    var sdkVersion = "9.14.4";
     function processPlatformName(name) {
       switch (name) {
         case "darwin":
@@ -30269,6 +30991,7 @@ var require_eventsource2 = __commonJS({
     var lineFeed = 10;
     var carriageReturn = 13;
     var MAX_OVER_ALLOCATION = 1024 * 1024;
+    var MAX_SERVER_DIRECTED_RETRY_DELAY_MILLIS = 60 * 60 * 1e3;
     function hasBom(buf) {
       return bom.every(function(charCode, index) {
         return buf[index] === charCode;
@@ -30306,12 +31029,18 @@ var require_eventsource2 = __commonJS({
       var discardTrailingNewline = false;
       var data, eventName, eventId;
       var reconnectUrl = null;
-      var retryDelayStrategy = new retryDelay.RetryDelayStrategy(
-        config.initialRetryDelayMillis !== null && config.initialRetryDelayMillis !== void 0 ? config.initialRetryDelayMillis : 1e3,
-        config.retryResetIntervalMillis,
-        config.maxBackoffMillis ? retryDelay.defaultBackoff(config.maxBackoffMillis) : null,
-        config.jitterRatio ? retryDelay.defaultJitter(config.jitterRatio) : null
-      );
+      var retryDelayStrategy;
+      if (config.retryDelayStrategy) {
+        retryDelayStrategy = config.retryDelayStrategy;
+      } else {
+        retryDelayStrategy = new retryDelay.RetryDelayStrategy(
+          config.initialRetryDelayMillis !== null && config.initialRetryDelayMillis !== void 0 ? config.initialRetryDelayMillis : 1e3,
+          config.retryResetIntervalMillis,
+          config.maxBackoffMillis ? retryDelay.defaultBackoff(config.maxBackoffMillis) : null,
+          config.jitterRatio ? retryDelay.defaultJitter(config.jitterRatio) : null
+        );
+      }
+      var goodSinceAnchored = false;
       var streamOriginUrl = new URL2(url).origin;
       let reconnectTimer;
       function makeRequestUrlAndOptions() {
@@ -30415,6 +31144,7 @@ var require_eventsource2 = __commonJS({
         const failOnce = once(failed);
         var callback = function(res) {
           if (res.statusCode === 301 || res.statusCode === 307) {
+            res.destroy();
             if (!res.headers.location) {
               failOnce({ status: res.statusCode, headers: res.headers, message: res.statusMessage });
               return;
@@ -30425,12 +31155,14 @@ var require_eventsource2 = __commonJS({
             return;
           }
           if (res.statusCode !== 200) {
+            res.destroy();
             failOnce({ status: res.statusCode, headers: res.headers, message: res.statusMessage });
             return;
           }
           data = "";
           eventName = "";
           eventId = void 0;
+          goodSinceAnchored = false;
           readyState = EventSource.OPEN;
           res.on("close", function() {
             res.removeAllListeners("close");
@@ -30543,7 +31275,10 @@ var require_eventsource2 = __commonJS({
         _emit(new Event2("closed"));
       };
       function receivedEvent(event) {
-        retryDelayStrategy.setGoodSince((/* @__PURE__ */ new Date()).getTime());
+        if (!goodSinceAnchored) {
+          goodSinceAnchored = true;
+          retryDelayStrategy.setGoodSince((/* @__PURE__ */ new Date()).getTime());
+        }
         _emit(event);
       }
       function parseEventStreamLine(buf, pos, fieldLength, lineLength) {
@@ -30587,8 +31322,11 @@ var require_eventsource2 = __commonJS({
               eventId = value;
             }
           } else if (field === "retry") {
-            var retry = parseInt(value, 10);
-            if (!Number.isNaN(retry)) {
+            if (/^\d+$/.test(value)) {
+              var retry = parseInt(value, 10);
+              if (retry > MAX_SERVER_DIRECTED_RETRY_DELAY_MILLIS) {
+                retry = MAX_SERVER_DIRECTED_RETRY_DELAY_MILLIS;
+              }
               self.reconnectInterval = retry;
               retryDelayStrategy.setBaseDelay(retry);
             }
@@ -30641,6 +31379,7 @@ var require_eventsource2 = __commonJS({
       "maxBackoffMillis",
       "method",
       "proxy",
+      "retryDelayStrategy",
       "retryResetIntervalMillis",
       "skipDefaultHeaders",
       "withCredentials"
