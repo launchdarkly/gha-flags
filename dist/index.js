@@ -21022,12 +21022,13 @@ var require_cjs = __commonJS({
       return u.kind === "migration_op";
     }
     var SummaryCounter = class {
-      constructor(count, key, value, defValue, version, variation) {
+      constructor(count, key, value, defValue, version, variation, overrideAffected) {
         this.count = count;
         this.key = key;
         this.value = value;
         this.version = version;
         this.variation = variation;
+        this.overrideAffected = overrideAffected;
         this.default = defValue;
       }
       increment() {
@@ -21035,7 +21036,7 @@ var require_cjs = __commonJS({
       }
     };
     function counterKey(event) {
-      return `${event.key}:${event.variation !== null && event.variation !== void 0 ? event.variation : ""}:${event.version !== null && event.version !== void 0 ? event.version : ""}`;
+      return `${event.key}:${event.variation !== null && event.variation !== void 0 ? event.variation : ""}:${event.version !== null && event.version !== void 0 ? event.version : ""}:${event.overrideAffected ? "overrideAffected" : ""}`;
     }
     var EventSummarizer = class {
       constructor(_singleContext = false, _contextFilter) {
@@ -21062,7 +21063,7 @@ var require_cjs = __commonJS({
           if (counter) {
             counter.increment();
           } else {
-            this._counters[countKey] = new SummaryCounter(1, event.key, event.value, event.default, event.version, event.variation);
+            this._counters[countKey] = new SummaryCounter(1, event.key, event.value, event.default, event.version, event.variation, event.overrideAffected);
           }
           if (this._startDate === 0 || event.creationDate < this._startDate) {
             this._startDate = event.creationDate;
@@ -21094,6 +21095,9 @@ var require_cjs = __commonJS({
             counterOut.version = counter.version;
           } else {
             counterOut.unknown = true;
+          }
+          if (counter.overrideAffected) {
+            counterOut.overrideAffected = true;
           }
           flagSummary.counters.push(counterOut);
           return acc;
@@ -21271,8 +21275,9 @@ var require_cjs = __commonJS({
         }
         this._summarizer.summarizeEvent(inputEvent);
         const isFeatureEvent = isFeature(inputEvent);
-        const addFullEvent = isFeatureEvent && inputEvent.trackEvents || !isFeatureEvent;
-        const addDebugEvent = this._shouldDebugEvent(inputEvent);
+        const overrideAffected = isFeatureEvent && !!inputEvent.overrideAffected;
+        const addFullEvent = isFeatureEvent && inputEvent.trackEvents && !overrideAffected || !isFeatureEvent;
+        const addDebugEvent = !overrideAffected && this._shouldDebugEvent(inputEvent);
         const isIdentifyEvent = isIdentify(inputEvent);
         const shouldNotDeduplicate = this._contextDeduplicator?.processContext(inputEvent.context);
         if (!shouldNotDeduplicate) {
@@ -21425,7 +21430,7 @@ var require_cjs = __commonJS({
       }
     };
     var InputEvalEvent = class {
-      constructor(withReasons, context, key, value, defValue, version, variation, trackEvents, prereqOf, reason, debugEventsUntilDate, excludeFromSummaries, samplingRatio = 1) {
+      constructor(withReasons, context, key, value, defValue, version, variation, trackEvents, prereqOf, reason, debugEventsUntilDate, excludeFromSummaries, samplingRatio = 1, overrideAffected) {
         this.withReasons = withReasons;
         this.context = context;
         this.key = key;
@@ -21454,6 +21459,9 @@ var require_cjs = __commonJS({
         }
         if (excludeFromSummaries !== void 0) {
           this.excludeFromSummaries = excludeFromSummaries;
+        }
+        if (overrideAffected !== void 0) {
+          this.overrideAffected = overrideAffected;
         }
       }
     };
@@ -21492,7 +21500,8 @@ var require_cjs = __commonJS({
           this._withReasons || e.addExperimentData ? e.reason : void 0,
           e.debugEventsUntilDate,
           e.excludeFromSummaries,
-          e.samplingRatio
+          e.samplingRatio,
+          e.overrideAffected
         );
       }
       unknownFlagEvent(key, defVal, context) {
@@ -21865,6 +21874,89 @@ var require_cjs = __commonJS({
         });
       }
     };
+    function wrapRawHeaders(headers) {
+      const normalized = /* @__PURE__ */ new Map();
+      Object.keys(headers).forEach((key) => {
+        const val = headers[key];
+        if (val !== void 0 && val !== null) {
+          const name = key.toLowerCase();
+          const joined = Array.isArray(val) ? val.join(", ") : val;
+          const existing = normalized.get(name);
+          normalized.set(name, existing === void 0 ? joined : `${existing}, ${joined}`);
+        }
+      });
+      return {
+        get: (name) => normalized.get(name.toLowerCase()) ?? null,
+        keys: () => normalized.keys(),
+        values: () => normalized.values(),
+        entries: () => normalized.entries(),
+        forEach: (callback) => {
+          normalized.forEach((value, key) => callback(value, key));
+        },
+        has: (name) => normalized.has(name.toLowerCase())
+      };
+    }
+    function createStreamingResponse(source) {
+      if (typeof source[Symbol.asyncIterator] !== "function") {
+        throw new TypeError("the streaming response source does not provide an async iterator");
+      }
+      const iterator = source[Symbol.asyncIterator]();
+      const cancel = async () => {
+        try {
+          source.destroy?.();
+        } catch {
+        }
+        try {
+          Promise.resolve(iterator.return?.()).catch(() => {
+          });
+        } catch {
+        }
+      };
+      async function text() {
+        const decoder = new TextDecoder();
+        let result = "";
+        try {
+          let next = await iterator.next();
+          while (!next.done) {
+            if (next.value !== void 0) {
+              try {
+                result += decoder.decode(next.value, { stream: true });
+              } catch {
+                throw new TypeError("the source supplied a chunk that is not a BufferSource");
+              }
+            }
+            next = await iterator.next();
+          }
+        } catch (err) {
+          cancel();
+          throw err;
+        }
+        return result + decoder.decode();
+      }
+      return {
+        headers: wrapRawHeaders(source.headers),
+        status: source.statusCode ?? 0,
+        statusText: source.statusMessage ?? "",
+        body: {
+          getReader: () => ({
+            read: async () => {
+              const next = await iterator.next();
+              if (next.done) {
+                return { done: true };
+              }
+              return { done: false, value: next.value };
+            },
+            cancel
+          }),
+          cancel
+        },
+        text,
+        json: async () => JSON.parse(await text())
+      };
+    }
+    function toRequestInit(options) {
+      return options;
+    }
     function initMetadataFromHeaders(initHeaders) {
       if (initHeaders) {
         const envIdKey = Object.keys(initHeaders).find((key) => key.toLowerCase() === "x-ld-envid");
@@ -21924,6 +22016,7 @@ var require_cjs = __commonJS({
       PayloadStreamReader,
       canonicalize,
       createProtocolHandler,
+      createStreamingResponse,
       initMetadataFromHeaders,
       isLegacyUser,
       isMultiKind,
@@ -21933,7 +22026,8 @@ var require_cjs = __commonJS({
       safeGetHooks,
       safeGetName,
       safeRegisterPlugins,
-      shouldSample
+      shouldSample,
+      toRequestInit
     });
     exports.ApplicationTags = ApplicationTags;
     exports.AttributeReference = AttributeReference;
@@ -22502,6 +22596,7 @@ var require_dist = __commonJS({
       interfaces: () => interfaces_exports,
       internalServer: () => internal_exports,
       isCustomOptions: () => isCustomOptions,
+      isFileOverrideSourceOptions: () => isFileOverrideSourceOptions,
       isPollingOnlyOptions: () => isPollingOnlyOptions,
       isStandardOptions: () => isStandardOptions,
       isStreamingOnlyOptions: () => isStreamingOnlyOptions,
@@ -22547,7 +22642,7 @@ var require_dist = __commonJS({
         this._lastStatus = status;
       }
     };
-    var import_js_sdk_common23 = require_cjs();
+    var import_js_sdk_common29 = require_cjs();
     var LDMigrationStage = /* @__PURE__ */ ((LDMigrationStage3) => {
       LDMigrationStage3["Off"] = "off";
       LDMigrationStage3["DualWrite"] = "dualwrite";
@@ -22587,6 +22682,9 @@ var require_dist = __commonJS({
         this.type = 1;
       }
     };
+    function isFileOverrideSourceOptions(u) {
+      return typeof u === "object" && u !== null && u.type === "file";
+    }
     function isStandardOptions(u) {
       return u.dataSourceOptionsType === "standard";
     }
@@ -22874,6 +22972,38 @@ var require_dist = __commonJS({
     };
     var import_js_sdk_common3 = require_cjs();
     var import_js_sdk_common2 = require_cjs();
+    function ownMarker(value) {
+      if (typeof value !== "object" || value === null) {
+        return void 0;
+      }
+      if (!Object.prototype.hasOwnProperty.call(value, "_sdk_override")) {
+        return void 0;
+      }
+      return value._sdk_override;
+    }
+    function isOverrideEntry(item) {
+      return ownMarker(item) === true;
+    }
+    function markOverrideEntry(item) {
+      item._sdk_override = true;
+      return item;
+    }
+    function hasOverrideMarker(value) {
+      return ownMarker(value) !== void 0;
+    }
+    function withoutOverrideMarker(item) {
+      const copy = __spreadValues({}, item);
+      delete copy._sdk_override;
+      return copy;
+    }
+    function stripOverrideMarker(item) {
+      if (typeof item === "object" && item !== null) {
+        delete item._sdk_override;
+      }
+    }
+    function markOverrideAffected(reason) {
+      return __spreadProps(__spreadValues({}, reason), { overrideAffected: true });
+    }
     var VersionedDataKinds = class {
       static getKeyFromPath(kind, path) {
         return path.startsWith(kind.streamApiPath) ? path.substring(kind.streamApiPath.length) : void 0;
@@ -22960,6 +23090,7 @@ var require_dist = __commonJS({
     function processFlag(flag) {
       var _a;
       nullReplacer(flag, ["variations"]);
+      stripOverrideMarker(flag);
       if (flag.fallthrough && flag.fallthrough.rollout) {
         const rollout = flag.fallthrough.rollout;
         processRollout(rollout);
@@ -22979,6 +23110,7 @@ var require_dist = __commonJS({
     function processSegment(segment) {
       var _a, _b, _c, _d, _e;
       nullReplacer(segment);
+      stripOverrideMarker(segment);
       if (((_a = segment == null ? void 0 : segment.included) == null ? void 0 : _a.length) && segment.included.length > TARGET_LIST_ARRAY_CUTOFF) {
         segment.generated_includedSet = new Set(segment.included);
         delete segment.included;
@@ -23082,7 +23214,7 @@ var require_dist = __commonJS({
       return parsed;
     }
     function serializeFlag(flag) {
-      return JSON.stringify(flag, replacer);
+      return JSON.stringify(hasOverrideMarker(flag) ? withoutOverrideMarker(flag) : flag, replacer);
     }
     function deserializeFlag(data) {
       const parsed = tryParse(data);
@@ -23093,7 +23225,10 @@ var require_dist = __commonJS({
       return parsed;
     }
     function serializeSegment(segment) {
-      return JSON.stringify(segment, replacer);
+      return JSON.stringify(
+        hasOverrideMarker(segment) ? withoutOverrideMarker(segment) : segment,
+        replacer
+      );
     }
     function deserializeSegment(data) {
       const parsed = tryParse(data);
@@ -23358,66 +23493,659 @@ var require_dist = __commonJS({
         });
       }
     };
-    var import_js_sdk_common4 = require_cjs();
-    var FileLoader = class {
-      constructor(_filesystem, _paths, _watch, _callback) {
+    var import_js_sdk_common5 = require_cjs();
+    function isYamlPath(path) {
+      return path.endsWith(".yml") || path.endsWith(".yaml");
+    }
+    function parseYaml(path, data, yamlParser) {
+      if (!yamlParser) {
+        throw new Error(`Attempted to parse yaml file (${path}) without parser.`);
+      }
+      return yamlParser(data);
+    }
+    function parseDocumentByExtension(yamlParser) {
+      return (path, data) => {
+        if (isYamlPath(path)) {
+          return parseYaml(path, data, yamlParser);
+        }
+        return JSON.parse(data);
+      };
+    }
+    function isFileNotFoundError(err) {
+      return (err == null ? void 0 : err.code) === "ENOENT";
+    }
+    var WATCH_RETRY_DELAY_MS = 1e3;
+    function directoryOf(path) {
+      const index = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+      if (index < 0) {
+        return ".";
+      }
+      if (index === 0) {
+        return path.substring(0, 1);
+      }
+      const directory = path.substring(0, index);
+      return /^[a-zA-Z]:$/.test(directory) ? `${directory}\\` : directory;
+    }
+    function basenameOf(path) {
+      const index = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+      return index < 0 ? path : path.substring(index + 1);
+    }
+    async function directoryExists(filesystem, directory) {
+      try {
+        if (filesystem.getFileStats) {
+          return await filesystem.getFileStats(directory) !== void 0;
+        }
+        await filesystem.getFileTimestamp(directory);
+        return true;
+      } catch (e) {
+        return false;
+      }
+    }
+    var DirectoryWatch = class {
+      constructor(filesystem, directory, onEvent) {
+        this.closed = false;
+        this.handle = filesystem.watch(
+          directory,
+          (eventType, _watched, changedName) => onEvent(this, eventType, changedName)
+        );
+      }
+    };
+    var FileDirectoryWatcher = class {
+      constructor(_filesystem, paths, _onChange, _logger) {
         this._filesystem = _filesystem;
-        this._paths = _paths;
-        this._watch = _watch;
-        this._callback = _callback;
-        this._watchers = [];
-        this._fileData = {};
-        this._fileTimestamps = {};
+        this._onChange = _onChange;
+        this._logger = _logger;
+        this._watches = {};
+        this._names = {};
+        this._files = {};
+        this._signatures = {};
+        this._fileChecks = {};
+        this._fileWatches = {};
+        this._checks = {};
+        this._closed = false;
+        this._paths = Array.from(new Set(paths));
+        this._directories = Array.from(new Set(paths.map(directoryOf)));
+        paths.forEach((path) => {
+          var _a, _b;
+          const directory = directoryOf(path);
+          this._names[directory] = (_a = this._names[directory]) != null ? _a : /* @__PURE__ */ new Set();
+          this._names[directory].add(basenameOf(path));
+          this._files[directory] = (_b = this._files[directory]) != null ? _b : [];
+          this._files[directory].push(path);
+        });
       }
       /**
-       * Load all the files and start watching them if watching is enabled.
+       * Sets up the watches. Returns after the first attempt. Failures are retried in the
+       * background.
        */
-      async loadAndWatch() {
-        const promises3 = this._paths.map(async (path) => {
-          const data = await this._filesystem.readFile(path);
-          const timeStamp = await this._filesystem.getFileTimestamp(path);
-          return { data, path, timeStamp };
-        });
-        const results = await Promise.all(promises3);
-        results.forEach((res) => {
-          this._fileData[res.path] = res.data;
-          this._fileTimestamps[res.path] = res.timeStamp;
-        });
-        this._callback(results);
-        if (this._watch) {
-          this._paths.forEach((path) => {
-            const watcher = this._filesystem.watch(path, async (_, updatePath) => {
-              const timeStamp = await this._filesystem.getFileTimestamp(updatePath);
-              if (timeStamp === this._fileTimestamps[updatePath]) {
-                return;
-              }
-              this._fileTimestamps[updatePath] = timeStamp;
-              const data = await this._filesystem.readFile(updatePath);
-              this._fileData[updatePath] = data;
-              this._debounceCallback();
-            });
-            this._watchers.push(watcher);
-          });
-        }
+      start() {
+        this._setupWatches(false);
+        this._armFileWatches();
+        this._directories.forEach((directory) => this._checkFiles(directory, false));
       }
       close() {
-        this._watchers.forEach((watcher) => watcher.close());
-      }
-      _debounceCallback() {
-        if (!this._debounceHandle) {
-          this._debounceHandle = setTimeout(() => {
-            this._debounceHandle = void 0;
-            this._callback(
-              Object.entries(this._fileData).reduce(
-                (acc, [path, data]) => {
-                  acc.push({ path, data });
-                  return acc;
-                },
-                []
-              )
-            );
-          }, 10);
+        this._closed = true;
+        if (this._retryTimer) {
+          clearTimeout(this._retryTimer);
+          this._retryTimer = void 0;
         }
+        Object.keys(this._watches).forEach((directory) => this._dropWatch(directory));
+        Object.keys(this._fileWatches).forEach((path) => this._dropFileWatch(path));
+      }
+      /**
+       * Checks that every watched directory still exists. A directory that does not exist has its
+       * watch closed and set up again once it exists. Call it after a failed load, because a load
+       * that fails to read a file can mean that the file's directory is gone.
+       */
+      verify() {
+        this._directories.forEach((directory) => this._checkDirectory(directory));
+        this._armFileWatches();
+      }
+      /**
+       * Sets up a direct watch on each configured file that has none. A file that cannot be watched,
+       * usually because it does not exist yet, is attempted again at the next event or verify call.
+       */
+      _armFileWatches() {
+        if (this._closed) {
+          return;
+        }
+        this._paths.forEach((path) => this._armFileWatch(path));
+      }
+      _armFileWatch(path) {
+        if (this._closed || this._fileWatches[path]) {
+          return;
+        }
+        try {
+          this._fileWatches[path] = this._filesystem.watch(path, () => this._handleFileEvent(path));
+        } catch (e) {
+        }
+      }
+      _dropFileWatch(path) {
+        const handle = this._fileWatches[path];
+        if (!handle) {
+          return;
+        }
+        delete this._fileWatches[path];
+        handle.close();
+      }
+      /**
+       * Sets the direct watch on a configured file up again. A direct watch follows the path to the
+       * inode it names when the watch is set up. After the path was replaced or its link retargeted,
+       * the watch is on an inode that the path no longer names, and edits to the new target are
+       * invisible to it and to the directory watch alike.
+       */
+      _renewFileWatch(path) {
+        this._dropFileWatch(path);
+        this._armFileWatch(path);
+      }
+      /**
+       * An event from the direct watch on a configured file. The file or the target of its link
+       * changed, so the callback runs. The watch may now be on an inode that the path no longer
+       * names, so it is set up again. An error from the watch is treated the same way: the watch
+       * cannot be trusted anymore, and the file can have changed while it was failing, which the
+       * directory watch does not see when the path is a link to a file elsewhere.
+       */
+      _handleFileEvent(path) {
+        if (this._closed || !this._fileWatches[path]) {
+          return;
+        }
+        this._renewFileWatch(path);
+        this._onChange();
+        this._checkFiles(directoryOf(path), false);
+      }
+      _setupWatches(isRetry) {
+        if (this._closed) {
+          return;
+        }
+        const added = [];
+        let failed = false;
+        this._directories.forEach((directory) => {
+          var _a;
+          if (this._watches[directory]) {
+            return;
+          }
+          try {
+            this._watches[directory] = new DirectoryWatch(
+              this._filesystem,
+              directory,
+              (watch, eventType, changedName) => this._handleEvent(watch, directory, eventType, changedName)
+            );
+            added.push(directory);
+          } catch (err) {
+            failed = true;
+            (_a = this._logger) == null ? void 0 : _a.error(
+              `Unable to watch directory "${directory}": ${err instanceof Error ? err.message : err}`
+            );
+          }
+        });
+        if (failed) {
+          this._scheduleSetup();
+        }
+        if (isRetry && added.length > 0) {
+          this._onChange();
+          added.forEach((directory) => this._checkFiles(directory, false));
+          this._armFileWatches();
+        }
+      }
+      _scheduleSetup() {
+        if (this._closed || this._retryTimer) {
+          return;
+        }
+        this._retryTimer = setTimeout(() => {
+          this._retryTimer = void 0;
+          this._setupWatches(true);
+        }, WATCH_RETRY_DELAY_MS);
+      }
+      _handleEvent(watch, directory, eventType, changedName) {
+        var _a;
+        if (this._closed || watch.closed) {
+          return;
+        }
+        if (eventType === "error") {
+          (_a = this._logger) == null ? void 0 : _a.warn(`The watch on directory "${directory}" failed. Setting it up again.`);
+          this._replaceWatch(directory);
+          return;
+        }
+        if (changedName === void 0 || this._names[directory].has(changedName)) {
+          this._onChange();
+          this._checkFiles(directory, false);
+          this._files[directory].filter((path) => changedName === void 0 || basenameOf(path) === changedName).forEach((path) => this._renewFileWatch(path));
+          this._armFileWatches();
+        } else {
+          this._checkFiles(directory, true);
+        }
+        this._checkDirectory(directory);
+      }
+      /**
+       * Reads the metadata of the configured files in a directory and remembers it. When `notify` is
+       * set and any file's metadata differs from the last observation, the change callback runs, and
+       * the direct watch on each changed file is set up again, because its link can point elsewhere
+       * now. Reads for one directory do not overlap. A read requested during a read runs afterwards.
+       * A request to notify that arrives during a read applies to that read's result as well, since
+       * the read may already have observed the change the request is about; when the read is the
+       * first observation, which has nothing to compare to, such a request counts as a change.
+       */
+      _checkFiles(directory, notify) {
+        if (this._closed || !this._filesystem.getFileStats) {
+          return;
+        }
+        const pending = this._fileChecks[directory];
+        if (pending) {
+          pending.again = true;
+          pending.notify = pending.notify || notify;
+          return;
+        }
+        const check = { again: false, notify: false };
+        this._fileChecks[directory] = check;
+        const { getFileStats } = this._filesystem;
+        const files = this._files[directory];
+        Promise.all(
+          files.map(async (path) => {
+            try {
+              const stats = await getFileStats.call(this._filesystem, path);
+              return stats ? `${stats.timestamp}:${stats.size}` : "absent";
+            } catch (e) {
+              return "error";
+            }
+          })
+        ).then((signatures) => {
+          delete this._fileChecks[directory];
+          if (this._closed) {
+            return;
+          }
+          let changed = false;
+          let firstObservation = false;
+          files.forEach((path, index) => {
+            if (this._signatures[path] !== signatures[index]) {
+              if (this._signatures[path] !== void 0) {
+                changed = true;
+                this._renewFileWatch(path);
+              } else {
+                firstObservation = true;
+              }
+              this._signatures[path] = signatures[index];
+            }
+          });
+          if ((notify || check.notify) && (changed || check.notify && firstObservation)) {
+            this._onChange();
+          }
+          if (check.again) {
+            this._checkFiles(directory, check.notify);
+          }
+        });
+      }
+      /**
+       * Closes and drops the watch on a directory that no longer exists, and sets it up again once
+       * the directory exists. Closing the watch is what ends the flood of events that some
+       * platforms deliver for a deleted directory.
+       */
+      _checkDirectory(directory) {
+        if (this._closed || !this._watches[directory]) {
+          return;
+        }
+        const pending = this._checks[directory];
+        if (pending) {
+          pending.again = true;
+          return;
+        }
+        const check = { again: false };
+        this._checks[directory] = check;
+        directoryExists(this._filesystem, directory).then((exists2) => {
+          var _a;
+          delete this._checks[directory];
+          if (this._closed || !this._watches[directory]) {
+            return;
+          }
+          if (exists2) {
+            if (check.again) {
+              this._checkDirectory(directory);
+            }
+            return;
+          }
+          (_a = this._logger) == null ? void 0 : _a.warn(
+            `Directory "${directory}" no longer exists. Its watch is set up again when it appears.`
+          );
+          this._replaceWatch(directory);
+        });
+      }
+      _replaceWatch(directory) {
+        this._dropWatch(directory);
+        this._setupWatches(true);
+      }
+      _dropWatch(directory) {
+        const watch = this._watches[directory];
+        if (!watch) {
+          return;
+        }
+        watch.closed = true;
+        delete this._watches[directory];
+        watch.handle.close();
+      }
+    };
+    var absent = { exists: false, timestamp: 0, size: 0 };
+    async function observe(filesystem, path) {
+      try {
+        if (filesystem.getFileStats) {
+          const stats = await filesystem.getFileStats(path);
+          if (!stats) {
+            return absent;
+          }
+          return { exists: true, timestamp: stats.timestamp, size: stats.size };
+        }
+        const timestamp = await filesystem.getFileTimestamp(path);
+        return { exists: true, timestamp, size: 0 };
+      } catch (e) {
+        return absent;
+      }
+    }
+    function observeAll(filesystem, paths) {
+      return Promise.all(paths.map((path) => observe(filesystem, path)));
+    }
+    function sameState(a, b) {
+      return a.exists === b.exists && a.timestamp === b.timestamp && a.size === b.size;
+    }
+    var FilePoller = class {
+      constructor(_filesystem, _paths, _intervalMs, _onChange) {
+        this._filesystem = _filesystem;
+        this._paths = _paths;
+        this._intervalMs = _intervalMs;
+        this._onChange = _onChange;
+        this._last = [];
+        this._closed = false;
+      }
+      /**
+       * Examines the files once and then starts the interval, so only later changes invoke the
+       * callback.
+       */
+      async start() {
+        this._last = await observeAll(this._filesystem, this._paths);
+        this._scheduleNext();
+      }
+      /**
+       * Stops the poller. It does not wait for an examination that is in progress. An
+       * examination that completes after close does not invoke the callback.
+       */
+      close() {
+        this._closed = true;
+        if (this._timer) {
+          clearTimeout(this._timer);
+          this._timer = void 0;
+        }
+      }
+      _scheduleNext() {
+        if (this._closed) {
+          return;
+        }
+        this._timer = setTimeout(() => {
+          this._timer = void 0;
+          this._poll();
+        }, this._intervalMs);
+      }
+      async _poll() {
+        const current = await observeAll(this._filesystem, this._paths);
+        if (this._closed) {
+          return;
+        }
+        const changed = current.some((state, index) => !sameState(state, this._last[index]));
+        this._last = current;
+        if (changed) {
+          this._onChange();
+        }
+        this._scheduleNext();
+      }
+    };
+    var import_js_sdk_common4 = require_cjs();
+    function mergeDocuments(policy, documents, previousFlags = {}) {
+      const flags = [];
+      const segments = [];
+      const summaries = documents.map(() => ({ flags: 0, segments: 0 }));
+      const positions = {
+        flag: /* @__PURE__ */ new Map(),
+        segment: /* @__PURE__ */ new Map()
+      };
+      const insert = (items, category, key, item, documentIndex) => {
+        const counter = category === "flag" ? "flags" : "segments";
+        const existing = positions[category].get(key);
+        if (existing) {
+          if (policy.resolveDuplicateKey(category, key) === "keepFirst") {
+            return;
+          }
+          items[existing.index] = { key, item };
+          summaries[existing.document][counter] -= 1;
+          summaries[documentIndex][counter] += 1;
+          positions[category].set(key, { index: existing.index, document: documentIndex });
+          return;
+        }
+        items.push({ key, item });
+        positions[category].set(key, { index: items.length - 1, document: documentIndex });
+        summaries[documentIndex][counter] += 1;
+      };
+      documents.forEach((document2, documentIndex) => {
+        var _a, _b, _c;
+        Object.entries((_a = document2.flags) != null ? _a : {}).forEach(([key, flag]) => {
+          insert(flags, "flag", policy.entryKey(key, flag), flag, documentIndex);
+        });
+        Object.entries((_b = document2.flagValues) != null ? _b : {}).forEach(([key, value]) => {
+          insert(
+            flags,
+            "flag",
+            key,
+            policy.makeFlagWithValue(key, value, previousFlags[key]),
+            documentIndex
+          );
+        });
+        Object.entries((_c = document2.segments) != null ? _c : {}).forEach(([key, segment]) => {
+          insert(segments, "segment", policy.entryKey(key, segment), segment, documentIndex);
+        });
+      });
+      return { flags, segments, documents: summaries };
+    }
+    var DEFAULT_DEBOUNCE_DELAY_MS = 100;
+    var DEFAULT_RETRY_DELAY_MS = 1e3;
+    var MAX_DEBOUNCE_DELAY_MS = 1e3;
+    function asError(err) {
+      return err instanceof Error ? err : new Error(String(err));
+    }
+    var FileReloader = class {
+      constructor(_config) {
+        this._config = _config;
+        this._closed = false;
+        this._chain = Promise.resolve();
+        this._burstStartedAt = 0;
+        this._lastGoodFlags = {};
+      }
+      /**
+       * Loads the files and applies the result, or reports the failure. Use it for the initial
+       * load. A failure schedules the same automatic retry as a failed triggered reload.
+       *
+       * @returns A promise that resolves when this reload has completed. It never rejects.
+       */
+      reloadNow() {
+        return this._enqueue("initial");
+      }
+      /**
+       * Signals that the files may have changed. The reload happens after the debounce delay, or no
+       * later than the maximum debounce delay after the first trigger of a burst. Triggers that
+       * arrive while a reload is pending are coalesced into it.
+       */
+      trigger() {
+        if (this._closed) {
+          return;
+        }
+        if (this._config.debounceDelayMs <= 0) {
+          this._enqueue("change");
+          return;
+        }
+        const now = (0, import_js_sdk_common4.monotonicNow)();
+        if (this._debounceTimer) {
+          clearTimeout(this._debounceTimer);
+          this._debounceTimer = void 0;
+        } else {
+          this._burstStartedAt = now;
+        }
+        const remaining = this._burstStartedAt + MAX_DEBOUNCE_DELAY_MS - now;
+        if (remaining <= 0) {
+          this._enqueue("change");
+          return;
+        }
+        this._debounceTimer = setTimeout(
+          () => {
+            this._debounceTimer = void 0;
+            this._enqueue("change");
+          },
+          Math.min(this._config.debounceDelayMs, remaining)
+        );
+      }
+      /**
+       * Stops the reloader. A reload that is in progress finishes its file reads, but it does not
+       * call `apply` or `onFailure`.
+       */
+      close() {
+        this._closed = true;
+        if (this._debounceTimer) {
+          clearTimeout(this._debounceTimer);
+          this._debounceTimer = void 0;
+        }
+        this._clearRetry();
+      }
+      _enqueue(reason) {
+        if (this._queued) {
+          return this._queued;
+        }
+        const run2 = this._chain.then(() => {
+          this._queued = void 0;
+          return this._reload(reason).catch((err) => {
+            var _a;
+            (_a = this._config.logger) == null ? void 0 : _a.error(`Unexpected error while reloading flag data: ${err}`);
+          });
+        });
+        this._queued = run2;
+        this._chain = run2.catch(() => void 0);
+        return run2;
+      }
+      _clearRetry() {
+        if (this._retryTimer) {
+          clearTimeout(this._retryTimer);
+          this._retryTimer = void 0;
+        }
+      }
+      _armRetry() {
+        if (this._closed || this._config.retryDelayMs <= 0) {
+          return;
+        }
+        this._clearRetry();
+        this._retryTimer = setTimeout(() => {
+          this._retryTimer = void 0;
+          this._enqueue("retry");
+        }, this._config.retryDelayMs);
+      }
+      /**
+       * Performs one full load of all configured files. The whole set is read on every reload.
+       * Entries are combined across files in order, so a change to one file can alter which file
+       * wins for a key. Every filesystem and parsing failure is caught and reported, so the returned
+       * promise never rejects.
+       */
+      async _reload(reason) {
+        if (this._closed) {
+          return;
+        }
+        const { logger, paths, policy } = this._config;
+        if (reason === "change") {
+          logger == null ? void 0 : logger.info("Reloading flag data after detecting a change");
+        } else if (reason === "retry") {
+          logger == null ? void 0 : logger.debug("Retrying flag data load after earlier failure");
+        }
+        this._clearRetry();
+        const documents = [];
+        const files = [];
+        const contents = [];
+        let failure;
+        const readAll = paths.reduce(
+          (previous, path) => previous.then(async () => {
+            if (failure) {
+              return;
+            }
+            let data;
+            try {
+              data = await this._config.filesystem.readFile(path);
+            } catch (err) {
+              if (policy.missingFile === "skip" && isFileNotFoundError(err)) {
+                logger == null ? void 0 : logger.debug(`File ${path} does not exist. It contributes no data.`);
+                files.push({ path, present: false, flags: 0, segments: 0 });
+                return;
+              }
+              failure = { kind: "read", error: asError(err), path, repeated: false };
+              return;
+            }
+            contents.push(data);
+            try {
+              documents.push(policy.parseDocument(path, data));
+            } catch (err) {
+              failure = { kind: "parse", error: asError(err), path, repeated: false };
+              return;
+            }
+            files.push({ path, present: true, flags: 0, segments: 0 });
+          }),
+          Promise.resolve()
+        );
+        await readAll;
+        let merged;
+        if (!failure) {
+          try {
+            merged = mergeDocuments(policy, documents, this._lastGoodFlags);
+          } catch (err) {
+            failure = { kind: "merge", error: asError(err), repeated: false };
+          }
+        }
+        if (failure || !merged) {
+          this._fail(failure, reason);
+          return;
+        }
+        let next = 0;
+        files.forEach((file) => {
+          if (file.present) {
+            file.flags = merged.documents[next].flags;
+            file.segments = merged.documents[next].segments;
+            next += 1;
+          }
+        });
+        if (this._closed) {
+          return;
+        }
+        const recovering = this._lastFailureKey !== void 0;
+        const content = JSON.stringify(contents);
+        if (this._config.skipUnchanged && !recovering && content === this._lastGoodContent) {
+          this._lastFailureKey = void 0;
+          return;
+        }
+        const nextFlags = {};
+        try {
+          merged.flags.forEach(({ item }) => {
+            nextFlags[String(item.key)] = item;
+          });
+          this._config.apply(__spreadProps(__spreadValues({}, merged), { files }));
+        } catch (err) {
+          this._fail({ kind: "apply", error: asError(err), repeated: false }, reason);
+          return;
+        }
+        this._lastFailureKey = void 0;
+        this._lastGoodContent = content;
+        this._lastGoodFlags = nextFlags;
+      }
+      _fail(failure, reason) {
+        var _a, _b;
+        if (this._closed) {
+          return;
+        }
+        const key = `${failure.kind}:${(_a = failure.path) != null ? _a : ""}`;
+        const repeated = reason === "retry" && key === this._lastFailureKey;
+        this._lastFailureKey = key;
+        try {
+          this._config.onFailure(__spreadProps(__spreadValues({}, failure), { repeated }));
+        } catch (err) {
+          (_b = this._config.logger) == null ? void 0 : _b.error(`Error while reporting a flag data load failure: ${err}`);
+        }
+        this._armRetry();
       }
     };
     function makeFlagWithValue(key, value, version) {
@@ -23427,6 +24155,24 @@ var require_dist = __commonJS({
         fallthrough: { variation: 0 },
         variations: [value],
         version
+      };
+    }
+    function fileDataSourcePolicy(yamlParser) {
+      return {
+        parseDocument: parseDocumentByExtension(yamlParser),
+        makeFlagWithValue: (key, value, previous) => {
+          var _a;
+          let version = previous ? previous.version : 1;
+          if (previous && JSON.stringify(value) !== JSON.stringify((_a = previous.variations) == null ? void 0 : _a[0])) {
+            version += 1;
+          }
+          return makeFlagWithValue(key, value, version);
+        },
+        resolveDuplicateKey: (_category, key) => {
+          throw new Error(`found duplicate key: "${key}"`);
+        },
+        missingFile: "fail",
+        entryKey: (_mapKey, entry) => String(entry.key)
       };
     }
     var FileDataSource = class {
@@ -23440,95 +24186,94 @@ var require_dist = __commonJS({
         this._featureStore = _featureStore;
         this._initSuccessHandler = _initSuccessHandler;
         this._errorHandler = _errorHandler;
-        this._allData = {};
         var _a;
-        this._fileLoader = new FileLoader(
-          filesystem,
-          options.paths,
-          (_a = options.autoUpdate) != null ? _a : false,
-          (results) => {
-            var _a2, _b;
-            try {
-              this._processFileData(results);
-            } catch (err) {
-              (_a2 = this._errorHandler) == null ? void 0 : _a2.call(this, err);
-              (_b = this._logger) == null ? void 0 : _b.error(`Error processing files: ${err}`);
-            }
-          }
-        );
         this._logger = options.logger;
-        this._yamlParser = options.yamlParser;
+        const autoUpdate = (_a = options.autoUpdate) != null ? _a : false;
+        this._reloader = new FileReloader({
+          paths: options.paths,
+          policy: fileDataSourcePolicy(options.yamlParser),
+          filesystem,
+          logger: options.logger,
+          apply: (result) => this._applyData(result),
+          onFailure: (failure) => this._handleFailure(failure),
+          // Debouncing and automatic retries only matter when something can trigger further
+          // reloads. A source configured without automatic updates loads exactly once.
+          debounceDelayMs: autoUpdate ? DEFAULT_DEBOUNCE_DELAY_MS : 0,
+          retryDelayMs: autoUpdate ? DEFAULT_RETRY_DELAY_MS : 0,
+          skipUnchanged: true
+        });
+        if (autoUpdate) {
+          this._watcher = new FileDirectoryWatcher(
+            filesystem,
+            options.paths,
+            () => this._reloader.trigger(),
+            options.logger
+          );
+        }
       }
       start() {
-        (async () => {
-          var _a;
-          try {
-            await this._fileLoader.loadAndWatch();
-          } catch (err) {
-            (_a = this._errorHandler) == null ? void 0 : _a.call(this, err);
-          }
-        })();
+        var _a;
+        (_a = this._watcher) == null ? void 0 : _a.start();
+        this._reloader.reloadNow();
       }
       stop() {
-        this._fileLoader.close();
+        var _a;
+        (_a = this._watcher) == null ? void 0 : _a.close();
+        this._reloader.close();
       }
       close() {
         this.stop();
       }
-      _addItem(kind, item) {
-        if (!this._allData[kind.namespace]) {
-          this._allData[kind.namespace] = {};
-        }
-        if (this._allData[kind.namespace][item.key]) {
-          throw new Error(`found duplicate key: "${item.key}"`);
-        } else {
-          this._allData[kind.namespace][item.key] = item;
-        }
-      }
-      _processFileData(fileData) {
-        const oldData = this._allData;
-        this._allData = {};
-        fileData.forEach((fd) => {
-          let parsed;
-          if (fd.path.endsWith(".yml") || fd.path.endsWith(".yaml")) {
-            if (this._yamlParser) {
-              parsed = this._yamlParser(fd.data);
-            } else {
-              throw new Error(`Attempted to parse yaml file (${fd.path}) without parser.`);
-            }
-          } else {
-            parsed = JSON.parse(fd.data);
+      _applyData(result) {
+        const allData = {};
+        const addItem = (kind, item) => {
+          if (!allData[kind.namespace]) {
+            allData[kind.namespace] = {};
           }
-          this._processParsedData(parsed, oldData);
+          allData[kind.namespace][item.key] = item;
+        };
+        result.flags.forEach(({ item }) => {
+          processFlag(item);
+          addItem(VersionedDataKinds.Features, item);
         });
-        this._featureStore.init(this._allData, () => {
+        result.segments.forEach(({ item }) => {
+          processSegment(item);
+          addItem(VersionedDataKinds.Segments, item);
+        });
+        this._featureStore.init(allData, () => {
           this._initSuccessHandler();
           this._initSuccessHandler = () => {
           };
         });
       }
-      _processParsedData(parsed, oldData) {
-        Object.keys(parsed.flags || {}).forEach((key) => {
-          processFlag(parsed.flags[key]);
-          this._addItem(VersionedDataKinds.Features, parsed.flags[key]);
-        });
-        Object.keys(parsed.flagValues || {}).forEach((key) => {
-          var _a, _b;
-          const previousInstance = (_a = oldData[VersionedDataKinds.Features.namespace]) == null ? void 0 : _a[key];
-          let { version } = previousInstance != null ? previousInstance : { version: 1 };
-          if (previousInstance && JSON.stringify(parsed.flagValues[key]) !== JSON.stringify((_b = previousInstance == null ? void 0 : previousInstance.variations) == null ? void 0 : _b[0])) {
-            version += 1;
-          }
-          const flag = makeFlagWithValue(key, parsed.flagValues[key], version);
-          processFlag(flag);
-          this._addItem(VersionedDataKinds.Features, flag);
-        });
-        Object.keys(parsed.segments || {}).forEach((key) => {
-          processSegment(parsed.segments[key]);
-          this._addItem(VersionedDataKinds.Segments, parsed.segments[key]);
-        });
+      _handleFailure(failure) {
+        var _a, _b, _c, _d;
+        (_a = this._watcher) == null ? void 0 : _a.verify();
+        const message = failure.kind === "read" ? `Error loading files: ${failure.error}` : `Error processing files: ${failure.error}`;
+        if (failure.repeated) {
+          (_b = this._logger) == null ? void 0 : _b.debug(message);
+          return;
+        }
+        (_c = this._errorHandler) == null ? void 0 : _c.call(this, failure.error);
+        (_d = this._logger) == null ? void 0 : _d.error(message);
       }
     };
+    function fileDataInitializerPolicy(yamlParser) {
+      return {
+        parseDocument: parseDocumentByExtension(yamlParser),
+        makeFlagWithValue: (key, value) => makeFlagWithValue(key, value, 1),
+        resolveDuplicateKey: () => "keepLast",
+        missingFile: "fail",
+        entryKey: (mapKey) => mapKey
+      };
+    }
+    function byKey(items) {
+      const result = {};
+      items.forEach(({ key, item }) => {
+        result[key] = item;
+      });
+      return result;
+    }
     var FileDataInitializerFDv2 = class {
       constructor(options, platform22, logger) {
         this._validateInputs(options, platform22);
@@ -23546,9 +24291,9 @@ var require_dist = __commonJS({
         }
       }
       start(dataCallback, statusCallback) {
-        statusCallback(import_js_sdk_common4.subsystem.DataSourceState.Initializing);
-        const initMetadata = import_js_sdk_common4.internal.initMetadataFromHeaders(void 0);
-        const payloadProcessor = new import_js_sdk_common4.internal.PayloadProcessor(
+        statusCallback(import_js_sdk_common5.subsystem.DataSourceState.Initializing);
+        const initMetadata = import_js_sdk_common5.internal.initMetadataFromHeaders(void 0);
+        const payloadProcessor = new import_js_sdk_common5.internal.PayloadProcessor(
           {
             flag: (flag) => {
               processFlag(flag);
@@ -23561,86 +24306,62 @@ var require_dist = __commonJS({
           },
           (errorKind, message) => {
             statusCallback(
-              import_js_sdk_common4.subsystem.DataSourceState.Interrupted,
-              new import_js_sdk_common4.LDPollingError(errorKind, message)
+              import_js_sdk_common5.subsystem.DataSourceState.Interrupted,
+              new import_js_sdk_common5.LDPollingError(errorKind, message)
             );
           },
           this._logger
         );
-        const adaptor = import_js_sdk_common4.internal.FDv1PayloadAdaptor(payloadProcessor);
-        this._fileLoader = new FileLoader(
-          this._filesystem,
-          this._paths,
-          false,
-          // autoupdate is always false for initializer
-          (results) => {
-            var _a;
-            try {
-              const parsedData = this._processFileData(results);
-              payloadProcessor.addPayloadListener((payload) => {
-                dataCallback(false, { initMetadata, payload });
-              });
-              statusCallback(import_js_sdk_common4.subsystem.DataSourceState.Valid);
-              adaptor.processFullTransfer(parsedData);
-              statusCallback(import_js_sdk_common4.subsystem.DataSourceState.Closed);
-            } catch (err) {
-              (_a = this._logger) == null ? void 0 : _a.error("File contained invalid data", err);
-              statusCallback(
-                import_js_sdk_common4.subsystem.DataSourceState.Closed,
-                new import_js_sdk_common4.LDPollingError(import_js_sdk_common4.DataSourceErrorKind.InvalidData, "Malformed data in file response")
-              );
-            }
+        const adaptor = import_js_sdk_common5.internal.FDv1PayloadAdaptor(payloadProcessor);
+        const apply = (result) => {
+          payloadProcessor.addPayloadListener((payload) => {
+            dataCallback(false, { initMetadata, payload });
+          });
+          statusCallback(import_js_sdk_common5.subsystem.DataSourceState.Valid);
+          adaptor.processFullTransfer({
+            segments: byKey(result.segments),
+            flags: byKey(result.flags)
+          });
+          statusCallback(import_js_sdk_common5.subsystem.DataSourceState.Closed);
+        };
+        const onFailure = (failure) => {
+          var _a, _b;
+          if (failure.kind === "read") {
+            (_a = this._logger) == null ? void 0 : _a.error("Error loading files", failure.error);
+            statusCallback(
+              import_js_sdk_common5.subsystem.DataSourceState.Closed,
+              new import_js_sdk_common5.LDPollingError(
+                import_js_sdk_common5.DataSourceErrorKind.NetworkError,
+                `Failed to load files: ${failure.error.message}`
+              )
+            );
+            return;
           }
-        );
-        this._fileLoader.loadAndWatch().catch((err) => {
-          var _a;
-          (_a = this._logger) == null ? void 0 : _a.error("Error loading files", err);
+          (_b = this._logger) == null ? void 0 : _b.error("File contained invalid data", failure.error);
           statusCallback(
-            import_js_sdk_common4.subsystem.DataSourceState.Closed,
-            new import_js_sdk_common4.LDPollingError(
-              import_js_sdk_common4.DataSourceErrorKind.NetworkError,
-              `Failed to load files: ${err instanceof Error ? err.message : String(err)}`
-            )
+            import_js_sdk_common5.subsystem.DataSourceState.Closed,
+            new import_js_sdk_common5.LDPollingError(import_js_sdk_common5.DataSourceErrorKind.InvalidData, "Malformed data in file response")
           );
+        };
+        this._reloader = new FileReloader({
+          paths: this._paths,
+          policy: fileDataInitializerPolicy(this._yamlParser),
+          filesystem: this._filesystem,
+          logger: this._logger,
+          apply,
+          onFailure,
+          debounceDelayMs: 0,
+          retryDelayMs: 0,
+          skipUnchanged: false
         });
-      }
-      _processFileData(results) {
-        const combined = results.reduce(
-          (acc, curr) => {
-            var _a, _b, _c;
-            let parsed;
-            if (curr.path.endsWith(".yml") || curr.path.endsWith(".yaml")) {
-              if (this._yamlParser) {
-                parsed = this._yamlParser(curr.data);
-              } else {
-                throw new Error(`Attempted to parse yaml file (${curr.path}) without parser.`);
-              }
-            } else {
-              parsed = JSON.parse(curr.data);
-            }
-            const flagsFromValues = {};
-            Object.entries((_a = parsed.flagValues) != null ? _a : {}).forEach(([key, value]) => {
-              flagsFromValues[key] = makeFlagWithValue(key, value, 1);
-            });
-            return {
-              segments: __spreadValues(__spreadValues({}, acc.segments), (_b = parsed.segments) != null ? _b : {}),
-              flags: __spreadValues(__spreadValues(__spreadValues({}, acc.flags), (_c = parsed.flags) != null ? _c : {}), flagsFromValues)
-            };
-          },
-          {
-            segments: {},
-            flags: {}
-          }
-        );
-        return combined;
+        this._reloader.reloadNow();
       }
       stop() {
-        if (this._fileLoader) {
-          this._fileLoader.close();
-        }
+        var _a;
+        (_a = this._reloader) == null ? void 0 : _a.close();
       }
     };
-    var import_js_sdk_common5 = require_cjs();
+    var import_js_sdk_common6 = require_cjs();
     var OneShotInitializerFDv2 = class {
       constructor(_requestor, _logger) {
         this._requestor = _requestor;
@@ -23649,7 +24370,7 @@ var require_dist = __commonJS({
       }
       start(dataCallback, statusCallback) {
         var _a;
-        statusCallback(import_js_sdk_common5.subsystem.DataSourceState.Initializing);
+        statusCallback(import_js_sdk_common6.subsystem.DataSourceState.Initializing);
         (_a = this._logger) == null ? void 0 : _a.debug("Performing initialization request to LaunchDarkly for feature flag data.");
         this._requestor.requestAllData((err, body, headers, fallbackToFDv1) => {
           var _a2, _b, _c;
@@ -23659,11 +24380,11 @@ var require_dist = __commonJS({
           const emitFallback = () => {
             var _a3;
             const status = err == null ? void 0 : err.status;
-            const message = err ? (0, import_js_sdk_common5.httpErrorMessage)(err, "initializer", "falling back to FDv1") : `Response header indicates to fallback to FDv1`;
+            const message = err ? (0, import_js_sdk_common6.httpErrorMessage)(err, "initializer", "falling back to FDv1") : `Response header indicates to fallback to FDv1`;
             (_a3 = this._logger) == null ? void 0 : _a3.warn(message);
             statusCallback(
-              import_js_sdk_common5.subsystem.DataSourceState.Closed,
-              new import_js_sdk_common5.LDFlagDeliveryFallbackError(import_js_sdk_common5.DataSourceErrorKind.ErrorResponse, message, status)
+              import_js_sdk_common6.subsystem.DataSourceState.Closed,
+              new import_js_sdk_common6.LDFlagDeliveryFallbackError(import_js_sdk_common6.DataSourceErrorKind.ErrorResponse, message, status)
             );
           };
           if (err) {
@@ -23672,11 +24393,11 @@ var require_dist = __commonJS({
               return;
             }
             const { status } = err;
-            const message = (0, import_js_sdk_common5.httpErrorMessage)(err, "initializer", "initializer does not retry");
+            const message = (0, import_js_sdk_common6.httpErrorMessage)(err, "initializer", "initializer does not retry");
             (_a2 = this._logger) == null ? void 0 : _a2.error(message);
             statusCallback(
-              import_js_sdk_common5.subsystem.DataSourceState.Closed,
-              new import_js_sdk_common5.LDPollingError(import_js_sdk_common5.DataSourceErrorKind.ErrorResponse, message, status)
+              import_js_sdk_common6.subsystem.DataSourceState.Closed,
+              new import_js_sdk_common6.LDPollingError(import_js_sdk_common6.DataSourceErrorKind.ErrorResponse, message, status)
             );
             return;
           }
@@ -23686,18 +24407,18 @@ var require_dist = __commonJS({
               return;
             }
             statusCallback(
-              import_js_sdk_common5.subsystem.DataSourceState.Closed,
-              new import_js_sdk_common5.LDPollingError(
-                import_js_sdk_common5.DataSourceErrorKind.InvalidData,
+              import_js_sdk_common6.subsystem.DataSourceState.Closed,
+              new import_js_sdk_common6.LDPollingError(
+                import_js_sdk_common6.DataSourceErrorKind.InvalidData,
                 "One shot initializer response missing body."
               )
             );
             return;
           }
-          const initMetadata = import_js_sdk_common5.internal.initMetadataFromHeaders(headers);
+          const initMetadata = import_js_sdk_common6.internal.initMetadataFromHeaders(headers);
           try {
             const parsed = JSON.parse(body);
-            const payloadProcessor = new import_js_sdk_common5.internal.PayloadProcessor(
+            const payloadProcessor = new import_js_sdk_common6.internal.PayloadProcessor(
               {
                 flag: (flag) => {
                   processFlag(flag);
@@ -23714,13 +24435,13 @@ var require_dist = __commonJS({
                   return;
                 }
                 statusCallback(
-                  import_js_sdk_common5.subsystem.DataSourceState.Interrupted,
-                  new import_js_sdk_common5.LDPollingError(errorKind, message)
+                  import_js_sdk_common6.subsystem.DataSourceState.Interrupted,
+                  new import_js_sdk_common6.LDPollingError(errorKind, message)
                 );
               },
               this._logger
             );
-            statusCallback(import_js_sdk_common5.subsystem.DataSourceState.Valid);
+            statusCallback(import_js_sdk_common6.subsystem.DataSourceState.Valid);
             payloadProcessor.addPayloadListener((payload) => {
               var _a3;
               const data = {
@@ -23734,7 +24455,7 @@ var require_dist = __commonJS({
               dataCallback(payload.type === "full", data);
             });
             payloadProcessor.processEvents(parsed.events);
-            statusCallback(import_js_sdk_common5.subsystem.DataSourceState.Closed);
+            statusCallback(import_js_sdk_common6.subsystem.DataSourceState.Closed);
           } catch (parseError) {
             (_b = this._logger) == null ? void 0 : _b.error("Response contained invalid data");
             (_c = this._logger) == null ? void 0 : _c.debug(`${parseError} - Body follows: ${body}`);
@@ -23743,8 +24464,8 @@ var require_dist = __commonJS({
               return;
             }
             statusCallback(
-              import_js_sdk_common5.subsystem.DataSourceState.Closed,
-              new import_js_sdk_common5.LDPollingError(import_js_sdk_common5.DataSourceErrorKind.InvalidData, "Malformed data in polling response")
+              import_js_sdk_common6.subsystem.DataSourceState.Closed,
+              new import_js_sdk_common6.LDPollingError(import_js_sdk_common6.DataSourceErrorKind.InvalidData, "Malformed data in polling response")
             );
           }
         });
@@ -23753,7 +24474,7 @@ var require_dist = __commonJS({
         this._stopped = true;
       }
     };
-    var import_js_sdk_common9 = require_cjs();
+    var import_js_sdk_common10 = require_cjs();
     function promisify(method) {
       return new Promise((resolve) => {
         method((val) => {
@@ -23850,7 +24571,7 @@ var require_dist = __commonJS({
         return (_b = (_a = this._store).getInitMetaData) == null ? void 0 : _b.call(_a);
       }
     };
-    var import_js_sdk_common6 = require_cjs();
+    var import_js_sdk_common7 = require_cjs();
     function isStale(record) {
       return Date.now() > record.expiration;
     }
@@ -24328,7 +25049,7 @@ var require_dist = __commonJS({
         var _a, _b;
         const reason = toError(err, "unknown");
         const message = `Persistent store returned error: ${reason.message}`;
-        const now = (0, import_js_sdk_common6.monotonicNow)();
+        const now = (0, import_js_sdk_common7.monotonicNow)();
         if (now - this._lastErrorLogMs >= ERROR_LOG_INTERVAL_MS) {
           this._lastErrorLogMs = now;
           (_a = this._logger) == null ? void 0 : _a.error(message);
@@ -24347,7 +25068,7 @@ var require_dist = __commonJS({
         return this._core.getDescription();
       }
     };
-    var import_js_sdk_common8 = require_cjs();
+    var import_js_sdk_common9 = require_cjs();
     var InMemoryFeatureStore = class {
       constructor() {
         this._allData = {};
@@ -24464,7 +25185,7 @@ var require_dist = __commonJS({
         return this._selector;
       }
     };
-    var import_js_sdk_common7 = require_cjs();
+    var import_js_sdk_common8 = require_cjs();
     var SupervisedOperation = class {
       constructor() {
         this._inFlight = false;
@@ -24478,7 +25199,7 @@ var require_dist = __commonJS({
       begin() {
         this._generation += 1;
         this._inFlight = true;
-        this._startedAt = (0, import_js_sdk_common7.monotonicNow)();
+        this._startedAt = (0, import_js_sdk_common8.monotonicNow)();
         return this._generation;
       }
       /**
@@ -24506,7 +25227,7 @@ var require_dist = __commonJS({
        * whether it was released.
        */
       releaseIfHung(timeoutMs) {
-        if ((0, import_js_sdk_common7.monotonicNow)() - this._startedAt < timeoutMs) {
+        if ((0, import_js_sdk_common8.monotonicNow)() - this._startedAt < timeoutMs) {
           return false;
         }
         this.invalidate();
@@ -24547,7 +25268,7 @@ var require_dist = __commonJS({
       }
     }
     var TransactionalFeatureStore = class {
-      constructor(_basePersistenceStore, _logger, _backoff = new import_js_sdk_common8.DefaultBackoff(
+      constructor(_basePersistenceStore, _logger, _backoff = new import_js_sdk_common9.DefaultBackoff(
         WRITE_BACK_INITIAL_BACKOFF_MS,
         WRITE_BACK_BACKOFF_RESET_MS
       )) {
@@ -24734,13 +25455,13 @@ var require_dist = __commonJS({
           return;
         }
         this._persistenceAvailable = true;
-        this._backoff.success((0, import_js_sdk_common8.monotonicNow)());
+        this._backoff.success((0, import_js_sdk_common9.monotonicNow)());
         this._failureLoggedThisOutage = false;
         this._slowWriteBackWarnedThisOutage = false;
         this._writeFailedDuringWriteBack = false;
         this._probe.invalidate();
         this._writeBackOp.invalidate();
-        this._writeBackEmbargoUntil = (0, import_js_sdk_common8.monotonicNow)() + WRITE_BACK_SUCCESS_EMBARGO_MS;
+        this._writeBackEmbargoUntil = (0, import_js_sdk_common9.monotonicNow)() + WRITE_BACK_SUCCESS_EMBARGO_MS;
         this._stopRecoveryPolling();
         this._cancelEmbargoRetry();
         this._cancelSlowWriteBackWarning();
@@ -24771,7 +25492,7 @@ var require_dist = __commonJS({
           if (this._persistenceAvailable) {
             return;
           }
-          if ((0, import_js_sdk_common8.monotonicNow)() < this._writeBackEmbargoUntil) {
+          if ((0, import_js_sdk_common9.monotonicNow)() < this._writeBackEmbargoUntil) {
             return;
           }
           const probe = (_a = this._basePersistenceStore.isStoreAvailable) == null ? void 0 : _a.bind(this._basePersistenceStore);
@@ -24834,7 +25555,7 @@ var require_dist = __commonJS({
             this._embargoRetryHandle = void 0;
             this._attemptRecovery();
           },
-          Math.max(this._writeBackEmbargoUntil - (0, import_js_sdk_common8.monotonicNow)(), 0)
+          Math.max(this._writeBackEmbargoUntil - (0, import_js_sdk_common9.monotonicNow)(), 0)
         );
       }
       _cancelEmbargoRetry() {
@@ -24897,7 +25618,7 @@ var require_dist = __commonJS({
         if (this._persistenceAvailable) {
           return;
         }
-        if ((0, import_js_sdk_common8.monotonicNow)() < this._writeBackEmbargoUntil) {
+        if ((0, import_js_sdk_common9.monotonicNow)() < this._writeBackEmbargoUntil) {
           this._scheduleEmbargoRetry();
           return;
         }
@@ -24935,7 +25656,7 @@ var require_dist = __commonJS({
             return;
           }
           if (this._writeFailedDuringWriteBack) {
-            this._writeBackEmbargoUntil = (0, import_js_sdk_common8.monotonicNow)() + WRITE_BACK_SUCCESS_EMBARGO_MS;
+            this._writeBackEmbargoUntil = (0, import_js_sdk_common9.monotonicNow)() + WRITE_BACK_SUCCESS_EMBARGO_MS;
             this._attemptRecovery();
             return;
           }
@@ -24954,7 +25675,7 @@ var require_dist = __commonJS({
        * attempt at the backoff deadline.
        */
       _armFailureEmbargo() {
-        this._writeBackEmbargoUntil = (0, import_js_sdk_common8.monotonicNow)() + this._backoff.fail((0, import_js_sdk_common8.monotonicNow)());
+        this._writeBackEmbargoUntil = (0, import_js_sdk_common9.monotonicNow)() + this._backoff.fail((0, import_js_sdk_common9.monotonicNow)());
         this._scheduleEmbargoRetry();
       }
       /**
@@ -24979,7 +25700,7 @@ var require_dist = __commonJS({
         }
       }
     };
-    var { initMetadataFromHeaders: initMetadataFromHeaders2 } = import_js_sdk_common9.internal;
+    var { initMetadataFromHeaders: initMetadataFromHeaders2 } = import_js_sdk_common10.internal;
     var PollingProcessor = class {
       constructor(_requestor, _pollInterval, _featureStore, _logger, _initSuccessHandler = () => {
       }, _errorHandler) {
@@ -24990,7 +25711,7 @@ var require_dist = __commonJS({
         this._initSuccessHandler = _initSuccessHandler;
         this._errorHandler = _errorHandler;
         this._stopped = false;
-        this._retryState = (0, import_js_sdk_common9.forPolling)(1e3 * this._pollInterval);
+        this._retryState = (0, import_js_sdk_common10.forPolling)(1e3 * this._pollInterval);
       }
       _scheduleNextPoll() {
         var _a;
@@ -25013,9 +25734,9 @@ var require_dist = __commonJS({
           }
           if (err) {
             const { status } = err;
-            const kind = status !== void 0 ? (0, import_js_sdk_common9.classifyHttpStatus)(status) : (0, import_js_sdk_common9.classifyTransportFailure)();
+            const kind = status !== void 0 ? (0, import_js_sdk_common10.classifyHttpStatus)(status) : (0, import_js_sdk_common10.classifyTransportFailure)();
             this._retryState.recordFailure(kind);
-            const message = (0, import_js_sdk_common9.httpErrorMessage)(err, "polling request", "will retry");
+            const message = (0, import_js_sdk_common10.httpErrorMessage)(err, "polling request", "will retry");
             if (kind === "unexpected") {
               (_a2 = this._logger) == null ? void 0 : _a2.error(message);
             } else {
@@ -25071,7 +25792,7 @@ var require_dist = __commonJS({
         this.stop();
       }
     };
-    var import_js_sdk_common10 = require_cjs();
+    var import_js_sdk_common11 = require_cjs();
     function selectorAsQueryParams(selector) {
       if (!selector) {
         return [];
@@ -25084,7 +25805,7 @@ var require_dist = __commonJS({
       ];
     }
     function processFDv1FlagsAndSegments(payloadProcessor, data) {
-      const adaptor = import_js_sdk_common10.internal.FDv1PayloadAdaptor(payloadProcessor);
+      const adaptor = import_js_sdk_common11.internal.FDv1PayloadAdaptor(payloadProcessor);
       adaptor.useSelector("FDv1Fallback").processFullTransfer(data);
     }
     var PollingProcessorFDv2 = class {
@@ -25118,34 +25839,34 @@ var require_dist = __commonJS({
           const sleepFor = Math.max(this._pollInterval * 1e3 - elapsed, 0);
           const emitFallback = () => {
             var _a3;
-            const fallbackErr = err instanceof import_js_sdk_common10.LDFlagDeliveryFallbackError ? err : new import_js_sdk_common10.LDFlagDeliveryFallbackError(
-              import_js_sdk_common10.DataSourceErrorKind.ErrorResponse,
-              err ? (0, import_js_sdk_common10.httpErrorMessage)(err, "polling request", "falling back to FDv1") : `Response header indicates to fallback to FDv1`,
+            const fallbackErr = err instanceof import_js_sdk_common11.LDFlagDeliveryFallbackError ? err : new import_js_sdk_common11.LDFlagDeliveryFallbackError(
+              import_js_sdk_common11.DataSourceErrorKind.ErrorResponse,
+              err ? (0, import_js_sdk_common11.httpErrorMessage)(err, "polling request", "falling back to FDv1") : `Response header indicates to fallback to FDv1`,
               err == null ? void 0 : err.status
             );
             (_a3 = this._logger) == null ? void 0 : _a3.warn(fallbackErr.message);
-            statusCallback(import_js_sdk_common10.subsystem.DataSourceState.Closed, fallbackErr);
+            statusCallback(import_js_sdk_common11.subsystem.DataSourceState.Closed, fallbackErr);
           };
           (_a2 = this._logger) == null ? void 0 : _a2.debug("Elapsed: %d ms, sleeping for %d ms", elapsed, sleepFor);
           if (err) {
-            if (fallbackToFDv1 || err instanceof import_js_sdk_common10.LDFlagDeliveryFallbackError) {
+            if (fallbackToFDv1 || err instanceof import_js_sdk_common11.LDFlagDeliveryFallbackError) {
               emitFallback();
               return;
             }
             const { status } = err;
-            if (status && !(0, import_js_sdk_common10.isHttpRecoverable)(status)) {
-              const message2 = (0, import_js_sdk_common10.httpErrorMessage)(err, "polling request");
+            if (status && !(0, import_js_sdk_common11.isHttpRecoverable)(status)) {
+              const message2 = (0, import_js_sdk_common11.httpErrorMessage)(err, "polling request");
               (_b = this._logger) == null ? void 0 : _b.error(message2);
               statusCallback(
-                import_js_sdk_common10.subsystem.DataSourceState.Closed,
-                new import_js_sdk_common10.LDPollingError(import_js_sdk_common10.DataSourceErrorKind.ErrorResponse, message2, status, false)
+                import_js_sdk_common11.subsystem.DataSourceState.Closed,
+                new import_js_sdk_common11.LDPollingError(import_js_sdk_common11.DataSourceErrorKind.ErrorResponse, message2, status, false)
               );
               return;
             }
-            const message = (0, import_js_sdk_common10.httpErrorMessage)(err, "polling request", "will retry");
+            const message = (0, import_js_sdk_common11.httpErrorMessage)(err, "polling request", "will retry");
             statusCallback(
-              import_js_sdk_common10.subsystem.DataSourceState.Interrupted,
-              new import_js_sdk_common10.LDPollingError(import_js_sdk_common10.DataSourceErrorKind.ErrorResponse, message, status)
+              import_js_sdk_common11.subsystem.DataSourceState.Interrupted,
+              new import_js_sdk_common11.LDPollingError(import_js_sdk_common11.DataSourceErrorKind.ErrorResponse, message, status)
             );
             (_c = this._logger) == null ? void 0 : _c.warn(message);
             this._timeoutHandle = setTimeout(() => {
@@ -25153,10 +25874,10 @@ var require_dist = __commonJS({
             }, sleepFor);
             return;
           }
-          const initMetadata = import_js_sdk_common10.internal.initMetadataFromHeaders(headers);
+          const initMetadata = import_js_sdk_common11.internal.initMetadataFromHeaders(headers);
           if (body) {
             try {
-              const payloadProcessor = new import_js_sdk_common10.internal.PayloadProcessor(
+              const payloadProcessor = new import_js_sdk_common11.internal.PayloadProcessor(
                 {
                   flag: (flag) => {
                     processFlag(flag);
@@ -25173,8 +25894,8 @@ var require_dist = __commonJS({
                     return;
                   }
                   statusCallback(
-                    import_js_sdk_common10.subsystem.DataSourceState.Interrupted,
-                    new import_js_sdk_common10.LDPollingError(errorKind, message)
+                    import_js_sdk_common11.subsystem.DataSourceState.Interrupted,
+                    new import_js_sdk_common11.LDPollingError(errorKind, message)
                   );
                 },
                 this._logger
@@ -25202,7 +25923,7 @@ var require_dist = __commonJS({
               if (fallbackToFDv1) {
                 return;
               }
-              statusCallback(import_js_sdk_common10.subsystem.DataSourceState.Valid);
+              statusCallback(import_js_sdk_common11.subsystem.DataSourceState.Valid);
             } catch (e) {
               (_e = this._logger) == null ? void 0 : _e.error("Response contained invalid data");
               (_f = this._logger) == null ? void 0 : _f.debug(`${err} - Body follows: ${body}`);
@@ -25211,9 +25932,9 @@ var require_dist = __commonJS({
                 return;
               }
               statusCallback(
-                import_js_sdk_common10.subsystem.DataSourceState.Interrupted,
-                new import_js_sdk_common10.LDPollingError(
-                  import_js_sdk_common10.DataSourceErrorKind.InvalidData,
+                import_js_sdk_common11.subsystem.DataSourceState.Interrupted,
+                new import_js_sdk_common11.LDPollingError(
+                  import_js_sdk_common11.DataSourceErrorKind.InvalidData,
                   "Malformed data in polling response"
                 )
               );
@@ -25229,7 +25950,7 @@ var require_dist = __commonJS({
       }
       start(dataCallback, statusCallback, selectorGetter) {
         this._statusCallback = statusCallback;
-        statusCallback(import_js_sdk_common10.subsystem.DataSourceState.Initializing);
+        statusCallback(import_js_sdk_common11.subsystem.DataSourceState.Initializing);
         this._poll(dataCallback, statusCallback, selectorGetter);
       }
       stop() {
@@ -25238,12 +25959,12 @@ var require_dist = __commonJS({
           clearTimeout(this._timeoutHandle);
           this._timeoutHandle = void 0;
         }
-        (_a = this._statusCallback) == null ? void 0 : _a.call(this, import_js_sdk_common10.subsystem.DataSourceState.Closed);
+        (_a = this._statusCallback) == null ? void 0 : _a.call(this, import_js_sdk_common11.subsystem.DataSourceState.Closed);
         this._stopped = true;
         this._statusCallback = void 0;
       }
     };
-    var import_js_sdk_common11 = require_cjs();
+    var import_js_sdk_common12 = require_cjs();
     var Requestor = class {
       constructor(config, _requests, baseHeaders, _path = "/sdk/latest-all", _logger, serviceEndpointsOverride) {
         this._requests = _requests;
@@ -25282,7 +26003,7 @@ var require_dist = __commonJS({
           headers: this._headers,
           timeout: this._timeoutMs
         };
-        const uri = (0, import_js_sdk_common11.getPollingUri)(this._serviceEndpoints, this._path, queryParams);
+        const uri = (0, import_js_sdk_common12.getPollingUri)(this._serviceEndpoints, this._path, queryParams);
         (_a = this._logger) == null ? void 0 : _a.debug(`Requestor making request to uri: ${uri}`);
         try {
           const { res, body } = await this._requestWithETagCache(uri, options);
@@ -25290,12 +26011,12 @@ var require_dist = __commonJS({
           const fallbackToFDv1 = res.headers.get(`x-ld-fd-fallback`) === `true`;
           const responseHeaders = Object.fromEntries(res.headers.entries());
           if (res.status !== 200 && res.status !== 304) {
-            const err = fallbackToFDv1 ? new import_js_sdk_common11.LDFlagDeliveryFallbackError(
-              import_js_sdk_common11.DataSourceErrorKind.ErrorResponse,
+            const err = fallbackToFDv1 ? new import_js_sdk_common12.LDFlagDeliveryFallbackError(
+              import_js_sdk_common12.DataSourceErrorKind.ErrorResponse,
               `Response header indicates to fallback to FDv1.`,
               res.status
-            ) : new import_js_sdk_common11.LDPollingError(
-              import_js_sdk_common11.DataSourceErrorKind.ErrorResponse,
+            ) : new import_js_sdk_common12.LDPollingError(
+              import_js_sdk_common12.DataSourceErrorKind.ErrorResponse,
               `Unexpected status code: ${res.status}`,
               res.status
             );
@@ -25307,7 +26028,7 @@ var require_dist = __commonJS({
         }
       }
     };
-    var import_js_sdk_common12 = require_cjs();
+    var import_js_sdk_common13 = require_cjs();
     var StreamingProcessor = class {
       constructor(clientContext, streamUriPath, parameters, _listeners, baseHeaders, _diagnosticsManager, _errorHandler, _streamInitialReconnectDelay = 1) {
         this._listeners = _listeners;
@@ -25321,12 +26042,12 @@ var require_dist = __commonJS({
         this._headers = __spreadValues({}, baseHeaders);
         this._logger = logger;
         this._requests = requests;
-        this._streamUri = (0, import_js_sdk_common12.getStreamingUri)(
+        this._streamUri = (0, import_js_sdk_common13.getStreamingUri)(
           basicConfiguration.serviceEndpoints,
           streamUriPath,
           parameters
         );
-        this._retryState = (0, import_js_sdk_common12.forStreaming)(1e3 * this._streamInitialReconnectDelay);
+        this._retryState = (0, import_js_sdk_common13.forStreaming)(1e3 * this._streamInitialReconnectDelay);
       }
       _logConnectionStarted() {
         this._connectionAttemptStartTime = Date.now();
@@ -25352,10 +26073,10 @@ var require_dist = __commonJS({
        */
       _retryAndHandleError(err) {
         var _a, _b;
-        const kind = err.status !== void 0 ? (0, import_js_sdk_common12.classifyHttpStatus)(err.status) : (0, import_js_sdk_common12.classifyTransportFailure)();
+        const kind = err.status !== void 0 ? (0, import_js_sdk_common13.classifyHttpStatus)(err.status) : (0, import_js_sdk_common13.classifyTransportFailure)();
         this._retryState.recordFailure(kind);
         this._logConnectionResult(false);
-        const message = (0, import_js_sdk_common12.httpErrorMessage)(err, "streaming request", "will retry");
+        const message = (0, import_js_sdk_common13.httpErrorMessage)(err, "streaming request", "will retry");
         if (kind === "unexpected") {
           (_a = this._logger) == null ? void 0 : _a.error(message);
         } else {
@@ -25449,7 +26170,7 @@ var require_dist = __commonJS({
         this.stop();
       }
     };
-    var import_js_sdk_common13 = require_cjs();
+    var import_js_sdk_common14 = require_cjs();
     var StreamingProcessorFDv2 = class {
       constructor(clientContext, _streamUriPath, _parameters, baseHeaders, _diagnosticsManager, _streamInitialReconnectDelay = 1, serviceEndpointsOverride) {
         this._streamUriPath = _streamUriPath;
@@ -25489,36 +26210,36 @@ var require_dist = __commonJS({
       _retryAndHandleError(err, statusCallback) {
         var _a, _b, _c;
         if (((_a = err.headers) == null ? void 0 : _a[`x-ld-fd-fallback`]) === `true`) {
-          const fallbackErr = new import_js_sdk_common13.LDFlagDeliveryFallbackError(
-            import_js_sdk_common13.DataSourceErrorKind.ErrorResponse,
+          const fallbackErr = new import_js_sdk_common14.LDFlagDeliveryFallbackError(
+            import_js_sdk_common14.DataSourceErrorKind.ErrorResponse,
             `Response header indicates to fallback to FDv1`,
             err.status
           );
-          statusCallback(import_js_sdk_common13.subsystem.DataSourceState.Closed, fallbackErr);
+          statusCallback(import_js_sdk_common14.subsystem.DataSourceState.Closed, fallbackErr);
           return false;
         }
-        if (!(0, import_js_sdk_common13.shouldRetry)(err)) {
-          (_b = this._logger) == null ? void 0 : _b.error((0, import_js_sdk_common13.httpErrorMessage)(err, "streaming request"));
+        if (!(0, import_js_sdk_common14.shouldRetry)(err)) {
+          (_b = this._logger) == null ? void 0 : _b.error((0, import_js_sdk_common14.httpErrorMessage)(err, "streaming request"));
           this._logConnectionResult(false);
           statusCallback(
-            import_js_sdk_common13.subsystem.DataSourceState.Closed,
-            new import_js_sdk_common13.LDStreamingError(import_js_sdk_common13.DataSourceErrorKind.ErrorResponse, err.message, err.status, false)
+            import_js_sdk_common14.subsystem.DataSourceState.Closed,
+            new import_js_sdk_common14.LDStreamingError(import_js_sdk_common14.DataSourceErrorKind.ErrorResponse, err.message, err.status, false)
           );
           return false;
         }
-        (_c = this._logger) == null ? void 0 : _c.warn((0, import_js_sdk_common13.httpErrorMessage)(err, "streaming request", "will retry"));
+        (_c = this._logger) == null ? void 0 : _c.warn((0, import_js_sdk_common14.httpErrorMessage)(err, "streaming request", "will retry"));
         this._logConnectionResult(false);
         this._logConnectionAttempt();
-        statusCallback(import_js_sdk_common13.subsystem.DataSourceState.Interrupted);
+        statusCallback(import_js_sdk_common14.subsystem.DataSourceState.Interrupted);
         return true;
       }
       start(dataCallback, statusCallback, selectorGetter) {
         var _a;
         this._logConnectionAttempt();
-        statusCallback(import_js_sdk_common13.subsystem.DataSourceState.Initializing);
+        statusCallback(import_js_sdk_common14.subsystem.DataSourceState.Initializing);
         const selector = selectorGetter == null ? void 0 : selectorGetter();
         const params = selector ? [...this._parameters, { key: "basis", value: selector }] : this._parameters;
-        const uri = (0, import_js_sdk_common13.getStreamingUri)(this._serviceEndpoints, this._streamUriPath, params);
+        const uri = (0, import_js_sdk_common14.getStreamingUri)(this._serviceEndpoints, this._streamUriPath, params);
         (_a = this._logger) == null ? void 0 : _a.debug(`Streaming processor opening event source to uri: ${uri}`);
         let fallbackRequested = false;
         const eventSource = this._requests.createEventSource(uri, {
@@ -25538,17 +26259,17 @@ var require_dist = __commonJS({
         eventSource.onopen = (e) => {
           var _a2, _b;
           (_a2 = this._logger) == null ? void 0 : _a2.info("Opened LaunchDarkly stream connection");
-          this._initMetadata = import_js_sdk_common13.internal.initMetadataFromHeaders(e.headers);
+          this._initMetadata = import_js_sdk_common14.internal.initMetadataFromHeaders(e.headers);
           if (((_b = e.headers) == null ? void 0 : _b[`x-ld-fd-fallback`]) === `true`) {
             fallbackRequested = true;
           }
-          statusCallback(import_js_sdk_common13.subsystem.DataSourceState.Valid);
+          statusCallback(import_js_sdk_common14.subsystem.DataSourceState.Valid);
         };
         eventSource.onretrying = (e) => {
           var _a2;
           (_a2 = this._logger) == null ? void 0 : _a2.info(`Will retry stream connection in ${e.delayMillis} milliseconds`);
         };
-        const payloadReader = new import_js_sdk_common13.internal.PayloadStreamReader(
+        const payloadReader = new import_js_sdk_common14.internal.PayloadStreamReader(
           eventSource,
           {
             flag: (flag) => {
@@ -25563,16 +26284,16 @@ var require_dist = __commonJS({
           (errorKind, message) => {
             var _a2;
             if (fallbackRequested) {
-              const fallbackErr = new import_js_sdk_common13.LDFlagDeliveryFallbackError(
-                import_js_sdk_common13.DataSourceErrorKind.ErrorResponse,
+              const fallbackErr = new import_js_sdk_common14.LDFlagDeliveryFallbackError(
+                import_js_sdk_common14.DataSourceErrorKind.ErrorResponse,
                 `Response header indicates to fallback to FDv1`
               );
               (_a2 = this._logger) == null ? void 0 : _a2.warn(fallbackErr.message);
-              statusCallback(import_js_sdk_common13.subsystem.DataSourceState.Closed, fallbackErr);
+              statusCallback(import_js_sdk_common14.subsystem.DataSourceState.Closed, fallbackErr);
             } else {
               statusCallback(
-                import_js_sdk_common13.subsystem.DataSourceState.Interrupted,
-                new import_js_sdk_common13.LDStreamingError(errorKind, message)
+                import_js_sdk_common14.subsystem.DataSourceState.Interrupted,
+                new import_js_sdk_common14.LDStreamingError(errorKind, message)
               );
             }
             this.stop();
@@ -25705,41 +26426,41 @@ var require_dist = __commonJS({
         });
       }
     };
+    var import_js_sdk_common16 = require_cjs();
     var import_js_sdk_common15 = require_cjs();
-    var import_js_sdk_common14 = require_cjs();
     var validations = {
-      baseUri: import_js_sdk_common14.TypeValidators.String,
-      streamUri: import_js_sdk_common14.TypeValidators.String,
-      eventsUri: import_js_sdk_common14.TypeValidators.String,
-      timeout: import_js_sdk_common14.TypeValidators.numberWithMin(1),
-      capacity: import_js_sdk_common14.TypeValidators.Number,
-      logger: import_js_sdk_common14.TypeValidators.Object,
-      featureStore: import_js_sdk_common14.TypeValidators.ObjectOrFactory,
-      dataSystem: import_js_sdk_common14.TypeValidators.Object,
-      bigSegments: import_js_sdk_common14.TypeValidators.Object,
-      updateProcessor: import_js_sdk_common14.TypeValidators.ObjectOrFactory,
-      flushInterval: import_js_sdk_common14.TypeValidators.Number,
-      pollInterval: import_js_sdk_common14.TypeValidators.numberWithMin(30),
-      proxyOptions: import_js_sdk_common14.TypeValidators.Object,
-      offline: import_js_sdk_common14.TypeValidators.Boolean,
-      stream: import_js_sdk_common14.TypeValidators.Boolean,
-      streamInitialReconnectDelay: import_js_sdk_common14.TypeValidators.Number,
-      useLdd: import_js_sdk_common14.TypeValidators.Boolean,
-      sendEvents: import_js_sdk_common14.TypeValidators.Boolean,
-      allAttributesPrivate: import_js_sdk_common14.TypeValidators.Boolean,
-      privateAttributes: import_js_sdk_common14.TypeValidators.StringArray,
-      contextKeysCapacity: import_js_sdk_common14.TypeValidators.Number,
-      contextKeysFlushInterval: import_js_sdk_common14.TypeValidators.Number,
-      tlsParams: import_js_sdk_common14.TypeValidators.Object,
-      diagnosticOptOut: import_js_sdk_common14.TypeValidators.Boolean,
-      diagnosticRecordingInterval: import_js_sdk_common14.TypeValidators.numberWithMin(60),
-      wrapperName: import_js_sdk_common14.TypeValidators.String,
-      wrapperVersion: import_js_sdk_common14.TypeValidators.String,
-      application: import_js_sdk_common14.TypeValidators.Object,
-      payloadFilterKey: import_js_sdk_common14.TypeValidators.stringMatchingRegex(/^[a-zA-Z0-9](\w|\.|-)*$/),
-      hooks: import_js_sdk_common14.TypeValidators.createTypeArray("Hook[]", {}),
-      enableEventCompression: import_js_sdk_common14.TypeValidators.Boolean,
-      dataSourceOptionsType: import_js_sdk_common14.TypeValidators.String
+      baseUri: import_js_sdk_common15.TypeValidators.String,
+      streamUri: import_js_sdk_common15.TypeValidators.String,
+      eventsUri: import_js_sdk_common15.TypeValidators.String,
+      timeout: import_js_sdk_common15.TypeValidators.numberWithMin(1),
+      capacity: import_js_sdk_common15.TypeValidators.Number,
+      logger: import_js_sdk_common15.TypeValidators.Object,
+      featureStore: import_js_sdk_common15.TypeValidators.ObjectOrFactory,
+      dataSystem: import_js_sdk_common15.TypeValidators.Object,
+      bigSegments: import_js_sdk_common15.TypeValidators.Object,
+      updateProcessor: import_js_sdk_common15.TypeValidators.ObjectOrFactory,
+      flushInterval: import_js_sdk_common15.TypeValidators.Number,
+      pollInterval: import_js_sdk_common15.TypeValidators.numberWithMin(30),
+      proxyOptions: import_js_sdk_common15.TypeValidators.Object,
+      offline: import_js_sdk_common15.TypeValidators.Boolean,
+      stream: import_js_sdk_common15.TypeValidators.Boolean,
+      streamInitialReconnectDelay: import_js_sdk_common15.TypeValidators.Number,
+      useLdd: import_js_sdk_common15.TypeValidators.Boolean,
+      sendEvents: import_js_sdk_common15.TypeValidators.Boolean,
+      allAttributesPrivate: import_js_sdk_common15.TypeValidators.Boolean,
+      privateAttributes: import_js_sdk_common15.TypeValidators.StringArray,
+      contextKeysCapacity: import_js_sdk_common15.TypeValidators.Number,
+      contextKeysFlushInterval: import_js_sdk_common15.TypeValidators.Number,
+      tlsParams: import_js_sdk_common15.TypeValidators.Object,
+      diagnosticOptOut: import_js_sdk_common15.TypeValidators.Boolean,
+      diagnosticRecordingInterval: import_js_sdk_common15.TypeValidators.numberWithMin(60),
+      wrapperName: import_js_sdk_common15.TypeValidators.String,
+      wrapperVersion: import_js_sdk_common15.TypeValidators.String,
+      application: import_js_sdk_common15.TypeValidators.Object,
+      payloadFilterKey: import_js_sdk_common15.TypeValidators.stringMatchingRegex(/^[a-zA-Z0-9](\w|\.|-)*$/),
+      hooks: import_js_sdk_common15.TypeValidators.createTypeArray("Hook[]", {}),
+      enableEventCompression: import_js_sdk_common15.TypeValidators.Boolean,
+      dataSourceOptionsType: import_js_sdk_common15.TypeValidators.String
     };
     var DEFAULT_POLL_INTERVAL = 30;
     var DEFAULT_STREAM_RECONNECT_DELAY = 1;
@@ -25762,7 +26483,7 @@ var require_dist = __commonJS({
     var defaultValues = {
       baseUri: "https://sdk.launchdarkly.com",
       streamUri: "https://stream.launchdarkly.com",
-      eventsUri: import_js_sdk_common14.ServiceEndpoints.DEFAULT_EVENTS,
+      eventsUri: import_js_sdk_common15.ServiceEndpoints.DEFAULT_EVENTS,
       stream: true,
       streamInitialReconnectDelay: DEFAULT_STREAM_RECONNECT_DELAY,
       sendEvents: true,
@@ -25792,15 +26513,15 @@ var require_dist = __commonJS({
         if (validator) {
           if (!validator.is(optionValue)) {
             if (validator.getType() === "boolean") {
-              errors.push(import_js_sdk_common14.OptionMessages.wrongOptionTypeBoolean(optionName, typeof optionValue));
+              errors.push(import_js_sdk_common15.OptionMessages.wrongOptionTypeBoolean(optionName, typeof optionValue));
               validatedOptions[optionName] = !!optionValue;
-            } else if (validator instanceof import_js_sdk_common14.NumberWithMinimum && import_js_sdk_common14.TypeValidators.Number.is(optionValue)) {
+            } else if (validator instanceof import_js_sdk_common15.NumberWithMinimum && import_js_sdk_common15.TypeValidators.Number.is(optionValue)) {
               const { min } = validator;
-              errors.push(import_js_sdk_common14.OptionMessages.optionBelowMinimum(optionName, optionValue, min));
+              errors.push(import_js_sdk_common15.OptionMessages.optionBelowMinimum(optionName, optionValue, min));
               validatedOptions[optionName] = min;
             } else {
               errors.push(
-                import_js_sdk_common14.OptionMessages.wrongOptionType(optionName, validator.getType(), typeof optionValue)
+                import_js_sdk_common15.OptionMessages.wrongOptionType(optionName, validator.getType(), typeof optionValue)
               );
               validatedOptions[optionName] = defaultValues[optionName];
             }
@@ -25808,7 +26529,7 @@ var require_dist = __commonJS({
             validatedOptions[optionName] = optionValue;
           }
         } else {
-          (_a = options.logger) == null ? void 0 : _a.warn(import_js_sdk_common14.OptionMessages.unknownOption(optionName));
+          (_a = options.logger) == null ? void 0 : _a.warn(import_js_sdk_common15.OptionMessages.unknownOption(optionName));
         }
       });
       return { errors, validatedOptions };
@@ -25823,18 +26544,18 @@ var require_dist = __commonJS({
         return;
       }
       if (!streamingEndpointSpecified && validatedOptions.stream) {
-        (_a = validatedOptions.logger) == null ? void 0 : _a.warn(import_js_sdk_common14.OptionMessages.partialEndpoint("streamUri"));
+        (_a = validatedOptions.logger) == null ? void 0 : _a.warn(import_js_sdk_common15.OptionMessages.partialEndpoint("streamUri"));
       }
       if (!pollingEndpointSpecified) {
-        (_b = validatedOptions.logger) == null ? void 0 : _b.warn(import_js_sdk_common14.OptionMessages.partialEndpoint("baseUri"));
+        (_b = validatedOptions.logger) == null ? void 0 : _b.warn(import_js_sdk_common15.OptionMessages.partialEndpoint("baseUri"));
       }
       if (!eventEndpointSpecified && validatedOptions.sendEvents) {
-        (_c = validatedOptions.logger) == null ? void 0 : _c.warn(import_js_sdk_common14.OptionMessages.partialEndpoint("eventsUri"));
+        (_c = validatedOptions.logger) == null ? void 0 : _c.warn(import_js_sdk_common15.OptionMessages.partialEndpoint("eventsUri"));
       }
     }
     var fdv1FallbackValidations = {
-      baseUri: import_js_sdk_common14.TypeValidators.String,
-      pollInterval: import_js_sdk_common14.TypeValidators.numberWithMin(30)
+      baseUri: import_js_sdk_common15.TypeValidators.String,
+      pollInterval: import_js_sdk_common15.TypeValidators.numberWithMin(30)
     };
     function validateFDv1FallbackOptions(options) {
       const errors = [];
@@ -25843,14 +26564,14 @@ var require_dist = __commonJS({
         const optionValue = options[optionName];
         const validator = fdv1FallbackValidations[optionName];
         if (!validator) {
-          errors.push(import_js_sdk_common14.OptionMessages.unknownOption(`dataSystem.fdv1Fallback.${optionName}`));
+          errors.push(import_js_sdk_common15.OptionMessages.unknownOption(`dataSystem.fdv1Fallback.${optionName}`));
           return;
         }
         if (!validator.is(optionValue)) {
-          if (validator instanceof import_js_sdk_common14.NumberWithMinimum && import_js_sdk_common14.TypeValidators.Number.is(optionValue)) {
+          if (validator instanceof import_js_sdk_common15.NumberWithMinimum && import_js_sdk_common15.TypeValidators.Number.is(optionValue)) {
             const { min } = validator;
             errors.push(
-              import_js_sdk_common14.OptionMessages.optionBelowMinimum(
+              import_js_sdk_common15.OptionMessages.optionBelowMinimum(
                 `dataSystem.fdv1Fallback.${optionName}`,
                 optionValue,
                 min
@@ -25859,7 +26580,7 @@ var require_dist = __commonJS({
             validatedOptions[optionName] = min;
           } else {
             errors.push(
-              import_js_sdk_common14.OptionMessages.wrongOptionType(
+              import_js_sdk_common15.OptionMessages.wrongOptionType(
                 `dataSystem.fdv1Fallback.${optionName}`,
                 validator.getType(),
                 typeof optionValue
@@ -25877,15 +26598,15 @@ var require_dist = __commonJS({
         return [];
       }
       delete validatedDataSource.baseUri;
-      return [import_js_sdk_common14.OptionMessages.unknownOption("dataSystem.dataSource.baseUri")];
+      return [import_js_sdk_common15.OptionMessages.unknownOption("dataSystem.dataSource.baseUri")];
     }
     function validateDataSystemOptions(options) {
       const allErrors = [];
       const validatedOptions = __spreadValues({}, options);
-      if (options.persistentStore && !import_js_sdk_common14.TypeValidators.ObjectOrFactory.is(options.persistentStore)) {
+      if (options.persistentStore && !import_js_sdk_common15.TypeValidators.ObjectOrFactory.is(options.persistentStore)) {
         validatedOptions.persistentStore = void 0;
         allErrors.push(
-          import_js_sdk_common14.OptionMessages.wrongOptionType(
+          import_js_sdk_common15.OptionMessages.wrongOptionType(
             "persistentStore",
             "LDFeatureStore",
             typeof options.persistentStore
@@ -25893,7 +26614,7 @@ var require_dist = __commonJS({
         );
       }
       if (options.fdv1Fallback !== void 0 && options.fdv1Fallback !== null) {
-        if (import_js_sdk_common14.TypeValidators.Object.is(options.fdv1Fallback)) {
+        if (import_js_sdk_common15.TypeValidators.Object.is(options.fdv1Fallback)) {
           const { errors: fbErrors, validatedOptions: fbValidated } = validateFDv1FallbackOptions(
             options.fdv1Fallback
           );
@@ -25902,13 +26623,25 @@ var require_dist = __commonJS({
         } else {
           validatedOptions.fdv1Fallback = void 0;
           allErrors.push(
-            import_js_sdk_common14.OptionMessages.wrongOptionType(
+            import_js_sdk_common15.OptionMessages.wrongOptionType(
               "dataSystem.fdv1Fallback",
               "FDv1FallbackConfiguration",
               typeof options.fdv1Fallback
             )
           );
         }
+      }
+      if (options.overrides === null) {
+        validatedOptions.overrides = void 0;
+      } else if (options.overrides !== void 0 && !import_js_sdk_common15.TypeValidators.ObjectOrFactory.is(options.overrides)) {
+        validatedOptions.overrides = void 0;
+        allErrors.push(
+          import_js_sdk_common15.OptionMessages.wrongOptionType(
+            "dataSystem.overrides",
+            "LDOverrideSourceOptions",
+            typeof options.overrides
+          )
+        );
       }
       if (options.dataSource) {
         let errors;
@@ -25937,7 +26670,7 @@ var require_dist = __commonJS({
         } else {
           validatedDataSourceOptions = defaultStandardDataSourceOptions;
           errors = [
-            import_js_sdk_common14.OptionMessages.wrongOptionType(
+            import_js_sdk_common15.OptionMessages.wrongOptionType(
               "dataSource",
               "DataSourceOptions",
               typeof options.dataSource
@@ -25975,19 +26708,20 @@ var require_dist = __commonJS({
             dataSource: validatedDSOptions.dataSource,
             useLdd: validatedDSOptions.useLdd,
             fdv1Fallback: validatedDSOptions.fdv1Fallback,
+            overrides: validatedDSOptions.overrides,
             featureStoreFactory: (clientContext) => {
               const { persistentStore } = validatedDSOptions;
               let store;
               if (persistentStore === void 0) {
                 store = new InMemoryFeatureStore();
-              } else if (import_js_sdk_common14.TypeValidators.Function.is(persistentStore)) {
+              } else if (import_js_sdk_common15.TypeValidators.Function.is(persistentStore)) {
                 store = persistentStore(
                   clientContext
                 );
               } else {
                 store = persistentStore;
               }
-              if (import_js_sdk_common14.TypeValidators.Function.is(store.applyChanges)) {
+              if (import_js_sdk_common15.TypeValidators.Function.is(store.applyChanges)) {
                 return store;
               }
               return new TransactionalFeatureStore(store, this.logger);
@@ -25998,7 +26732,7 @@ var require_dist = __commonJS({
             (_a2 = this.logger) == null ? void 0 : _a2.warn(error2);
           });
         }
-        this.serviceEndpoints = new import_js_sdk_common14.ServiceEndpoints(
+        this.serviceEndpoints = new import_js_sdk_common15.ServiceEndpoints(
           validatedOptions.streamUri,
           validatedOptions.baseUri,
           validatedOptions.eventsUri,
@@ -26027,14 +26761,14 @@ var require_dist = __commonJS({
         this.wrapperName = validatedOptions.wrapperName;
         this.payloadFilterKey = validatedOptions.payloadFilterKey;
         this.wrapperVersion = validatedOptions.wrapperVersion;
-        this.tags = new import_js_sdk_common14.ApplicationTags(validatedOptions);
+        this.tags = new import_js_sdk_common15.ApplicationTags(validatedOptions);
         this.diagnosticRecordingInterval = validatedOptions.diagnosticRecordingInterval;
-        if (import_js_sdk_common14.TypeValidators.Function.is(validatedOptions.updateProcessor)) {
+        if (import_js_sdk_common15.TypeValidators.Function.is(validatedOptions.updateProcessor)) {
           this.updateProcessorFactory = validatedOptions.updateProcessor;
         } else {
           this.updateProcessorFactory = () => validatedOptions.updateProcessor;
         }
-        if (import_js_sdk_common14.TypeValidators.Function.is(validatedOptions.featureStore)) {
+        if (import_js_sdk_common15.TypeValidators.Function.is(validatedOptions.featureStore)) {
           this.featureStoreFactory = validatedOptions.featureStore;
         } else {
           this.featureStoreFactory = () => validatedOptions.featureStore;
@@ -26050,20 +26784,20 @@ var require_dist = __commonJS({
       let pollingIntervalMillis;
       if ((_a = config.dataSystem) == null ? void 0 : _a.dataSource) {
         if ((isStandardOptions(config.dataSystem.dataSource) || isPollingOnlyOptions(config.dataSystem.dataSource)) && config.dataSystem.dataSource.pollInterval) {
-          pollingIntervalMillis = (0, import_js_sdk_common15.secondsToMillis)(config.dataSystem.dataSource.pollInterval);
+          pollingIntervalMillis = (0, import_js_sdk_common16.secondsToMillis)(config.dataSystem.dataSource.pollInterval);
         }
       } else {
-        pollingIntervalMillis = (0, import_js_sdk_common15.secondsToMillis)(config.pollInterval);
+        pollingIntervalMillis = (0, import_js_sdk_common16.secondsToMillis)(config.pollInterval);
       }
       let reconnectTimeMillis;
       if ((_b = config.dataSystem) == null ? void 0 : _b.dataSource) {
         if ((isStandardOptions(config.dataSystem.dataSource) || isStreamingOnlyOptions(config.dataSystem.dataSource)) && config.dataSystem.dataSource.streamInitialReconnectDelay) {
-          reconnectTimeMillis = (0, import_js_sdk_common15.secondsToMillis)(
+          reconnectTimeMillis = (0, import_js_sdk_common16.secondsToMillis)(
             config.dataSystem.dataSource.streamInitialReconnectDelay
           );
         }
       } else {
-        reconnectTimeMillis = (0, import_js_sdk_common15.secondsToMillis)(config.streamInitialReconnectDelay);
+        reconnectTimeMillis = (0, import_js_sdk_common16.secondsToMillis)(config.streamInitialReconnectDelay);
       }
       let streamDisabled;
       if ((_c = config.dataSystem) == null ? void 0 : _c.dataSource) {
@@ -26078,12 +26812,12 @@ var require_dist = __commonJS({
         eventsCapacity: config.eventsCapacity,
         // Node doesn't distinguish between these two kinds of timeouts. It is unlikely other web
         // based implementations would be able to either.
-        connectTimeoutMillis: (0, import_js_sdk_common15.secondsToMillis)(config.timeout),
-        socketTimeoutMillis: (0, import_js_sdk_common15.secondsToMillis)(config.timeout),
-        eventsFlushIntervalMillis: (0, import_js_sdk_common15.secondsToMillis)(config.flushInterval)
+        connectTimeoutMillis: (0, import_js_sdk_common16.secondsToMillis)(config.timeout),
+        socketTimeoutMillis: (0, import_js_sdk_common16.secondsToMillis)(config.timeout),
+        eventsFlushIntervalMillis: (0, import_js_sdk_common16.secondsToMillis)(config.flushInterval)
       }, pollingIntervalMillis ? { pollingIntervalMillis } : null), reconnectTimeMillis ? { reconnectTimeMillis } : null), {
-        contextKeysFlushIntervalMillis: (0, import_js_sdk_common15.secondsToMillis)(config.contextKeysFlushInterval),
-        diagnosticRecordingIntervalMillis: (0, import_js_sdk_common15.secondsToMillis)(config.diagnosticRecordingInterval),
+        contextKeysFlushIntervalMillis: (0, import_js_sdk_common16.secondsToMillis)(config.contextKeysFlushInterval),
+        diagnosticRecordingIntervalMillis: (0, import_js_sdk_common16.secondsToMillis)(config.diagnosticRecordingInterval),
         streamingDisabled: streamDisabled,
         usingRelayDaemon: (_f = (_e = config.dataSystem) == null ? void 0 : _e.useLdd) != null ? _f : config.useLdd,
         offline: config.offline,
@@ -26104,7 +26838,7 @@ var require_dist = __commonJS({
       return res;
     }
     var ITERATION_RECURSION_LIMIT = 50;
-    function seriesAsync(collection, check, all, index, cb) {
+    function seriesAsync(collection, check, all, index, cb, onError) {
       if (!collection) {
         cb(false);
         return;
@@ -26122,28 +26856,35 @@ var require_dist = __commonJS({
           }
           if (collection.length > ITERATION_RECURSION_LIMIT) {
             Promise.resolve().then(() => {
-              seriesAsync(collection, check, all, index + 1, cb);
+              try {
+                seriesAsync(collection, check, all, index + 1, cb, onError);
+              } catch (err) {
+                if (!onError) {
+                  throw err;
+                }
+                onError(err);
+              }
             });
           } else {
-            seriesAsync(collection, check, all, index + 1, cb);
+            seriesAsync(collection, check, all, index + 1, cb, onError);
           }
         });
       } else {
         cb(all);
       }
     }
-    function allSeriesAsync(collection, check, cb) {
-      seriesAsync(collection, check, true, 0, cb);
+    function allSeriesAsync(collection, check, cb, onError) {
+      seriesAsync(collection, check, true, 0, cb, onError);
     }
-    function firstSeriesAsync(collection, check, cb) {
-      seriesAsync(collection, check, false, 0, cb);
+    function firstSeriesAsync(collection, check, cb, onError) {
+      seriesAsync(collection, check, false, 0, cb, onError);
     }
-    function allAsync(collection, check, cb) {
+    function allAsync(collection, check, cb, onError) {
       if (!collection) {
         cb(false);
         return;
       }
-      Promise.all(
+      const completion = Promise.all(
         collection == null ? void 0 : collection.map(
           (item) => new Promise((resolve) => {
             check(item, resolve);
@@ -26152,6 +26893,9 @@ var require_dist = __commonJS({
       ).then((results) => {
         cb(results.every((success) => success));
       });
+      if (onError) {
+        completion.catch(onError);
+      }
     }
     var Reasons = class {
       static prerequisiteFailed(prerequisiteKey) {
@@ -26169,6 +26913,7 @@ var require_dist = __commonJS({
         this.isError = isError;
         this.detail = detail;
         this.message = message;
+        this.overrideAffected = false;
         this.isError = isError;
         this.detail = detail;
         this.message = message;
@@ -26198,7 +26943,7 @@ var require_dist = __commonJS({
         });
       }
     };
-    var import_js_sdk_common19 = require_cjs();
+    var import_js_sdk_common20 = require_cjs();
     function valueForBucketing(value) {
       if (typeof value === "string") {
         return value;
@@ -26247,18 +26992,18 @@ var require_dist = __commonJS({
         return [hashVal / 1152921504606847e3, true];
       }
     };
+    var import_js_sdk_common18 = require_cjs();
     var import_js_sdk_common17 = require_cjs();
-    var import_js_sdk_common16 = require_cjs();
-    var { ErrorKinds } = import_js_sdk_common16.internal;
-    var KEY_ATTR_REF = new import_js_sdk_common16.AttributeReference("key");
+    var { ErrorKinds } = import_js_sdk_common17.internal;
+    var KEY_ATTR_REF = new import_js_sdk_common17.AttributeReference("key");
     function getVariation(flag, index, reason) {
-      if (import_js_sdk_common16.TypeValidators.Number.is(index) && index >= 0 && index < flag.variations.length) {
+      if (import_js_sdk_common17.TypeValidators.Number.is(index) && index >= 0 && index < flag.variations.length) {
         return EvalResult.forSuccess(flag.variations[index], reason, index);
       }
       return EvalResult.forError(ErrorKinds.MalformedFlag, "Invalid variation index in flag");
     }
     function getOffVariation(flag, reason) {
-      if (!import_js_sdk_common16.TypeValidators.Number.is(flag.offVariation)) {
+      if (!import_js_sdk_common17.TypeValidators.Number.is(flag.offVariation)) {
         return EvalResult.forSuccess(null, reason);
       }
       return getVariation(flag, flag.offVariation, reason);
@@ -26283,7 +27028,7 @@ var require_dist = __commonJS({
         return firstResult(flag.targets, (target) => evalTarget(flag, target, context));
       }
       return firstResult(flag.contextTargets, (target) => {
-        if (!target.contextKind || target.contextKind === import_js_sdk_common17.Context.UserKind) {
+        if (!target.contextKind || target.contextKind === import_js_sdk_common18.Context.UserKind) {
           const userTarget = (flag.targets || []).find((ut) => ut.variation === target.variation);
           if (userTarget) {
             return evalTarget(flag, userTarget, context);
@@ -26297,10 +27042,10 @@ var require_dist = __commonJS({
       return `${segment.key}.g${segment.generation}`;
     }
     var import_parse = __toESM2(require_parse2(), 1);
-    var import_js_sdk_common18 = require_cjs();
+    var import_js_sdk_common19 = require_cjs();
     var VERSION_COMPONENTS_REGEX = /^\d+(\.\d+)?(\.\d+)?/;
     function parseSemver(input) {
-      if (import_js_sdk_common18.TypeValidators.String.is(input) && !input.startsWith("v")) {
+      if (import_js_sdk_common19.TypeValidators.String.is(input) && !input.startsWith("v")) {
         const parsed = (0, import_parse.default)(input);
         if (parsed) {
           return parsed;
@@ -26352,19 +27097,19 @@ var require_dist = __commonJS({
     }
     var operators = {
       in: (a, b) => a === b,
-      endsWith: makeOperator((a, b) => a.endsWith(b), import_js_sdk_common18.TypeValidators.String),
-      startsWith: makeOperator((a, b) => a.startsWith(b), import_js_sdk_common18.TypeValidators.String),
+      endsWith: makeOperator((a, b) => a.endsWith(b), import_js_sdk_common19.TypeValidators.String),
+      startsWith: makeOperator((a, b) => a.startsWith(b), import_js_sdk_common19.TypeValidators.String),
       matches: makeOperator(
         (value, pattern) => safeRegexMatch(pattern, value),
-        import_js_sdk_common18.TypeValidators.String
+        import_js_sdk_common19.TypeValidators.String
       ),
-      contains: makeOperator((a, b) => a.indexOf(b) > -1, import_js_sdk_common18.TypeValidators.String),
-      lessThan: makeOperator((a, b) => a < b, import_js_sdk_common18.TypeValidators.Number),
-      lessThanOrEqual: makeOperator((a, b) => a <= b, import_js_sdk_common18.TypeValidators.Number),
-      greaterThan: makeOperator((a, b) => a > b, import_js_sdk_common18.TypeValidators.Number),
-      greaterThanOrEqual: makeOperator((a, b) => a >= b, import_js_sdk_common18.TypeValidators.Number),
-      before: makeOperator((a, b) => a < b, import_js_sdk_common18.TypeValidators.Date, parseDate),
-      after: makeOperator((a, b) => a > b, import_js_sdk_common18.TypeValidators.Date, parseDate),
+      contains: makeOperator((a, b) => a.indexOf(b) > -1, import_js_sdk_common19.TypeValidators.String),
+      lessThan: makeOperator((a, b) => a < b, import_js_sdk_common19.TypeValidators.Number),
+      lessThanOrEqual: makeOperator((a, b) => a <= b, import_js_sdk_common19.TypeValidators.Number),
+      greaterThan: makeOperator((a, b) => a > b, import_js_sdk_common19.TypeValidators.Number),
+      greaterThanOrEqual: makeOperator((a, b) => a >= b, import_js_sdk_common19.TypeValidators.Number),
+      before: makeOperator((a, b) => a < b, import_js_sdk_common19.TypeValidators.Date, parseDate),
+      after: makeOperator((a, b) => a > b, import_js_sdk_common19.TypeValidators.Date, parseDate),
       semVerEqual: semVerOperator((a, b) => a.compare(b) === 0),
       semVerLessThan: semVerOperator((a, b) => a.compare(b) < 0),
       semVerGreaterThan: semVerOperator((a, b) => a.compare(b) > 0)
@@ -26454,7 +27199,7 @@ var require_dist = __commonJS({
       }
       return void 0;
     }
-    var { ErrorKinds: ErrorKinds2 } = import_js_sdk_common19.internal;
+    var { ErrorKinds: ErrorKinds2 } = import_js_sdk_common20.internal;
     var bigSegmentsStatusPriority = {
       HEALTHY: 1,
       STALE: 2,
@@ -26479,6 +27224,29 @@ var require_dist = __commonJS({
     function makeError(result) {
       return { error: true, isMatch: false, result };
     }
+    function deliverResult(state, res, cb) {
+      if (state.delivered) {
+        return;
+      }
+      state.delivered = true;
+      if (state.bigSegmentsStatus) {
+        res.detail.reason = __spreadProps(__spreadValues({}, res.detail.reason), {
+          bigSegmentsStatus: state.bigSegmentsStatus
+        });
+      }
+      if (state.overrideAffected) {
+        res.detail.reason = markOverrideAffected(res.detail.reason);
+        res.overrideAffected = true;
+      }
+      if (state.prerequisites) {
+        res.prerequisites = state.prerequisites;
+      }
+      res.events = state.events;
+      cb(res);
+    }
+    function errorMessage(err) {
+      return err instanceof Error ? err.message : String(err);
+    }
     var Evaluator = class {
       constructor(platform22, queries) {
         this._queries = queries;
@@ -26490,27 +27258,36 @@ var require_dist = __commonJS({
         });
       }
       evaluateCb(flag, context, cb, eventFactory) {
-        const state = {};
-        this._evaluateInternal(
-          flag,
-          context,
-          state,
-          [],
-          (res) => {
-            if (state.bigSegmentsStatus) {
-              res.detail.reason = __spreadProps(__spreadValues({}, res.detail.reason), {
-                bigSegmentsStatus: state.bigSegmentsStatus
-              });
+        const state = {
+          overrideAffected: isOverrideEntry(flag),
+          delivered: false,
+          onError: (err) => {
+            if (state.delivered) {
+              throw err;
             }
-            if (state.prerequisites) {
-              res.prerequisites = state.prerequisites;
-            }
-            res.events = state.events;
-            cb(res);
-          },
-          true,
-          eventFactory
-        );
+            deliverResult(
+              state,
+              EvalResult.forError(
+                ErrorKinds2.MalformedFlag,
+                `Flag "${flag.key}" has a malformed definition, or references a malformed prerequisite or segment: ${errorMessage(err)}`
+              ),
+              cb
+            );
+          }
+        };
+        try {
+          this._evaluateInternal(
+            flag,
+            context,
+            state,
+            [],
+            (res) => deliverResult(state, res, cb),
+            true,
+            eventFactory
+          );
+        } catch (err) {
+          state.onError(err);
+        }
       }
       /**
        * Evaluate the given flag against the given context. This internal method is entered
@@ -26587,47 +27364,68 @@ var require_dist = __commonJS({
             }
             const updatedVisitedFlags = [...visitedFlags, prereq.key];
             this._queries.getFlag(prereq.key, (prereqFlag) => {
-              if (!prereqFlag) {
-                prereqResult = getOffVariation(flag, Reasons.prerequisiteFailed(prereq.key));
-                iterCb(false);
-                return;
+              const parentOverrideAffected = state.overrideAffected;
+              try {
+                if (!prereqFlag) {
+                  prereqResult = getOffVariation(flag, Reasons.prerequisiteFailed(prereq.key));
+                  iterCb(false);
+                  return;
+                }
+                state.overrideAffected = isOverrideEntry(prereqFlag);
+                this._evaluateInternal(
+                  prereqFlag,
+                  context,
+                  state,
+                  updatedVisitedFlags,
+                  (res) => {
+                    var _a, _b;
+                    const prereqOverrideAffected = state.overrideAffected;
+                    state.overrideAffected = parentOverrideAffected || prereqOverrideAffected;
+                    if (prereqOverrideAffected) {
+                      res.detail.reason = markOverrideAffected(res.detail.reason);
+                      res.overrideAffected = true;
+                    }
+                    (_a = state.events) != null ? _a : state.events = [];
+                    if (topLevel) {
+                      (_b = state.prerequisites) != null ? _b : state.prerequisites = [];
+                      state.prerequisites.push(prereqFlag.key);
+                    }
+                    if (eventFactory) {
+                      state.events.push(
+                        eventFactory.evalEventServer(
+                          prereqFlag,
+                          context,
+                          res.detail,
+                          null,
+                          flag,
+                          res.overrideAffected
+                        )
+                      );
+                    }
+                    if (res.isError) {
+                      prereqResult = res;
+                      return iterCb(false);
+                    }
+                    if (res.isOff || res.detail.variationIndex !== prereq.variation) {
+                      prereqResult = getOffVariation(flag, Reasons.prerequisiteFailed(prereq.key));
+                      return iterCb(false);
+                    }
+                    return iterCb(true);
+                  },
+                  false,
+                  // topLevel false evaluating the prerequisite.
+                  eventFactory
+                );
+              } catch (err) {
+                state.overrideAffected = parentOverrideAffected || state.overrideAffected;
+                state.onError(err);
               }
-              this._evaluateInternal(
-                prereqFlag,
-                context,
-                state,
-                updatedVisitedFlags,
-                (res) => {
-                  var _a, _b;
-                  (_a = state.events) != null ? _a : state.events = [];
-                  if (topLevel) {
-                    (_b = state.prerequisites) != null ? _b : state.prerequisites = [];
-                    state.prerequisites.push(prereqFlag.key);
-                  }
-                  if (eventFactory) {
-                    state.events.push(
-                      eventFactory.evalEventServer(prereqFlag, context, res.detail, null, flag)
-                    );
-                  }
-                  if (res.isError) {
-                    prereqResult = res;
-                    return iterCb(false);
-                  }
-                  if (res.isOff || res.detail.variationIndex !== prereq.variation) {
-                    prereqResult = getOffVariation(flag, Reasons.prerequisiteFailed(prereq.key));
-                    return iterCb(false);
-                  }
-                  return iterCb(true);
-                },
-                false,
-                // topLevel false evaluating the prerequisite.
-                eventFactory
-              );
             });
           },
           () => {
             cb(prereqResult);
-          }
+          },
+          state.onError
         );
       }
       /**
@@ -26649,7 +27447,8 @@ var require_dist = __commonJS({
               iterCb(!!res);
             });
           },
-          () => cb(ruleResult)
+          () => cb(ruleResult),
+          state.onError
         );
       }
       _clauseMatchContext(clause, context, segmentsVisited, state, cb) {
@@ -26659,24 +27458,31 @@ var require_dist = __commonJS({
             clause.values,
             (value, _index, iterCb) => {
               this._queries.getSegment(value, (segment) => {
-                if (segment) {
-                  if (segmentsVisited.includes(segment.key)) {
-                    errorResult = EvalResult.forError(
-                      ErrorKinds2.MalformedFlag,
-                      `Segment rule referencing segment ${segment.key} caused a circular reference. This is probably a temporary condition due to an incomplete update`
-                    );
-                    iterCb(true);
-                    return;
-                  }
-                  const newVisited = [...segmentsVisited, segment == null ? void 0 : segment.key];
-                  this.segmentMatchContext(segment, context, state, newVisited, (res) => {
-                    if (res.error) {
-                      errorResult = res.result;
+                try {
+                  if (segment) {
+                    if (isOverrideEntry(segment)) {
+                      state.overrideAffected = true;
                     }
-                    iterCb(res.error || res.isMatch);
-                  });
-                } else {
-                  iterCb(false);
+                    if (segmentsVisited.includes(segment.key)) {
+                      errorResult = EvalResult.forError(
+                        ErrorKinds2.MalformedFlag,
+                        `Segment rule referencing segment ${segment.key} caused a circular reference. This is probably a temporary condition due to an incomplete update`
+                      );
+                      iterCb(true);
+                      return;
+                    }
+                    const newVisited = [...segmentsVisited, segment == null ? void 0 : segment.key];
+                    this.segmentMatchContext(segment, context, state, newVisited, (res) => {
+                      if (res.error) {
+                        errorResult = res.result;
+                      }
+                      iterCb(res.error || res.isMatch);
+                    });
+                  } else {
+                    iterCb(false);
+                  }
+                } catch (err) {
+                  state.onError(err);
                 }
               });
             },
@@ -26685,7 +27491,8 @@ var require_dist = __commonJS({
                 return cb(makeError(errorResult));
               }
               return cb(makeMatch(maybeNegate(clause, match)));
-            }
+            },
+            state.onError
           );
           return;
         }
@@ -26732,7 +27539,8 @@ var require_dist = __commonJS({
               );
             }
             return cb(void 0);
-          }
+          },
+          state.onError
         );
       }
       _variationForContext(varOrRollout, context, flag, reason) {
@@ -26825,7 +27633,8 @@ var require_dist = __commonJS({
               return cb(makeMatch(bucket < rule.weight / 1e5));
             }
             return cb(makeMatch(false));
-          }
+          },
+          state.onError
         );
       }
       simpleSegmentMatchContext(segment, context, state, segmentsVisited, cb) {
@@ -26850,7 +27659,8 @@ var require_dist = __commonJS({
               return cb(makeError(evalResult));
             }
             return cb(makeMatch(matched));
-          }
+          },
+          state.onError
         );
       }
       segmentMatchContext(segment, context, state, segmentsVisited, cb) {
@@ -26878,7 +27688,7 @@ var require_dist = __commonJS({
             segment,
             context,
             state
-          ).then(cb);
+          ).then(cb).catch(state.onError);
           return;
         }
         this._queries.getBigSegmentsMembership(keyForBigSegment).then((result) => {
@@ -26896,13 +27706,13 @@ var require_dist = __commonJS({
               "NOT_CONFIGURED"
             );
           }
-          this.bigSegmentMatchContext(
+          return this.bigSegmentMatchContext(
             state.bigSegmentsMembership[keyForBigSegment],
             segment,
             context,
             state
-          ).then(cb);
-        });
+          );
+        }).then(cb).catch(state.onError);
       }
       bigSegmentMatchContext(membership, segment, context, state) {
         const segmentRef = makeBigSegmentRef(segment);
@@ -26931,7 +27741,7 @@ var require_dist = __commonJS({
         this._contextKeysCache.clear();
       }
     };
-    var import_js_sdk_common20 = require_cjs();
+    var import_js_sdk_common21 = require_cjs();
     function isExperiment(flag, reason) {
       if (reason) {
         if (reason.inExperiment) {
@@ -26953,8 +27763,8 @@ var require_dist = __commonJS({
       }
       return false;
     }
-    var EventFactory = class extends import_js_sdk_common20.internal.EventFactoryBase {
-      evalEventServer(flag, context, detail, defaultVal, prereqOfFlag) {
+    var EventFactory = class extends import_js_sdk_common21.internal.EventFactoryBase {
+      evalEventServer(flag, context, detail, defaultVal, prereqOfFlag, overrideAffected) {
         var _a;
         const addExperimentData = isExperiment(flag, detail.reason);
         return super.evalEvent({
@@ -26964,6 +27774,7 @@ var require_dist = __commonJS({
           defaultVal,
           excludeFromSummaries: flag.excludeFromSummaries,
           flagKey: flag.key,
+          overrideAffected,
           prereqOfFlagKey: prereqOfFlag == null ? void 0 : prereqOfFlag.key,
           reason: detail.reason,
           samplingRatio: flag.samplingRatio,
@@ -26981,13 +27792,13 @@ var require_dist = __commonJS({
         this._flagValues = {};
         this._flagMetadata = {};
       }
-      addFlag(flag, value, variation, reason, trackEvents, trackReason, detailsOnlyIfTracked, prerequisites) {
+      addFlag(flag, value, variation, reason, trackEvents, trackReason, debugEventsUntilDate, detailsOnlyIfTracked, prerequisites) {
         this._flagValues[flag.key] = value;
         const meta = {};
         if (variation !== void 0) {
           meta.variation = variation;
         }
-        const omitDetails = detailsOnlyIfTracked && !trackEvents && !trackReason && flag.debugEventsUntilDate === void 0;
+        const omitDetails = detailsOnlyIfTracked && !trackEvents && !trackReason && debugEventsUntilDate === void 0;
         if (!omitDetails) {
           meta.version = flag.version;
         }
@@ -27000,8 +27811,8 @@ var require_dist = __commonJS({
         if (trackReason) {
           meta.trackReason = true;
         }
-        if (flag.debugEventsUntilDate !== void 0) {
-          meta.debugEventsUntilDate = flag.debugEventsUntilDate;
+        if (debugEventsUntilDate !== void 0) {
+          meta.debugEventsUntilDate = debugEventsUntilDate;
         }
         if (prerequisites && prerequisites.length) {
           meta.prerequisites = prerequisites;
@@ -27125,9 +27936,9 @@ var require_dist = __commonJS({
         this._hooks.push(hook);
       }
     };
-    var import_js_sdk_common21 = require_cjs();
+    var import_js_sdk_common22 = require_cjs();
     function isOperation(value) {
-      if (!import_js_sdk_common21.TypeValidators.String.is(value)) {
+      if (!import_js_sdk_common22.TypeValidators.String.is(value)) {
         return false;
       }
       return value === "read" || value === "write";
@@ -27147,10 +27958,10 @@ var require_dist = __commonJS({
     function areValidNumbers(values) {
       const oldValue = values.old;
       const newValue = values.new;
-      if (oldValue !== void 0 && !import_js_sdk_common21.TypeValidators.Number.is(oldValue)) {
+      if (oldValue !== void 0 && !import_js_sdk_common22.TypeValidators.Number.is(oldValue)) {
         return false;
       }
-      if (newValue !== void 0 && !import_js_sdk_common21.TypeValidators.Number.is(newValue)) {
+      if (newValue !== void 0 && !import_js_sdk_common22.TypeValidators.Number.is(newValue)) {
         return false;
       }
       return true;
@@ -27158,20 +27969,20 @@ var require_dist = __commonJS({
     function areValidBooleans(values) {
       const oldValue = values.old;
       const newValue = values.new;
-      if (oldValue !== void 0 && !import_js_sdk_common21.TypeValidators.Boolean.is(oldValue)) {
+      if (oldValue !== void 0 && !import_js_sdk_common22.TypeValidators.Boolean.is(oldValue)) {
         return false;
       }
-      if (newValue !== void 0 && !import_js_sdk_common21.TypeValidators.Boolean.is(newValue)) {
+      if (newValue !== void 0 && !import_js_sdk_common22.TypeValidators.Boolean.is(newValue)) {
         return false;
       }
       return true;
     }
     function validateMeasurement(measurement) {
-      if (!import_js_sdk_common21.TypeValidators.String.is(measurement.key) || measurement.key === "") {
+      if (!import_js_sdk_common22.TypeValidators.String.is(measurement.key) || measurement.key === "") {
         return void 0;
       }
       if (isLatencyMeasurement(measurement)) {
-        if (!import_js_sdk_common21.TypeValidators.Object.is(measurement.values)) {
+        if (!import_js_sdk_common22.TypeValidators.Object.is(measurement.values)) {
           return void 0;
         }
         if (!areValidNumbers(measurement.values)) {
@@ -27186,7 +27997,7 @@ var require_dist = __commonJS({
         };
       }
       if (isErrorMeasurement(measurement)) {
-        if (!import_js_sdk_common21.TypeValidators.Object.is(measurement.values)) {
+        if (!import_js_sdk_common22.TypeValidators.Object.is(measurement.values)) {
           return void 0;
         }
         if (!areValidBooleans(measurement.values)) {
@@ -27201,7 +28012,7 @@ var require_dist = __commonJS({
         };
       }
       if (isConsistencyMeasurement(measurement)) {
-        if (!import_js_sdk_common21.TypeValidators.Boolean.is(measurement.value) || !import_js_sdk_common21.TypeValidators.Number.is(measurement.samplingRatio)) {
+        if (!import_js_sdk_common22.TypeValidators.Boolean.is(measurement.value) || !import_js_sdk_common22.TypeValidators.Number.is(measurement.samplingRatio)) {
           return void 0;
         }
         return {
@@ -27211,7 +28022,7 @@ var require_dist = __commonJS({
         };
       }
       if (isInvokedMeasurement(measurement)) {
-        if (!import_js_sdk_common21.TypeValidators.Object.is(measurement.values)) {
+        if (!import_js_sdk_common22.TypeValidators.Object.is(measurement.values)) {
           return void 0;
         }
         if (!areValidBooleans(measurement.values)) {
@@ -27231,13 +28042,13 @@ var require_dist = __commonJS({
       return measurements.map(validateMeasurement).filter((value) => value !== void 0);
     }
     function validateEvaluation(evaluation) {
-      if (!import_js_sdk_common21.TypeValidators.String.is(evaluation.key) || evaluation.key === "") {
+      if (!import_js_sdk_common22.TypeValidators.String.is(evaluation.key) || evaluation.key === "") {
         return void 0;
       }
-      if (!import_js_sdk_common21.TypeValidators.Object.is(evaluation.reason)) {
+      if (!import_js_sdk_common22.TypeValidators.Object.is(evaluation.reason)) {
         return void 0;
       }
-      if (!import_js_sdk_common21.TypeValidators.String.is(evaluation.reason.kind) || evaluation.reason.kind === "") {
+      if (!import_js_sdk_common22.TypeValidators.String.is(evaluation.reason.kind) || evaluation.reason.kind === "") {
         return void 0;
       }
       const validated = {
@@ -27250,28 +28061,31 @@ var require_dist = __commonJS({
       };
       const inReason = evaluation.reason;
       const outReason = validated.reason;
-      if (import_js_sdk_common21.TypeValidators.String.is(inReason.errorKind)) {
+      if (import_js_sdk_common22.TypeValidators.String.is(inReason.errorKind)) {
         outReason.errorKind = inReason.errorKind;
       }
-      if (import_js_sdk_common21.TypeValidators.String.is(inReason.ruleId)) {
+      if (import_js_sdk_common22.TypeValidators.String.is(inReason.ruleId)) {
         outReason.ruleId = inReason.ruleId;
       }
-      if (import_js_sdk_common21.TypeValidators.String.is(inReason.prerequisiteKey)) {
+      if (import_js_sdk_common22.TypeValidators.String.is(inReason.prerequisiteKey)) {
         outReason.prerequisiteKey = inReason.prerequisiteKey;
       }
-      if (import_js_sdk_common21.TypeValidators.Boolean.is(inReason.inExperiment)) {
+      if (import_js_sdk_common22.TypeValidators.Boolean.is(inReason.inExperiment)) {
         outReason.inExperiment = inReason.inExperiment;
       }
-      if (import_js_sdk_common21.TypeValidators.Number.is(inReason.ruleIndex)) {
+      if (import_js_sdk_common22.TypeValidators.Number.is(inReason.ruleIndex)) {
         outReason.ruleIndex = inReason.ruleIndex;
       }
-      if (import_js_sdk_common21.TypeValidators.String.is(inReason.bigSegmentsStatus)) {
+      if (import_js_sdk_common22.TypeValidators.String.is(inReason.bigSegmentsStatus)) {
         outReason.bigSegmentsStatus = inReason.bigSegmentsStatus;
       }
-      if (evaluation.variation !== void 0 && import_js_sdk_common21.TypeValidators.Number.is(evaluation.variation)) {
+      if (import_js_sdk_common22.TypeValidators.Boolean.is(inReason.overrideAffected) && inReason.overrideAffected) {
+        outReason.overrideAffected = true;
+      }
+      if (evaluation.variation !== void 0 && import_js_sdk_common22.TypeValidators.Number.is(evaluation.variation)) {
         validated.variation = evaluation.variation;
       }
-      if (evaluation.version !== void 0 && import_js_sdk_common21.TypeValidators.Number.is(evaluation.version)) {
+      if (evaluation.version !== void 0 && import_js_sdk_common22.TypeValidators.Number.is(evaluation.version)) {
         validated.version = evaluation.version;
       }
       return validated;
@@ -27284,18 +28098,18 @@ var require_dist = __commonJS({
       if (!isOperation(inEvent.operation)) {
         return void 0;
       }
-      if (!import_js_sdk_common21.TypeValidators.Number.is(inEvent.creationDate)) {
+      if (!import_js_sdk_common22.TypeValidators.Number.is(inEvent.creationDate)) {
         return void 0;
       }
       const contextKeysOrContext = {};
-      if (import_js_sdk_common21.TypeValidators.Object.is(inEvent.context)) {
-        const context = import_js_sdk_common21.Context.fromLDContext(inEvent.context);
+      if (import_js_sdk_common22.TypeValidators.Object.is(inEvent.context)) {
+        const context = import_js_sdk_common22.Context.fromLDContext(inEvent.context);
         if (context.valid) {
           contextKeysOrContext.context = context;
         }
-      } else if (import_js_sdk_common21.TypeValidators.Object.is(inEvent.contextKeys)) {
-        if (Object.keys(inEvent.contextKeys).every((key) => import_js_sdk_common21.TypeValidators.Kind.is(key)) && Object.values(inEvent.contextKeys).every(
-          (value) => import_js_sdk_common21.TypeValidators.String.is(value) && value !== ""
+      } else if (import_js_sdk_common22.TypeValidators.Object.is(inEvent.contextKeys)) {
+        if (Object.keys(inEvent.contextKeys).every((key) => import_js_sdk_common22.TypeValidators.Kind.is(key)) && Object.values(inEvent.contextKeys).every(
+          (value) => import_js_sdk_common22.TypeValidators.String.is(value) && value !== ""
         )) {
           contextKeysOrContext.contextKeys = __spreadValues({}, inEvent.contextKeys);
         }
@@ -27304,7 +28118,7 @@ var require_dist = __commonJS({
         return void 0;
       }
       const samplingRatio = (_a = inEvent.samplingRatio) != null ? _a : 1;
-      if (!import_js_sdk_common21.TypeValidators.Number.is(samplingRatio)) {
+      if (!import_js_sdk_common22.TypeValidators.Number.is(samplingRatio)) {
         return void 0;
       }
       const evaluation = validateEvaluation(inEvent.evaluation);
@@ -27321,7 +28135,7 @@ var require_dist = __commonJS({
         samplingRatio
       });
     }
-    var import_js_sdk_common22 = require_cjs();
+    var import_js_sdk_common23 = require_cjs();
     function isPopulated(data) {
       return !Number.isNaN(data);
     }
@@ -27359,7 +28173,7 @@ var require_dist = __commonJS({
       }
       consistency(check) {
         var _a, _b;
-        if (import_js_sdk_common22.internal.shouldSample((_a = this._checkRatio) != null ? _a : 1)) {
+        if (import_js_sdk_common23.internal.shouldSample((_a = this._checkRatio) != null ? _a : 1)) {
           try {
             const res = check();
             this._consistencyCheck = res ? 1 : 0;
@@ -27378,7 +28192,7 @@ var require_dist = __commonJS({
       }
       createEvent() {
         var _a, _b, _c, _d, _e;
-        if (!import_js_sdk_common22.TypeValidators.String.is(this._flagKey) || this._flagKey === "") {
+        if (!import_js_sdk_common23.TypeValidators.String.is(this._flagKey) || this._flagKey === "") {
           (_a = this._logger) == null ? void 0 : _a.error("The flag key for a migration operation must be a non-empty string.");
           return void 0;
         }
@@ -27386,7 +28200,7 @@ var require_dist = __commonJS({
           (_b = this._logger) == null ? void 0 : _b.error('The operation must be set using "op" before an event can be created.');
           return void 0;
         }
-        if (!import_js_sdk_common22.Context.fromLDContext(this._context).valid) {
+        if (!import_js_sdk_common23.Context.fromLDContext(this._context).valid) {
           (_c = this._logger) == null ? void 0 : _c.error(
             "The migration was not done against a valid context and cannot generate an event."
           );
@@ -27520,7 +28334,702 @@ var require_dist = __commonJS({
         }
       }
     };
-    var { ClientMessages, ErrorKinds: ErrorKinds3, NullEventProcessor } = import_js_sdk_common23.internal;
+    var import_js_sdk_common26 = require_cjs();
+    var import_js_sdk_common25 = require_cjs();
+    var import_js_sdk_common24 = require_cjs();
+    function isPlainObject(value) {
+      return !(0, import_js_sdk_common24.isNullish)(value) && import_js_sdk_common24.TypeValidators.Object.is(value);
+    }
+    var Location = class _Location {
+      constructor(_kind, _key, _steps = []) {
+        this._kind = _kind;
+        this._key = _key;
+        this._steps = _steps;
+      }
+      at(step) {
+        return new _Location(this._kind, this._key, [...this._steps, step]);
+      }
+      fail(message) {
+        const where = this._steps.length > 0 ? `${this._steps.join(", ")}: ` : "";
+        throw new Error(`${this._kind} "${this._key}": ${where}${message}`);
+      }
+      /**
+       * Checks that a field is an array. An optional field may be absent.
+       *
+       * @returns The array, or undefined when an optional field is absent.
+       */
+      array(parent, field, required = false) {
+        const value = parent[field];
+        if ((0, import_js_sdk_common24.isNullish)(value)) {
+          if (required) {
+            this.fail(`"${field}" must be an array`);
+          }
+          return void 0;
+        }
+        if (!Array.isArray(value)) {
+          this.fail(`"${field}" must be an array`);
+        }
+        return value;
+      }
+      /**
+       * Checks that an optional field is an object when it is present.
+       *
+       * @returns The object, or undefined when the field is absent.
+       */
+      object(parent, field) {
+        const value = parent[field];
+        if ((0, import_js_sdk_common24.isNullish)(value)) {
+          return void 0;
+        }
+        if (!isPlainObject(value)) {
+          this.fail(`"${field}" must be an object`);
+        }
+        return value;
+      }
+      /**
+       * Checks that a field is a string. An optional field may be absent.
+       */
+      string(parent, field, required = false) {
+        const value = parent[field];
+        if ((0, import_js_sdk_common24.isNullish)(value)) {
+          if (required) {
+            this.fail(`"${field}" must be a string`);
+          }
+          return;
+        }
+        if (typeof value !== "string") {
+          this.fail(`"${field}" must be a string`);
+        }
+      }
+      /**
+       * Checks that an optional field is a boolean when it is present.
+       */
+      boolean(parent, field) {
+        const value = parent[field];
+        if (!(0, import_js_sdk_common24.isNullish)(value) && typeof value !== "boolean") {
+          this.fail(`"${field}" must be a boolean`);
+        }
+      }
+      /**
+       * Rejects fields that the SDK itself sets when it prepares a definition for evaluation: the
+       * sets it generates for large target lists and the attribute references it compiles. A
+       * supplied value for one of them is not what evaluation expects, and the preparation does not
+       * always replace it, so a definition that carries one is rejected.
+       */
+      noInternalFields(parent, ...names) {
+        Object.keys(parent).forEach((field) => {
+          if (field.startsWith("generated_") || names.includes(field)) {
+            this.fail(`"${field}" is set by the SDK and cannot be supplied`);
+          }
+        });
+      }
+      /**
+       * Checks that an optional field is an array of objects when it is present, and runs a check on
+       * each entry at the entry's location. The label names an entry in a message, for example
+       * "rule" for the entries of "rules".
+       */
+      entries(parent, field, label, check = () => {
+      }) {
+        var _a;
+        (_a = this.array(parent, field)) == null ? void 0 : _a.forEach((entry, index) => {
+          if (!isPlainObject(entry)) {
+            this.fail(`${label} ${index} must be an object`);
+          }
+          check(entry, this.at(`${label} ${index}`));
+        });
+      }
+    };
+    function checkTargets(parent, at, field, label) {
+      at.entries(parent, field, label, (target, targetAt) => {
+        targetAt.noInternalFields(target);
+        targetAt.array(target, "values", true);
+      });
+    }
+    function checkClauses(rule, at) {
+      at.entries(rule, "clauses", "clause", (clause, clauseAt) => {
+        clauseAt.noInternalFields(clause);
+        clauseAt.array(clause, "values", true);
+        clauseAt.string(clause, "attribute");
+      });
+    }
+    function checkRollout(parent, at) {
+      const rollout = at.object(parent, "rollout");
+      if (rollout) {
+        const rolloutAt = at.at("rollout");
+        rolloutAt.noInternalFields(rollout, "bucketByAttributeReference");
+        rolloutAt.string(rollout, "bucketBy");
+        rolloutAt.entries(rollout, "variations", "variation");
+      }
+    }
+    function validateFlag(flag) {
+      const at = new Location("flag", `${flag.key}`);
+      at.string(flag, "key", true);
+      at.noInternalFields(flag);
+      at.boolean(flag, "on");
+      at.array(flag, "variations", true);
+      at.entries(flag, "prerequisites", "prerequisite");
+      checkTargets(flag, at, "targets", "target");
+      checkTargets(flag, at, "contextTargets", "context target");
+      const fallthrough = at.object(flag, "fallthrough");
+      if (fallthrough) {
+        checkRollout(fallthrough, at.at("fallthrough"));
+      }
+      at.entries(flag, "rules", "rule", (rule, ruleAt) => {
+        checkClauses(rule, ruleAt);
+        checkRollout(rule, ruleAt);
+      });
+    }
+    function validateSegment(segment) {
+      const at = new Location("segment", `${segment.key}`);
+      at.string(segment, "key", true);
+      at.noInternalFields(segment);
+      at.array(segment, "included");
+      at.array(segment, "excluded");
+      checkTargets(segment, at, "includedContexts", "included context");
+      checkTargets(segment, at, "excludedContexts", "excluded context");
+      at.entries(segment, "rules", "rule", (rule, ruleAt) => {
+        ruleAt.noInternalFields(rule, "bucketByAttributeReference");
+        checkClauses(rule, ruleAt);
+        ruleAt.string(rule, "bucketBy");
+      });
+    }
+    function validateItems(document2, member) {
+      const items = document2[member];
+      if ((0, import_js_sdk_common25.isNullish)(items)) {
+        return;
+      }
+      if (!isPlainObject(items)) {
+        throw new Error(`"${member}" must be an object keyed by ${member.slice(0, -1)} key`);
+      }
+      Object.entries(items).forEach(([key, item]) => {
+        if (!isPlainObject(item)) {
+          throw new Error(`${member.slice(0, -1)} "${key}" must be an object`);
+        }
+        item.key = key;
+      });
+    }
+    function validateDocument(parsed) {
+      if ((0, import_js_sdk_common25.isNullish)(parsed)) {
+        return {};
+      }
+      if (!isPlainObject(parsed)) {
+        throw new Error("file data must be an object");
+      }
+      validateItems(parsed, "flags");
+      validateItems(parsed, "segments");
+      const { flagValues } = parsed;
+      if (!(0, import_js_sdk_common25.isNullish)(flagValues) && !isPlainObject(flagValues)) {
+        throw new Error('"flagValues" must be an object keyed by flag key');
+      }
+      const document2 = {};
+      if (parsed.flags) {
+        document2.flags = parsed.flags;
+      }
+      if (flagValues) {
+        document2.flagValues = flagValues;
+      }
+      if (parsed.segments) {
+        document2.segments = parsed.segments;
+      }
+      return document2;
+    }
+    function parseOverrideDocument(yamlParser) {
+      const parse2 = parseDocumentByExtension(yamlParser);
+      return (path, data) => validateDocument(parse2(path, data));
+    }
+    var DEFAULT_POLL_INTERVAL_SECONDS = 1;
+    var MINIMUM_POLL_INTERVAL_SECONDS = 1;
+    var MAXIMUM_POLL_INTERVAL_SECONDS = 2147483;
+    function fileOverrideSourcePolicy(duplicateKeysHandling, yamlParser) {
+      return {
+        parseDocument: parseOverrideDocument(yamlParser),
+        // An override snapshot has no version history, so every expanded flag is version 1.
+        makeFlagWithValue: (key, value) => makeFlagWithValue(key, value, 1),
+        resolveDuplicateKey: (category, key) => {
+          if (duplicateKeysHandling === "ignore") {
+            return "keepFirst";
+          }
+          throw new Error(`${category} '${key}' is specified by multiple files`);
+        },
+        missingFile: "skip",
+        entryKey: (mapKey) => mapKey
+      };
+    }
+    function pluralize(count, noun) {
+      return count === 1 ? `1 ${noun}` : `${count} ${noun}s`;
+    }
+    function countsText(flags, segments) {
+      const parts = [];
+      if (flags > 0) {
+        parts.push(pluralize(flags, "flag"));
+      }
+      if (segments > 0) {
+        parts.push(pluralize(segments, "segment"));
+      }
+      return parts.join(", ");
+    }
+    var FileOverrideSource = class {
+      constructor(config, _filesystem, _logger) {
+        this.config = config;
+        this._filesystem = _filesystem;
+        this._logger = _logger;
+      }
+      /**
+       * Sets up change detection and performs the initial load. The returned promise settles when
+       * the initial load has completed. A file that does not exist yet contributes no overrides. A
+       * file that cannot be read or parsed is not fatal: the failure is logged, and the retry plus
+       * the change signal recover once the file is readable.
+       */
+      async start(sink) {
+        const { paths, duplicateKeysHandling, changeDetection, pollIntervalMs, yamlParser } = this.config;
+        this._reloader = new FileReloader({
+          paths,
+          policy: fileOverrideSourcePolicy(duplicateKeysHandling, yamlParser),
+          filesystem: this._filesystem,
+          logger: this._logger,
+          apply: (result) => {
+            var _a;
+            sink.setOverrides(
+              result.flags.map((flag) => flag.item),
+              result.segments.map((segment) => segment.item)
+            );
+            this._logOverridesInEffect(result);
+            if (result.files.some((file) => !file.present)) {
+              (_a = this._watcher) == null ? void 0 : _a.verify();
+            }
+          },
+          onFailure: (failure) => this._handleFailure(failure),
+          debounceDelayMs: DEFAULT_DEBOUNCE_DELAY_MS,
+          retryDelayMs: DEFAULT_RETRY_DELAY_MS,
+          skipUnchanged: true
+        });
+        const trigger = () => {
+          var _a;
+          return (_a = this._reloader) == null ? void 0 : _a.trigger();
+        };
+        if (changeDetection === "watching") {
+          this._watcher = new FileDirectoryWatcher(this._filesystem, paths, trigger, this._logger);
+          this._watcher.start();
+        } else {
+          this._poller = new FilePoller(this._filesystem, paths, pollIntervalMs, trigger);
+          await this._poller.start();
+        }
+        await this._reloader.reloadNow();
+      }
+      close() {
+        var _a, _b, _c;
+        (_a = this._watcher) == null ? void 0 : _a.close();
+        (_b = this._poller) == null ? void 0 : _b.close();
+        (_c = this._reloader) == null ? void 0 : _c.close();
+      }
+      /**
+       * Reports a failed load. A persistent failure that automatic retries keep hitting is reported
+       * once at error level and then at debug level.
+       */
+      _handleFailure(failure) {
+        var _a, _b;
+        const where = failure.path ? ` [${failure.path}]` : "";
+        const message = `Unable to load flags: ${failure.error.message}${where}`;
+        if (failure.repeated) {
+          (_a = this._logger) == null ? void 0 : _a.debug(message);
+          return;
+        }
+        (_b = this._logger) == null ? void 0 : _b.error(message);
+      }
+      /**
+       * Reports the overrides now in effect and what each file supplied. The reloader applies a
+       * snapshot only when the content changed, so this logs each change once.
+       */
+      _logOverridesInEffect(result) {
+        var _a, _b;
+        const details = result.files.map((file) => {
+          if (!file.present) {
+            return `${file.path}: absent`;
+          }
+          if (file.flags === 0 && file.segments === 0) {
+            return `${file.path}: no entries`;
+          }
+          return `${file.path}: ${countsText(file.flags, file.segments)}`;
+        });
+        if (result.flags.length === 0 && result.segments.length === 0) {
+          (_a = this._logger) == null ? void 0 : _a.info(`Flag overrides: none in effect (${details.join("; ")})`);
+          return;
+        }
+        (_b = this._logger) == null ? void 0 : _b.info(
+          `Flag overrides in effect: ${countsText(result.flags.length, result.segments.length)} (${details.join("; ")})`
+        );
+      }
+    };
+    function isOverrideSource(u) {
+      const candidate = u;
+      return import_js_sdk_common26.TypeValidators.Function.is(candidate == null ? void 0 : candidate.start) && import_js_sdk_common26.TypeValidators.Function.is(candidate == null ? void 0 : candidate.close);
+    }
+    var duplicateKeysHandlingValues = ["fail", "ignore"];
+    var changeDetectionValues = ["polling", "watching"];
+    function validateFileOverrideSourceOptions(options, clientContext) {
+      const { logger } = clientContext.basicConfiguration;
+      if (!import_js_sdk_common26.TypeValidators.StringArray.is(options.paths) || options.paths.length === 0 || options.paths.some((path) => path === "")) {
+        throw new Error("The file-based override source requires at least one file path");
+      }
+      const paths = options.paths.filter((path, index) => options.paths.indexOf(path) === index);
+      if (paths.length !== options.paths.length) {
+        logger == null ? void 0 : logger.warn(
+          "dataSystem.overrides.paths lists the same file more than once; the repeats are ignored"
+        );
+      }
+      let duplicateKeysHandling = "fail";
+      if (options.duplicateKeysHandling !== void 0) {
+        if (duplicateKeysHandlingValues.includes(options.duplicateKeysHandling)) {
+          duplicateKeysHandling = options.duplicateKeysHandling;
+        } else {
+          logger == null ? void 0 : logger.warn(
+            import_js_sdk_common26.OptionMessages.wrongOptionType(
+              "dataSystem.overrides.duplicateKeysHandling",
+              duplicateKeysHandlingValues.map((value) => `'${value}'`).join(" | "),
+              String(options.duplicateKeysHandling)
+            )
+          );
+        }
+      }
+      let changeDetection = "polling";
+      if (options.changeDetection !== void 0) {
+        if (!changeDetectionValues.includes(options.changeDetection)) {
+          throw new Error(
+            `Unrecognized change detection mode "${options.changeDetection}" for the file-based override source`
+          );
+        }
+        changeDetection = options.changeDetection;
+      }
+      let pollIntervalSeconds = DEFAULT_POLL_INTERVAL_SECONDS;
+      if (options.pollInterval !== void 0) {
+        if (!import_js_sdk_common26.TypeValidators.Number.is(options.pollInterval)) {
+          logger == null ? void 0 : logger.warn(
+            import_js_sdk_common26.OptionMessages.wrongOptionType(
+              "dataSystem.overrides.pollInterval",
+              "number",
+              typeof options.pollInterval
+            )
+          );
+        } else if (!Number.isFinite(options.pollInterval) || options.pollInterval > MAXIMUM_POLL_INTERVAL_SECONDS) {
+          logger == null ? void 0 : logger.warn(
+            import_js_sdk_common26.OptionMessages.wrongOptionType(
+              "dataSystem.overrides.pollInterval",
+              `number of seconds up to ${MAXIMUM_POLL_INTERVAL_SECONDS}`,
+              String(options.pollInterval)
+            )
+          );
+        } else if (options.pollInterval < MINIMUM_POLL_INTERVAL_SECONDS) {
+          logger == null ? void 0 : logger.warn(
+            import_js_sdk_common26.OptionMessages.optionBelowMinimum(
+              "dataSystem.overrides.pollInterval",
+              options.pollInterval,
+              MINIMUM_POLL_INTERVAL_SECONDS
+            )
+          );
+          pollIntervalSeconds = MINIMUM_POLL_INTERVAL_SECONDS;
+        } else {
+          pollIntervalSeconds = options.pollInterval;
+        }
+      }
+      let yamlParser;
+      if (options.yamlParser !== void 0) {
+        if (import_js_sdk_common26.TypeValidators.Function.is(options.yamlParser)) {
+          yamlParser = options.yamlParser;
+        } else {
+          logger == null ? void 0 : logger.warn(
+            import_js_sdk_common26.OptionMessages.wrongOptionType(
+              "dataSystem.overrides.yamlParser",
+              "function",
+              typeof options.yamlParser
+            )
+          );
+        }
+      }
+      const yamlPath = paths.find(isYamlPath);
+      if (yamlPath !== void 0 && !yamlParser) {
+        throw new Error(
+          `The file-based override source was given a YAML file (${yamlPath}) but no yamlParser. The SDK does not include a YAML parser; configure one, for example the parse function of the 'yaml' package.`
+        );
+      }
+      return {
+        paths,
+        duplicateKeysHandling,
+        changeDetection,
+        pollIntervalMs: pollIntervalSeconds * 1e3,
+        yamlParser
+      };
+    }
+    function createOverrideSource(options, clientContext) {
+      if (import_js_sdk_common26.TypeValidators.Function.is(options)) {
+        return options(clientContext);
+      }
+      if (isFileOverrideSourceOptions(options)) {
+        const { fileSystem } = clientContext.platform;
+        if (!fileSystem) {
+          throw new Error("The file-based override source requires a platform with filesystem support");
+        }
+        return new FileOverrideSource(
+          validateFileOverrideSourceOptions(options, clientContext),
+          fileSystem,
+          clientContext.basicConfiguration.logger
+        );
+      }
+      if (isOverrideSource(options)) {
+        return options;
+      }
+      throw new Error("Unsupported override source configuration");
+    }
+    var import_js_sdk_common27 = require_cjs();
+    function prepareFlag(item) {
+      const copy = (0, import_js_sdk_common27.clone)(item);
+      validateFlag(copy);
+      const flag = copy;
+      processFlag(flag);
+      markOverrideEntry(flag);
+      return flag;
+    }
+    function prepareSegment(item) {
+      const copy = (0, import_js_sdk_common27.clone)(item);
+      validateSegment(copy);
+      const segment = copy;
+      processSegment(segment);
+      markOverrideEntry(segment);
+      return segment;
+    }
+    function emptyKindContents() {
+      return /* @__PURE__ */ Object.create(null);
+    }
+    function emptyContents() {
+      return {
+        [VersionedDataKinds.Features.namespace]: emptyKindContents(),
+        [VersionedDataKinds.Segments.namespace]: emptyKindContents()
+      };
+    }
+    var OverrideLayer = class {
+      constructor() {
+        this._contents = emptyContents();
+        this._empty = true;
+      }
+      /**
+       * Replaces the entire contents of the layer in one assignment, so the layer holds exactly one
+       * snapshot at any instant. Empty arrays clear the layer.
+       *
+       * Every definition is checked and prepared before the assignment. When one definition does
+       * not have the shape evaluation requires, this method throws an Error that names the kind, the
+       * key, and the field, and the layer keeps its previous contents: no part of the snapshot is
+       * applied.
+       *
+       * @returns The previous and the new contents, for change comparison. Neither may be modified.
+       */
+      setAll(flags, segments) {
+        const current = emptyContents();
+        flags.forEach((flag) => {
+          current[VersionedDataKinds.Features.namespace][flag.key] = prepareFlag(flag);
+        });
+        segments.forEach((segment) => {
+          current[VersionedDataKinds.Segments.namespace][segment.key] = prepareSegment(segment);
+        });
+        const previous = this._contents;
+        this._contents = current;
+        this._empty = flags.length === 0 && segments.length === 0;
+        return { previous, current };
+      }
+      /**
+       * Returns the override entry for a key, if any.
+       */
+      get(kind, key) {
+        var _a;
+        if (this._empty) {
+          return void 0;
+        }
+        return (_a = this._contents[kind.namespace]) == null ? void 0 : _a[key];
+      }
+      /**
+       * Returns the entries of the given kind, keyed by item key.
+       */
+      all(kind) {
+        return Object.assign(/* @__PURE__ */ Object.create(null), this._contents[kind.namespace]);
+      }
+      /**
+       * Reports whether the layer holds no entries. A configured but unpopulated layer costs one
+       * check per read.
+       */
+      isEmpty() {
+        return this._empty;
+      }
+    };
+    var import_js_sdk_common28 = require_cjs();
+    var diffNamespaces = [
+      VersionedDataKinds.Features.namespace,
+      VersionedDataKinds.Segments.namespace
+    ];
+    function sameEntry(a, b) {
+      try {
+        return (0, import_js_sdk_common28.fastDeepEqual)(a, b);
+      } catch (e) {
+        return false;
+      }
+    }
+    function diffContents(previous, current) {
+      const seeds = new NamespacedDataSet();
+      let count = 0;
+      diffNamespaces.forEach((namespace) => {
+        var _a, _b;
+        const oldItems = (_a = previous[namespace]) != null ? _a : {};
+        const newItems = (_b = current[namespace]) != null ? _b : {};
+        Object.entries(oldItems).forEach(([key, oldEntry]) => {
+          const newEntry = newItems[key];
+          if (!newEntry || !sameEntry(oldEntry, newEntry)) {
+            seeds.set(namespace, key, true);
+            count += 1;
+          }
+        });
+        Object.keys(newItems).forEach((key) => {
+          if (!oldItems[key]) {
+            seeds.set(namespace, key, true);
+            count += 1;
+          }
+        });
+      });
+      return { seeds, count };
+    }
+    function mergedView(base, contents) {
+      const view = {};
+      diffNamespaces.forEach((namespace) => {
+        var _a;
+        const items = Object.assign(/* @__PURE__ */ Object.create(null), base[namespace]);
+        Object.entries((_a = contents[namespace]) != null ? _a : {}).forEach(([key, entry]) => {
+          items[key] = entry;
+        });
+        view[namespace] = items;
+      });
+      return view;
+    }
+    function trackerFor(view) {
+      const tracker = new DependencyTracker();
+      Object.entries(view).forEach(([namespace, items]) => {
+        Object.entries(items).forEach(([key, item]) => {
+          tracker.updateDependenciesFrom(namespace, key, computeDependencies(namespace, item));
+        });
+      });
+      return tracker;
+    }
+    var OverrideSink = class {
+      /**
+       * @param _layer The layer to write to.
+       * @param _base The store that holds LaunchDarkly data, without the overlay. The merged views
+       * for change computation are built from it plus the layer.
+       * @param _onChange Receives the key of each flag whose evaluation may have changed.
+       * @param _hasEventListeners Reports whether anything listens for flag changes.
+       * @param _logger
+       */
+      constructor(_layer, _base, _onChange, _hasEventListeners, _logger) {
+        this._layer = _layer;
+        this._base = _base;
+        this._onChange = _onChange;
+        this._hasEventListeners = _hasEventListeners;
+        this._logger = _logger;
+        this._chain = Promise.resolve();
+      }
+      /**
+       * Replaces the entire override layer in one assignment, then notifies listeners of every flag
+       * whose merged-view evaluation may have changed. The replacement is visible to evaluations
+       * when this method returns. The notifications follow, because they can need asynchronous
+       * reads of the base store. A snapshot with a definition of the wrong shape is rejected by the
+       * layer before any of it is applied, and the error reaches the caller.
+       */
+      setOverrides(flags, segments) {
+        const { previous, current } = this._layer.setAll(flags, segments);
+        if (!this._hasEventListeners()) {
+          return;
+        }
+        this._chain = this._chain.then(() => this._notifyAffected(previous, current)).catch((err) => {
+          var _a;
+          (_a = this._logger) == null ? void 0 : _a.error(`Unable to compute the flags affected by an override change: ${err}`);
+        });
+      }
+      /**
+       * Notifies the flags whose override entries were added, removed, or changed, plus every flag
+       * that depends, directly or transitively, on any added, removed, or changed entry of either
+       * kind. Dependency edges are computed over the new merged view. A flag whose edges differed in
+       * the old view has a different definition in the new view, so it is already one of the changed
+       * entries.
+       */
+      async _notifyAffected(previous, current) {
+        var _a;
+        const { seeds, count } = diffContents(previous, current);
+        if (count === 0) {
+          return;
+        }
+        const base = await this._readBase();
+        const tracker = trackerFor(mergedView(base, current));
+        const affected = new NamespacedDataSet();
+        seeds.enumerate((namespace, key) => {
+          tracker.updateModifiedItems(affected, namespace, key);
+        });
+        const flagKeys = [];
+        affected.enumerate((namespace, key) => {
+          if (namespace === VersionedDataKinds.Features.namespace) {
+            flagKeys.push(key);
+          }
+        });
+        if (flagKeys.length > 0) {
+          (_a = this._logger) == null ? void 0 : _a.debug(`Override update affected ${flagKeys.length} flag(s)`);
+        }
+        flagKeys.forEach((key) => this._onChange(key));
+      }
+      _readBase() {
+        return new Promise((resolve) => {
+          this._base.all(VersionedDataKinds.Features, (flags) => {
+            this._base.all(VersionedDataKinds.Segments, (segments) => {
+              resolve({
+                [VersionedDataKinds.Features.namespace]: flags,
+                [VersionedDataKinds.Segments.namespace]: segments
+              });
+            });
+          });
+        });
+      }
+    };
+    var ReadStoreOverlay = class {
+      constructor(_base, _layer) {
+        this._base = _base;
+        this._layer = _layer;
+      }
+      /**
+       * Returns the override entry for the key when one exists, and otherwise delegates to the base
+       * store. This works when the base store is not initialized, because an uninitialized base
+       * reports not found.
+       */
+      get(kind, key, callback) {
+        const item = this._layer.get(kind, key);
+        if (item) {
+          callback(item);
+          return;
+        }
+        this._base.get(kind, key, callback);
+      }
+      /**
+       * Returns the union of the base store's items and the layer's items. The override entry wins
+       * for any key present in both, including a key the base holds as a deleted item.
+       */
+      all(kind, callback) {
+        if (this._layer.isEmpty()) {
+          this._base.all(kind, callback);
+          return;
+        }
+        this._base.all(kind, (baseItems) => {
+          callback(Object.assign(/* @__PURE__ */ Object.create(null), baseItems, this._layer.all(kind)));
+        });
+      }
+      /**
+       * Delegates to the base store. The override layer never affects initialization status.
+       */
+      initialized(callback) {
+        this._base.initialized(callback);
+      }
+    };
+    var { ClientMessages, ErrorKinds: ErrorKinds3, NullEventProcessor } = import_js_sdk_common29.internal;
     var HIGH_TIMEOUT_THRESHOLD = 60;
     var BOOL_VARIATION_METHOD_NAME = "LDClient.boolVariation";
     var NUMBER_VARIATION_METHOD_NAME = "LDClient.numberVariation";
@@ -27541,7 +29050,7 @@ var require_dist = __commonJS({
         throw new Error("You must configure the client with an SDK key");
       }
       const { logger } = config;
-      const baseHeaders = (0, import_js_sdk_common23.defaultHeaders)(
+      const baseHeaders = (0, import_js_sdk_common29.defaultHeaders)(
         sdkKey,
         platform22.info,
         config.tags,
@@ -27549,12 +29058,12 @@ var require_dist = __commonJS({
         userAgentHeaderName,
         instanceId
       );
-      const clientContext = new import_js_sdk_common23.ClientContext(sdkKey, config, platform22);
+      const clientContext = new import_js_sdk_common29.ClientContext(sdkKey, config, platform22);
       const featureStore = config.featureStoreFactory(clientContext);
       const dataSourceUpdates = new DataSourceUpdates(featureStore, hasEventListeners, onUpdate);
       let diagnosticsManager;
       if (config.sendEvents && !config.offline && !config.diagnosticOptOut) {
-        diagnosticsManager = new import_js_sdk_common23.internal.DiagnosticsManager(
+        diagnosticsManager = new import_js_sdk_common29.internal.DiagnosticsManager(
           sdkKey,
           platform22,
           createDiagnosticsInitConfig_default(config, platform22, featureStore)
@@ -27564,7 +29073,7 @@ var require_dist = __commonJS({
       if (!config.sendEvents || config.offline) {
         eventProcessor = new NullEventProcessor();
       } else {
-        eventProcessor = new import_js_sdk_common23.internal.EventProcessor(
+        eventProcessor = new import_js_sdk_common29.internal.EventProcessor(
           // Server-side SDKs redact anonymous context attributes on all inlined events (feature,
           // custom, migration op), not just feature events.
           __spreadProps(__spreadValues({}, config), { redactAnonymousAllEvents: true }),
@@ -27639,7 +29148,7 @@ var require_dist = __commonJS({
     }
     function scopedServiceEndpoints(base, overrides) {
       var _a, _b;
-      return new import_js_sdk_common23.ServiceEndpoints(
+      return new import_js_sdk_common29.ServiceEndpoints(
         (_a = overrides.streaming) != null ? _a : base.streaming,
         (_b = overrides.polling) != null ? _b : base.polling,
         base.events,
@@ -27662,7 +29171,7 @@ var require_dist = __commonJS({
           "Payload filtering is not supported with the FDv2 data system; the configured payload filter has no effect on FDv2 requests"
         );
       }
-      const baseHeaders = (0, import_js_sdk_common23.defaultHeaders)(
+      const baseHeaders = (0, import_js_sdk_common29.defaultHeaders)(
         sdkKey,
         platform22.info,
         config.tags,
@@ -27670,17 +29179,29 @@ var require_dist = __commonJS({
         userAgentHeaderName,
         instanceId
       );
-      const clientContext = new import_js_sdk_common23.ClientContext(sdkKey, config, platform22);
+      const clientContext = new import_js_sdk_common29.ClientContext(sdkKey, config, platform22);
       const dataSystem = config.dataSystem;
+      const overrideSource = dataSystem.overrides !== void 0 && !config.offline ? createOverrideSource(dataSystem.overrides, clientContext) : void 0;
       const featureStore = dataSystem.featureStoreFactory(clientContext);
       const dataSourceUpdates = new TransactionalDataSourceUpdates(
         featureStore,
         hasEventListeners,
         onUpdate
       );
+      let readStore = featureStore;
+      let overrides;
+      if (overrideSource) {
+        const layer = new OverrideLayer();
+        readStore = new ReadStoreOverlay(featureStore, layer);
+        overrides = {
+          layer,
+          sink: new OverrideSink(layer, featureStore, onUpdate, hasEventListeners, logger),
+          source: overrideSource
+        };
+      }
       let diagnosticsManager;
       if (config.sendEvents && !config.offline && !config.diagnosticOptOut) {
-        diagnosticsManager = new import_js_sdk_common23.internal.DiagnosticsManager(
+        diagnosticsManager = new import_js_sdk_common29.internal.DiagnosticsManager(
           sdkKey,
           platform22,
           createDiagnosticsInitConfig_default(config, platform22, featureStore)
@@ -27690,7 +29211,7 @@ var require_dist = __commonJS({
       if (!config.sendEvents || config.offline) {
         eventProcessor = new NullEventProcessor();
       } else {
-        eventProcessor = new import_js_sdk_common23.internal.EventProcessor(
+        eventProcessor = new import_js_sdk_common29.internal.EventProcessor(
           // Server-side SDKs redact anonymous context attributes on all inlined events (feature,
           // custom, migration op), not just feature events.
           __spreadProps(__spreadValues({}, config), { redactAnonymousAllEvents: true }),
@@ -27709,10 +29230,10 @@ var require_dist = __commonJS({
       );
       const queries = {
         getFlag(key, cb) {
-          featureStore.get(VersionedDataKinds.Features, key, (item) => cb(item));
+          readStore.get(VersionedDataKinds.Features, key, (item) => cb(item));
         },
         getSegment(key, cb) {
-          featureStore.get(VersionedDataKinds.Segments, key, (item) => cb(item));
+          readStore.get(VersionedDataKinds.Segments, key, (item) => cb(item));
         },
         getBigSegmentsMembership(userKey) {
           return bigSegmentsManager.getUserMembership(userKey);
@@ -27861,7 +29382,7 @@ var require_dist = __commonJS({
             )
           );
         }
-        dataSource = new import_js_sdk_common23.CompositeDataSource(
+        dataSource = new import_js_sdk_common29.CompositeDataSource(
           initializers,
           synchronizers,
           fdv1FallbackSynchronizers,
@@ -27874,6 +29395,8 @@ var require_dist = __commonJS({
         logger,
         evaluator,
         featureStore,
+        readStore,
+        overrides,
         dataSource,
         payloadListener,
         eventProcessor,
@@ -27891,6 +29414,7 @@ var require_dist = __commonJS({
         this._initState = 0;
         this._lastKnownValuesWarningLogged = false;
         this._allFlagsStateLastKnownValuesWarningLogged = false;
+        this._allFlagsStateOverridesOnlyWarningLogged = false;
         this._eventFactoryDefault = new EventFactory(false);
         this._eventFactoryWithReasons = new EventFactory(true);
         const config = new Configuration(options, internalOptions);
@@ -27928,6 +29452,7 @@ var require_dist = __commonJS({
             internalOptions == null ? void 0 : internalOptions.userAgentHeaderName,
             startEventProcessor
           ));
+          this._readStore = this._featureStore;
           this.bigSegmentStatusProviderInternal = this._bigSegmentsManager.statusProvider;
           if (this._updateProcessor) {
             this._updateProcessor.start();
@@ -27937,11 +29462,14 @@ var require_dist = __commonJS({
         } else {
           let transactionalStore;
           let payloadListener;
+          let overrides;
           ({
             config: this._config,
             logger: this._logger,
             evaluator: this._evaluator,
             featureStore: transactionalStore,
+            readStore: this._readStore,
+            overrides,
             dataSource: this._dataSource,
             payloadListener,
             eventProcessor: this._eventProcessor,
@@ -27963,13 +29491,18 @@ var require_dist = __commonJS({
           ));
           this._featureStore = transactionalStore;
           this.bigSegmentStatusProviderInternal = this._bigSegmentsManager.statusProvider;
+          if (overrides) {
+            this._overrideLayer = overrides.layer;
+            this._overrideSource = overrides.source;
+            this._overridesReady = this._startOverrideSource(overrides.source, overrides.sink);
+          }
           if (this._dataSource) {
             this._dataSource.start(
               (_, payload) => {
                 payloadListener == null ? void 0 : payloadListener(payload);
               },
               (state, err) => {
-                if (state === import_js_sdk_common23.subsystem.DataSourceState.Closed && err) {
+                if (state === import_js_sdk_common29.subsystem.DataSourceState.Closed && err) {
                   this._dataSourceErrorHandler(err);
                 }
               },
@@ -28002,15 +29535,27 @@ var require_dist = __commonJS({
           );
         }
         if (this._initializedPromise) {
-          return this._clientWithTimeout(this._initializedPromise, options == null ? void 0 : options.timeout, this._logger);
+          return this._clientWithTimeout(
+            this._withOverridesLoaded(this._initializedPromise),
+            options == null ? void 0 : options.timeout,
+            this._logger
+          );
         }
         if (this._initState === 1) {
           this._initializedPromise = Promise.resolve(this);
-          return this._initializedPromise;
+          return this._clientWithTimeout(
+            this._withOverridesLoaded(this._initializedPromise),
+            options == null ? void 0 : options.timeout,
+            this._logger
+          );
         }
         if (this._initState === 2) {
           this._initializedPromise = Promise.reject(this._rejectionReason);
-          return this._initializedPromise;
+          return this._clientWithTimeout(
+            this._withOverridesLoaded(this._initializedPromise),
+            options == null ? void 0 : options.timeout,
+            this._logger
+          );
         }
         if (!this._initializedPromise) {
           this._initializedPromise = new Promise((resolve, reject) => {
@@ -28018,7 +29563,28 @@ var require_dist = __commonJS({
             this._initReject = reject;
           });
         }
-        return this._clientWithTimeout(this._initializedPromise, options == null ? void 0 : options.timeout, this._logger);
+        return this._clientWithTimeout(
+          this._withOverridesLoaded(this._initializedPromise),
+          options == null ? void 0 : options.timeout,
+          this._logger
+        );
+      }
+      /**
+       * Extends the initialization promise with the override source's initial load, when that load
+       * is still in progress. The initial load is part of starting the client, so the start handle
+       * that waitForInitialization returns settles after it, whether initialization succeeded or
+       * failed: an application that handles a failed start and evaluates anyway sees the overrides
+       * that were present at startup. The load never rejects this promise: a failed load is logged
+       * and the client runs without overrides.
+       */
+      _withOverridesLoaded(initialized) {
+        const overridesReady = this._overridesReady;
+        if (!overridesReady) {
+          return initialized;
+        }
+        initialized.catch(() => {
+        });
+        return overridesReady.then(() => initialized);
       }
       variation(key, context, defaultValue, callback) {
         var _a, _b, _c;
@@ -28100,7 +29666,7 @@ var require_dist = __commonJS({
           defaultValue,
           this._eventFactoryDefault,
           BOOL_VARIATION_METHOD_NAME,
-          (value) => [import_js_sdk_common23.TypeValidators.Boolean.is(value), import_js_sdk_common23.TypeValidators.Boolean.getType()]
+          (value) => [import_js_sdk_common29.TypeValidators.Boolean.is(value), import_js_sdk_common29.TypeValidators.Boolean.getType()]
         )).value;
       }
       async numberVariation(key, context, defaultValue) {
@@ -28110,7 +29676,7 @@ var require_dist = __commonJS({
           defaultValue,
           this._eventFactoryDefault,
           NUMBER_VARIATION_METHOD_NAME,
-          (value) => [import_js_sdk_common23.TypeValidators.Number.is(value), import_js_sdk_common23.TypeValidators.Number.getType()]
+          (value) => [import_js_sdk_common29.TypeValidators.Number.is(value), import_js_sdk_common29.TypeValidators.Number.getType()]
         )).value;
       }
       async stringVariation(key, context, defaultValue) {
@@ -28120,7 +29686,7 @@ var require_dist = __commonJS({
           defaultValue,
           this._eventFactoryDefault,
           STRING_VARIATION_METHOD_NAME,
-          (value) => [import_js_sdk_common23.TypeValidators.String.is(value), import_js_sdk_common23.TypeValidators.String.getType()]
+          (value) => [import_js_sdk_common29.TypeValidators.String.is(value), import_js_sdk_common29.TypeValidators.String.getType()]
         )).value;
       }
       jsonVariation(key, context, defaultValue) {
@@ -28151,7 +29717,7 @@ var require_dist = __commonJS({
           defaultValue,
           this._eventFactoryWithReasons,
           BOOL_VARIATION_DETAIL_METHOD_NAME,
-          (value) => [import_js_sdk_common23.TypeValidators.Boolean.is(value), import_js_sdk_common23.TypeValidators.Boolean.getType()]
+          (value) => [import_js_sdk_common29.TypeValidators.Boolean.is(value), import_js_sdk_common29.TypeValidators.Boolean.getType()]
         );
       }
       numberVariationDetail(key, context, defaultValue) {
@@ -28161,7 +29727,7 @@ var require_dist = __commonJS({
           defaultValue,
           this._eventFactoryWithReasons,
           NUMBER_VARIATION_DETAIL_METHOD_NAME,
-          (value) => [import_js_sdk_common23.TypeValidators.Number.is(value), import_js_sdk_common23.TypeValidators.Number.getType()]
+          (value) => [import_js_sdk_common29.TypeValidators.Number.is(value), import_js_sdk_common29.TypeValidators.Number.getType()]
         );
       }
       stringVariationDetail(key, context, defaultValue) {
@@ -28171,7 +29737,7 @@ var require_dist = __commonJS({
           defaultValue,
           this._eventFactoryWithReasons,
           STRING_VARIATION_DETAIL_METHOD_NAME,
-          (value) => [import_js_sdk_common23.TypeValidators.String.is(value), import_js_sdk_common23.TypeValidators.String.getType()]
+          (value) => [import_js_sdk_common29.TypeValidators.String.is(value), import_js_sdk_common29.TypeValidators.String.getType()]
         );
       }
       jsonVariationDetail(key, context, defaultValue) {
@@ -28209,10 +29775,11 @@ var require_dist = __commonJS({
                   `Unrecognized MigrationState for "${key}"; returning default value.`
                 );
                 this._onError(error2);
-                const reason = {
+                const errorReason = {
                   kind: "ERROR",
                   errorKind: ErrorKinds3.WrongType
                 };
+                const reason = detail2.reason.overrideAffected ? markOverrideAffected(errorReason) : errorReason;
                 resolve({
                   detail: {
                     value: defaultValue,
@@ -28269,13 +29836,13 @@ var require_dist = __commonJS({
           callback == null ? void 0 : callback(null, allFlagState);
           return Promise.resolve(allFlagState);
         }
-        const evalContext = import_js_sdk_common23.Context.fromLDContext(context);
+        const evalContext = import_js_sdk_common29.Context.fromLDContext(context);
         if (!evalContext.valid) {
           (_c = this._logger) == null ? void 0 : _c.info(`${(_b = evalContext.message) != null ? _b : "Invalid context."}. Returning empty state.`);
           return Promise.resolve(new FlagsStateBuilder(false, false).build());
         }
         return new Promise((resolve) => {
-          const doEval = (valid) => this._featureStore.all(VersionedDataKinds.Features, (allFlags) => {
+          const evaluateAll = (valid, allFlags) => {
             const builder = new FlagsStateBuilder(valid, !!(options == null ? void 0 : options.withReasons));
             const clientOnly = !!(options == null ? void 0 : options.clientSideOnly);
             const detailsOnlyIfTracked = !!(options == null ? void 0 : options.detailsOnlyForTrackedFlags);
@@ -28298,13 +29865,22 @@ var require_dist = __commonJS({
                     );
                   }
                   const requireExperimentData = isExperiment(flag, res.detail.reason);
+                  let trackEvents = flag.trackEvents || requireExperimentData;
+                  let trackReason = requireExperimentData;
+                  let { debugEventsUntilDate } = flag;
+                  if (res.overrideAffected) {
+                    trackEvents = false;
+                    trackReason = false;
+                    debugEventsUntilDate = void 0;
+                  }
                   builder.addFlag(
                     flag,
                     res.detail.value,
                     (_a3 = res.detail.variationIndex) != null ? _a3 : void 0,
                     res.detail.reason,
-                    flag.trackEvents || requireExperimentData,
-                    requireExperimentData,
+                    trackEvents,
+                    trackReason,
+                    debugEventsUntilDate,
                     detailsOnlyIfTracked,
                     res.prerequisites
                   );
@@ -28317,49 +29893,70 @@ var require_dist = __commonJS({
                 resolve(res);
               }
             );
-          });
-          if (!this.initialized()) {
-            this._featureStore.initialized((storeInitialized) => {
-              var _a2, _b2;
-              let valid = true;
-              if (storeInitialized) {
-                if (!this._allFlagsStateLastKnownValuesWarningLogged) {
-                  this._allFlagsStateLastKnownValuesWarningLogged = true;
-                  (_a2 = this._logger) == null ? void 0 : _a2.warn(
-                    "Called allFlagsState before client initialization; using last known values from data store. This message is logged once."
+          };
+          const doEval = (valid) => this._readStore.all(
+            VersionedDataKinds.Features,
+            (allFlags) => evaluateAll(valid, allFlags)
+          );
+          if (this.initialized()) {
+            doEval(true);
+            return;
+          }
+          this._featureStore.initialized((storeInitialized) => {
+            var _a2;
+            if (storeInitialized) {
+              if (!this._allFlagsStateLastKnownValuesWarningLogged) {
+                this._allFlagsStateLastKnownValuesWarningLogged = true;
+                (_a2 = this._logger) == null ? void 0 : _a2.warn(
+                  "Called allFlagsState before client initialization; using last known values from data store. This message is logged once."
+                );
+              }
+              doEval(true);
+              return;
+            }
+            this._readStore.all(VersionedDataKinds.Features, (allFlags) => {
+              var _a3, _b2;
+              if (this._overrideLayer && Object.keys(allFlags).length > 0) {
+                if (!this._allFlagsStateOverridesOnlyWarningLogged) {
+                  this._allFlagsStateOverridesOnlyWarningLogged = true;
+                  (_a3 = this._logger) == null ? void 0 : _a3.warn(
+                    "Called allFlagsState before client initialization; returning only flags from the override layer. This message is logged once."
                   );
                 }
-              } else {
-                (_b2 = this._logger) == null ? void 0 : _b2.warn(
-                  "Called allFlagsState before client initialization. Data store not available; returning empty state"
-                );
-                valid = false;
+                evaluateAll(true, allFlags);
+                return;
               }
-              doEval(valid);
+              (_b2 = this._logger) == null ? void 0 : _b2.warn(
+                "Called allFlagsState before client initialization. Data store not available; returning empty state"
+              );
+              evaluateAll(false, allFlags);
             });
-          } else {
-            doEval(true);
-          }
+          });
         });
       }
       secureModeHash(context) {
-        const checkedContext = import_js_sdk_common23.Context.fromLDContext(context);
+        const checkedContext = import_js_sdk_common29.Context.fromLDContext(context);
         const key = checkedContext.valid ? checkedContext.canonicalKey : void 0;
         if (!this._platform.crypto.createHmac) {
           throw new Error("Platform must implement createHmac");
         }
         const hmac = this._platform.crypto.createHmac("sha256", this._sdkKey);
         if (key === void 0) {
-          throw new import_js_sdk_common23.LDClientError("Could not generate secure mode hash for invalid context");
+          throw new import_js_sdk_common29.LDClientError("Could not generate secure mode hash for invalid context");
         }
         hmac.update(key);
         return hmac.digest("hex");
       }
       close() {
-        var _a, _b;
+        var _a, _b, _c, _d;
+        try {
+          (_a = this._overrideSource) == null ? void 0 : _a.close();
+        } catch (err) {
+          (_b = this._logger) == null ? void 0 : _b.error(`Unable to close the override source: ${err}`);
+        }
         this._eventProcessor.close();
-        (_a = this._updateProcessor) == null ? void 0 : _a.close();
-        (_b = this._dataSource) == null ? void 0 : _b.stop();
+        (_c = this._updateProcessor) == null ? void 0 : _c.close();
+        (_d = this._dataSource) == null ? void 0 : _d.stop();
         this._featureStore.close();
         this._bigSegmentsManager.close();
       }
@@ -28368,12 +29965,12 @@ var require_dist = __commonJS({
       }
       track(key, context, data, metricValue) {
         var _a, _b;
-        const checkedContext = import_js_sdk_common23.Context.fromLDContext(context);
+        const checkedContext = import_js_sdk_common29.Context.fromLDContext(context);
         if (!checkedContext.valid) {
           (_a = this._logger) == null ? void 0 : _a.warn(ClientMessages.MissingContextKeyNoEvent);
           return;
         }
-        if (metricValue !== void 0 && !import_js_sdk_common23.TypeValidators.Number.is(metricValue)) {
+        if (metricValue !== void 0 && !import_js_sdk_common29.TypeValidators.Number.is(metricValue)) {
           (_b = this._logger) == null ? void 0 : _b.warn(ClientMessages.invalidMetricValue(typeof metricValue));
         }
         this._eventProcessor.sendEvent(
@@ -28389,7 +29986,7 @@ var require_dist = __commonJS({
       }
       identify(context) {
         var _a;
-        const checkedContext = import_js_sdk_common23.Context.fromLDContext(context);
+        const checkedContext = import_js_sdk_common29.Context.fromLDContext(context);
         if (!checkedContext.valid) {
           (_a = this._logger) == null ? void 0 : _a.warn(ClientMessages.MissingContextKeyNoEvent);
           return;
@@ -28414,20 +30011,20 @@ var require_dist = __commonJS({
           cb(EvalResult.forError(ErrorKinds3.ClientNotReady, void 0, defaultValue));
           return;
         }
-        const evalContext = import_js_sdk_common23.Context.fromLDContext(context);
+        const evalContext = import_js_sdk_common29.Context.fromLDContext(context);
         if (!evalContext.valid) {
           this._onError(
-            new import_js_sdk_common23.LDClientError(
+            new import_js_sdk_common29.LDClientError(
               `${(_b = evalContext.message) != null ? _b : "Context not valid;"} returning default value.`
             )
           );
           cb(EvalResult.forError(ErrorKinds3.UserNotSpecified, void 0, defaultValue));
           return;
         }
-        this._featureStore.get(VersionedDataKinds.Features, flagKey, (item) => {
+        this._readStore.get(VersionedDataKinds.Features, flagKey, (item) => {
           const flag = item;
           if (!flag) {
-            const error2 = new import_js_sdk_common23.LDClientError(
+            const error2 = new import_js_sdk_common29.LDClientError(
               `Unknown feature flag "${flagKey}"; returning default value`
             );
             this._onError(error2);
@@ -28455,6 +30052,10 @@ var require_dist = __commonJS({
                     `Did not receive expected type (${type}) evaluating feature flag "${flagKey}"`,
                     defaultValue
                   );
+                  if (evalRes.overrideAffected) {
+                    errorRes.detail.reason = markOverrideAffected(errorRes.detail.reason);
+                    errorRes.overrideAffected = true;
+                  }
                   this._sendEvalEvent(errorRes, eventFactory, flag, evalContext, defaultValue);
                   cb(errorRes, flag);
                   return;
@@ -28473,17 +30074,29 @@ var require_dist = __commonJS({
           this._eventProcessor.sendEvent(__spreadValues({}, event));
         });
         this._eventProcessor.sendEvent(
-          eventFactory.evalEventServer(flag, evalContext, evalRes.detail, defaultValue, void 0)
+          eventFactory.evalEventServer(
+            flag,
+            evalContext,
+            evalRes.detail,
+            defaultValue,
+            void 0,
+            evalRes.overrideAffected
+          )
         );
       }
       _evaluateIfPossible(flagKey, context, defaultValue, eventFactory, cb, typeChecker) {
+        var _a;
         if (!this.initialized()) {
+          if ((_a = this._overrideLayer) == null ? void 0 : _a.get(VersionedDataKinds.Features, flagKey)) {
+            this._variationInternal(flagKey, context, defaultValue, eventFactory, cb, typeChecker);
+            return;
+          }
           this._featureStore.initialized((storeInitialized) => {
-            var _a, _b;
+            var _a2, _b;
             if (storeInitialized) {
               if (!this._lastKnownValuesWarningLogged) {
                 this._lastKnownValuesWarningLogged = true;
-                (_a = this._logger) == null ? void 0 : _a.warn(
+                (_a2 = this._logger) == null ? void 0 : _a2.warn(
                   "Variation called before LaunchDarkly client initialization completed (did you wait for the 'ready' event?) - using last known values from feature store. This message is logged once."
                 );
               }
@@ -28498,6 +30111,26 @@ var require_dist = __commonJS({
           return;
         }
         this._variationInternal(flagKey, context, defaultValue, eventFactory, cb, typeChecker);
+      }
+      /**
+       * Starts the override source. The returned promise settles when the source's initial load has
+       * completed, also when it failed, and never rejects. A failure never prevents the client from
+       * operating: the layer stays as it was and the failure is logged. The load is part of starting
+       * the client, so waitForInitialization awaits this promise; evaluation does not.
+       */
+      _startOverrideSource(source, sink) {
+        let started;
+        try {
+          started = Promise.resolve(source.start(sink));
+        } catch (err) {
+          started = Promise.reject(err);
+        }
+        return started.catch((err) => {
+          var _a;
+          (_a = this._logger) == null ? void 0 : _a.error(`Unable to start the override source: ${err}`);
+        }).then(() => {
+          this._overridesReady = void 0;
+        });
       }
       _dataSourceErrorHandler(e) {
         var _a;
@@ -28532,12 +30165,12 @@ var require_dist = __commonJS({
        */
       _clientWithTimeout(basePromise, timeout, logger) {
         if (timeout) {
-          const cancelableTimeout = (0, import_js_sdk_common23.cancelableTimedPromise)(timeout, "waitForInitialization");
+          const cancelableTimeout = (0, import_js_sdk_common29.cancelableTimedPromise)(timeout, "waitForInitialization");
           return Promise.race([
             basePromise.then(() => this),
             cancelableTimeout.promise.then(() => this)
           ]).catch((reason) => {
-            if (reason instanceof import_js_sdk_common23.LDTimeoutError) {
+            if (reason instanceof import_js_sdk_common29.LDTimeoutError) {
               logger == null ? void 0 : logger.error(reason.message);
             }
             throw reason;
@@ -28546,7 +30179,7 @@ var require_dist = __commonJS({
         return basePromise;
       }
     };
-    var import_js_sdk_common24 = require_cjs();
+    var import_js_sdk_common30 = require_cjs();
     async function safeCall(method) {
       try {
         const res = await method();
@@ -28834,9 +30467,9 @@ var require_dist = __commonJS({
         if (!this._latencyTracking) {
           return method();
         }
-        const start = (0, import_js_sdk_common24.monotonicNow)();
+        const start = (0, import_js_sdk_common30.monotonicNow)();
         const result = await method();
-        const end = (0, import_js_sdk_common24.monotonicNow)();
+        const end = (0, import_js_sdk_common30.monotonicNow)();
         const latency = end - start;
         tracker.latency(origin, latency);
         return result;
@@ -28885,13 +30518,13 @@ var require_dist = __commonJS({
         return (ldClientContext, featureStore, initSuccessHandler, errorHandler) => this.create(ldClientContext, featureStore, initSuccessHandler, errorHandler);
       }
     };
-    var import_js_sdk_common26 = require_cjs();
+    var import_js_sdk_common32 = require_cjs();
     var TRUE_VARIATION_INDEX = 0;
     var FALSE_VARIATION_INDEX = 1;
     function variationForBoolean(val) {
       return val ? TRUE_VARIATION_INDEX : FALSE_VARIATION_INDEX;
     }
-    var import_js_sdk_common25 = require_cjs();
+    var import_js_sdk_common31 = require_cjs();
     var TestDataRuleBuilder = class _TestDataRuleBuilder {
       /**
        * @internal
@@ -28926,7 +30559,7 @@ var require_dist = __commonJS({
         this._clauses.push({
           contextKind,
           attribute,
-          attributeReference: new import_js_sdk_common25.AttributeReference(attribute),
+          attributeReference: new import_js_sdk_common31.AttributeReference(attribute),
           op: "in",
           values,
           negate: false
@@ -28953,7 +30586,7 @@ var require_dist = __commonJS({
         this._clauses.push({
           contextKind,
           attribute,
-          attributeReference: new import_js_sdk_common25.AttributeReference(attribute),
+          attributeReference: new import_js_sdk_common31.AttributeReference(attribute),
           op: "in",
           values,
           negate: true
@@ -28975,7 +30608,7 @@ var require_dist = __commonJS({
        * @return the flag rule builder
        */
       thenReturn(variation) {
-        if (import_js_sdk_common25.TypeValidators.Boolean.is(variation)) {
+        if (import_js_sdk_common31.TypeValidators.Boolean.is(variation)) {
           this._flagBuilder.booleanFlag();
           return this.thenReturn(variationForBoolean(variation));
         }
@@ -29096,7 +30729,7 @@ var require_dist = __commonJS({
        * @return the flag builder
        */
       fallthroughVariation(variation) {
-        if (import_js_sdk_common26.TypeValidators.Boolean.is(variation)) {
+        if (import_js_sdk_common32.TypeValidators.Boolean.is(variation)) {
           return this.booleanFlag().fallthroughVariation(variationForBoolean(variation));
         }
         this._data.fallthroughVariation = variation;
@@ -29115,7 +30748,7 @@ var require_dist = __commonJS({
        * @return the flag builder
        */
       offVariation(variation) {
-        if (import_js_sdk_common26.TypeValidators.Boolean.is(variation)) {
+        if (import_js_sdk_common32.TypeValidators.Boolean.is(variation)) {
           return this.booleanFlag().offVariation(variationForBoolean(variation));
         }
         this._data.offVariation = variation;
@@ -29195,7 +30828,7 @@ var require_dist = __commonJS({
        * @return the flag builder
        */
       variationForContext(contextKind, contextKey, variation) {
-        if (import_js_sdk_common26.TypeValidators.Boolean.is(variation)) {
+        if (import_js_sdk_common32.TypeValidators.Boolean.is(variation)) {
           return this.booleanFlag().variationForContext(
             contextKind,
             contextKey,
@@ -29711,10 +31344,26 @@ var require_NodeFilesystem = __commonJS({
       async readFile(path) {
         return fsPromises.readFile(path, "utf8");
       }
+      async getFileStats(path) {
+        try {
+          const stat2 = await fsPromises.stat(path);
+          return { timestamp: stat2.mtimeMs, size: stat2.size };
+        } catch (err) {
+          const { code } = err;
+          if (code === "ENOENT" || code === "ENOTDIR") {
+            return void 0;
+          }
+          throw err;
+        }
+      }
       watch(path, callback) {
-        return fs3.watch(path, { persistent: false }, (eventType) => {
-          callback(eventType, path);
+        const watcher = fs3.watch(path, { persistent: false }, (eventType, changedName) => {
+          callback(eventType, path, typeof changedName === "string" ? changedName : void 0);
         });
+        watcher.on("error", () => {
+          callback("error", path);
+        });
+        return watcher;
       }
     };
     exports.default = NodeFilesystem;
@@ -29728,7 +31377,7 @@ var require_NodeInfo = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     var os5 = __require("os");
     var sdkName = "@launchdarkly/node-server-sdk";
-    var sdkVersion = "9.14.4";
+    var sdkVersion = "9.15.0";
     function processPlatformName(name) {
       switch (name) {
         case "darwin":
