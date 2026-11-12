@@ -27,7 +27,7 @@
   "homepage": "https://github.com/launchdarkly/gha-flags#readme",
   "dependencies": {
     "@actions/core": "^3.0.1",
-    "@launchdarkly/node-server-sdk": "^9.15.0"
+    "@launchdarkly/node-server-sdk": "^9.16.3"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",
